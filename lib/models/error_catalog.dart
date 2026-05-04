@@ -1,19 +1,18 @@
-// Master catalog of errors
 class ErrorCatalog {
-  final int errorId;
+  final int? errorId;       // null before DB insert (AUTOINCREMENT)
   final String code;
   final String description;
   final String category;
 
   ErrorCatalog({
-    required this.errorId,
+    this.errorId,
     required this.code,
     required this.description,
     required this.category,
   });
 
   Map<String, dynamic> toMap() => {
-        'errorId': errorId,
+        if (errorId != null) 'errorId': errorId,
         'code': code,
         'description': description,
         'category': category,
@@ -21,8 +20,8 @@ class ErrorCatalog {
 
   factory ErrorCatalog.fromMap(Map<String, dynamic> map) => ErrorCatalog(
         errorId: map['errorId'],
-        code: map['code'],
-        description: map['description'],
-        category: map['category'],
+        code: map['code'] ?? '',
+        description: map['description'] ?? '',
+        category: map['category'] ?? '',
       );
 }
