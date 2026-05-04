@@ -251,6 +251,7 @@ class DatabaseService {
       'error_catalog',
       orderBy: 'category ASC, code ASC',
     );
+    print('Database query returned ${maps.length} error catalog entries');
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 
@@ -491,6 +492,21 @@ class DatabaseService {
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 
+  /// Search error catalog by code or description
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
+    print('Database search for: "$query"');
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'category, code',
+      limit: 50, // Limit results to prevent overflow
+    );
+    print('Database search returned ${maps.length} results');
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
   // ─────────────────────────────────────────────────────────────
   // SEED DATA
   // ─────────────────────────────────────────────────────────────
@@ -499,6 +515,16 @@ class DatabaseService {
     print('Seeding error catalog...');
     final standardErrors = DoorErrorCatalog.getStandardErrors();
     print('Found ${standardErrors.length} errors to seed');
+    
+    // Check if catalog already has data
+    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
+    final count = existingCount.first['count'] as int;
+    print('Existing error catalog entries: $count');
+    
+    if (count > 0) {
+      print('Error catalog already seeded, skipping...');
+      return;
+    }
     
     for (final error in standardErrors) {
       try {
@@ -525,5 +551,11 @@ class DatabaseService {
     // Seed with new data
     await _seedErrorCatalog(db);
     print('Manual seeding completed');
+  }
+
+  static Future<void> clearErrorCatalog() async {
+    final db = await getDb();
+    await db.delete('error_catalog');
+    print('Error catalog cleared');
   }
 }

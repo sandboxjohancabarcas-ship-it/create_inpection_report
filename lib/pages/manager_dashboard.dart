@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/services/database_service.dart';
+import 'package:flutter/material.dart';
+import '../services/database_service.dart';
+import '../models/models.dart';
+import 'bulk_error_import_page.dart';
+import 'error_catalog_test_page.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -426,10 +430,42 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEditErrorDialog(),
-        child: Icon(Icons.add),
-        tooltip: 'Neuen Fehler hinzufügen',
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: "diagnostic_test",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ErrorCatalogTestPage()),
+              );
+            },
+            backgroundColor: Colors.purple,
+            child: Icon(Icons.bug_report),
+            tooltip: 'Diagnostic Test',
+          ),
+          SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: "bulk_import",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => BulkErrorImportPage()),
+              );
+            },
+            backgroundColor: Colors.orange,
+            child: Icon(Icons.upload_file),
+            tooltip: 'Bulk Import',
+          ),
+          SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: "add_error",
+            onPressed: () => _showEditErrorDialog(),
+            child: Icon(Icons.add),
+            tooltip: 'Neuen Fehler hinzufügen',
+          ),
+        ],
       ),
     );
   }

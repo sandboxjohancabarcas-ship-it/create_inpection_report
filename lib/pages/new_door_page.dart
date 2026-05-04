@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
-import '../pages/error_management_page.dart';
+import 'error_management_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
@@ -468,13 +468,21 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: saveDoor,
-                    child: Text(widget.door == null ? "Speichern" : "Aktualisieren"),
+                    onPressed: () async {
+                      final door = buildDoor();
+                      await DatabaseService.insertDoor(door);
+                      if (mounted) Navigator.pop(context);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text('Speichern'),
                   ),
                 ),
                 SizedBox(width: 16),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: ElevatedButton(
                     onPressed: () {
                       if (widget.door != null) {
                         Navigator.push(
@@ -492,12 +500,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                         );
                       }
                     },
-                    icon: Icon(Icons.error_outline),
-                    label: Text('Fehler verwalten'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
+                    child: Text('Fehler verwalten'),
                   ),
                 ),
               ],
