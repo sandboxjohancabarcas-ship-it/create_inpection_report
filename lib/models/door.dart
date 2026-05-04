@@ -1,4 +1,13 @@
 class Door {
+  // Inspection Metadata
+  final String customerName;
+  final String customerAddress;
+  final String contactPerson;
+  final String jobNumber;
+  final DateTime inspectionDate;
+  final String inspectorName;
+  
+  // Door Technical Specifications
   final int id;
   final int pos;
   final String doorNumber;
@@ -29,6 +38,12 @@ class Door {
   final bool doorFunctionOK;
 
   Door({
+    required this.customerName,
+    required this.customerAddress,
+    required this.contactPerson,
+    required this.jobNumber,
+    required this.inspectionDate,
+    required this.inspectorName,
     required this.id,
     required this.pos,
     required this.doorNumber,
@@ -63,6 +78,15 @@ class Door {
   // COPYWITH METHOD (added)
   // ---------------------------------------------------------
   Door copyWith({
+    // Inspection metadata
+    String? customerName,
+    String? customerAddress,
+    String? contactPerson,
+    String? jobNumber,
+    DateTime? inspectionDate,
+    String? inspectorName,
+    
+    // Door specifications
     int? id,
     int? pos,
     String? doorNumber,
@@ -93,6 +117,12 @@ class Door {
     bool? doorFunctionOK,
   }) {
     return Door(
+      customerName: customerName ?? this.customerName,
+      customerAddress: customerAddress ?? this.customerAddress,
+      contactPerson: contactPerson ?? this.contactPerson,
+      jobNumber: jobNumber ?? this.jobNumber,
+      inspectionDate: inspectionDate ?? this.inspectionDate,
+      inspectorName: inspectorName ?? this.inspectorName,
       id: id ?? this.id,
       pos: pos ?? this.pos,
       doorNumber: doorNumber ?? this.doorNumber,
@@ -132,6 +162,15 @@ class Door {
   }
 
   Map<String, dynamic> toMap() => {
+        // Inspection metadata
+        'customerName': customerName,
+        'customerAddress': customerAddress,
+        'contactPerson': contactPerson,
+        'jobNumber': jobNumber,
+        'inspectionDate': inspectionDate.toIso8601String(),
+        'inspectorName': inspectorName,
+        
+        // Door specifications
         'id': id,
         'pos': pos,
         'doorNumber': doorNumber,
@@ -164,6 +203,15 @@ class Door {
       };
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
+        // Inspection metadata
+        customerName: map['customerName'] ?? '',
+        customerAddress: map['customerAddress'] ?? '',
+        contactPerson: map['contactPerson'] ?? '',
+        jobNumber: map['jobNumber'] ?? '',
+        inspectionDate: DateTime.parse(map['inspectionDate'] ?? DateTime.now().toIso8601String()),
+        inspectorName: map['inspectorName'] ?? '',
+        
+        // Door specifications
         id: map['id'],
         pos: map['pos'],
         doorNumber: map['doorNumber'],
@@ -191,7 +239,8 @@ class Door {
         panicFunction: map['panicFunction'],
         escapeDirectionRespected:
             map['escapeDirectionRespected'] == 1,
-        fullPanicStandWing: map['fullPanicStandWing'] == 1,
+        fullPanicStandWing:
+            map['fullPanicStandWing'] == 1,
         doorFunctionOK: map['doorFunctionOK'] == 1,
       );
 }

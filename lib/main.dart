@@ -21,6 +21,15 @@ void main() async {
   // -------------------------------
 
 final door = Door(
+  // Inspection metadata
+  customerName: 'Musterfirma GmbH',
+  customerAddress: 'Musterstraße 1, 12345 Musterstadt',
+  contactPerson: 'Max Mustermann',
+  jobNumber: 'JOB-2024-001',
+  inspectionDate: DateTime.now(),
+  inspectorName: 'Test Inspector',
+  
+  // Door technical specifications
   id: 1,
   pos: 101,
   doorNumber: 'D-12',
@@ -29,17 +38,17 @@ final door = Door(
   roomDesignation: 'Office',
   doorType: 'T30',
   wingCount: 1,
-  material: 'Steel',
+  material: 'Stahl',
   manufacturer: 'Hörmann',
   dinConfiguration: 'DIN L',
   closerType: 'Standard',
-  closingSequenceSystem: 'None',
+  closingSequenceSystem: 'Keine',
   lockDimensions: '72mm',
   closerOnHingeSide: true,
   closerOnOppositeSide: false,
   lintelHeightUnder1m: false,
   escapeDoorControl: true,
-  accessControl: 'None',
+  accessControl: 'Nein',
   escapeRouteSituation: true,
   escapeRouteSignage: true,
   blindCylinder: false,

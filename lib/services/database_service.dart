@@ -13,11 +13,20 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
           CREATE TABLE doors (
+            -- Inspection Metadata
+            customerName TEXT,
+            customerAddress TEXT,
+            contactPerson TEXT,
+            jobNumber TEXT,
+            inspectionDate TEXT,
+            inspectorName TEXT,
+            
+            -- Door Technical Specifications
             id INTEGER PRIMARY KEY,
             pos INTEGER,
             doorNumber TEXT,
