@@ -21,6 +21,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   List<ErrorCatalog> availableErrors = [];
   List<InspectionError> doorErrors = [];
   List<ErrorCatalog> searchResults = [];
+  ErrorCatalog? selectedError;
   bool isLoading = true;
 
   @override
@@ -69,14 +70,26 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     try {
       final results = await DatabaseService.searchErrorCatalog(query);
       print('Search results: ${results.length} items found');
-      setState(() {
-        searchResults = results;
-      });
+      if (mounted) {
+        setState(() {
+          searchResults = List.from(results); // Create a new list to prevent reference issues
+          selectedError = null; // Clear any selected error when new search results come in
+        });
+        // Force an additional update to ensure UI refreshes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {});
+          }
+        });
+      }
+      print('Updated state - searchResults.length: ${searchResults.length}');
     } catch (e) {
       print('Search error: $e');
-      setState(() {
-        searchResults = [];
-      });
+      if (mounted) {
+        setState(() {
+          searchResults = [];
+        });
+      }
     }
   }
 
@@ -252,145 +265,149 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               ],
                             ),
                           ),
-                        ] else if (searchResults.isNotEmpty) ...[
-                          // Show search results
+                        ] else ...[
+                          // Always show search results area when no error is selected
                           Container(
-                            height: 200,
+                            height: 250,
                             decoration: BoxDecoration(
                               border: Border.all(color: Colors.blue.shade300),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(8),
-                                      topRight: Radius.circular(8),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.search, color: Colors.blue, size: 16),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '${searchResults.length} Ergebnisse gefunden',
-                                        style: TextStyle(
-                                          color: Colors.blue.shade800,
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 12,
+                            child: searchResults.isEmpty && searchController.text.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.search, size: 48, color: Colors.grey),
+                                        SizedBox(height: 8),
+                                        Text(
+                                          'Geben Sie Suchbegriff ein...',
+                                          style: TextStyle(color: Colors.grey, fontSize: 14),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: searchResults.length,
-                                    itemBuilder: (context, index) {
-                                      final error = searchResults[index];
-                                      return Card(
-                                        margin: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                        elevation: 1,
-                                        child: ListTile(
-                                          dense: true,
-                                          leading: CircleAvatar(
-                                            backgroundColor: Colors.blue.shade100,
-                                            radius: 16,
-                                            child: Text(
-                                              error.code.split('.')[0],
-                                              style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.blue.shade800,
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'z.B. 1.1.1 oder Türbeschlag',
+                                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : searchResults.isEmpty && searchController.text.isNotEmpty
+                                    ? Center(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.search_off, size: 48, color: Colors.grey),
+                                            SizedBox(height: 8),
+                                            Text(
+                                              'Keine Ergebnisse gefunden',
+                                              style: TextStyle(color: Colors.grey, fontSize: 14),
+                                            ),
+                                            SizedBox(height: 4),
+                                            Text(
+                                              'Versuchen Sie einen anderen Suchbegriff',
+                                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    : Column(
+                                        children: [
+                                          Container(
+                                            width: double.infinity,
+                                            padding: EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.shade50,
+                                              borderRadius: BorderRadius.only(
+                                                topLeft: Radius.circular(8),
+                                                topRight: Radius.circular(8),
                                               ),
                                             ),
-                                          ),
-                                          title: Text(
-                                            error.code,
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                              color: Colors.black87,
-                                            ),
-                                          ),
-                                          subtitle: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                error.category,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.blue.shade600,
-                                                  fontWeight: FontWeight.w500,
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.search, color: Colors.blue, size: 16),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  '${searchResults.length} Ergebnisse gefunden',
+                                                  style: TextStyle(
+                                                    color: Colors.blue.shade800,
+                                                    fontWeight: FontWeight.w500,
+                                                    fontSize: 12,
+                                                  ),
                                                 ),
-                                              ),
-                                              Text(
-                                                error.description,
-                                                style: TextStyle(fontSize: 11, color: Colors.black54),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                          trailing: ElevatedButton(
-                                            onPressed: () {
-                                              setState(() => selectedError = error);
-                                              searchController.clear();
-                                              setState(() => searchResults = []);
-                                            },
-                                            child: Text('Auswählen'),
-                                            style: ElevatedButton.styleFrom(
-                                              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                              textStyle: TextStyle(fontSize: 11),
+                                              ],
                                             ),
                                           ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ] else ...[
-                          // Show search prompt
-                          Container(
-                            height: 150,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    searchController.text.isNotEmpty 
-                                        ? Icons.search_off 
-                                        : Icons.search, 
-                                    size: 48, 
-                                    color: Colors.grey,
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    searchController.text.isNotEmpty 
-                                        ? 'Keine Ergebnisse gefunden'
-                                        : 'Geben Sie Suchbegriff ein...',
-                                    style: TextStyle(color: Colors.grey, fontSize: 14),
-                                  ),
-                                  if (searchController.text.isEmpty) ...[
-                                    SizedBox(height: 4),
-                                    Text(
-                                      'z.B. 1.1.1 oder Türbeschlag',
-                                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
+                                          Expanded(
+                                            child: SingleChildScrollView(
+                                              child: Column(
+                                                children: searchResults.map((error) {
+                                                  return Card(
+                                                    margin: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                                    elevation: 1,
+                                                    child: ListTile(
+                                                      dense: true,
+                                                      leading: CircleAvatar(
+                                                        backgroundColor: Colors.blue.shade100,
+                                                        radius: 16,
+                                                        child: Text(
+                                                          error.code.split('.')[0],
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.blue.shade800,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      title: Text(
+                                                        error.code,
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 13,
+                                                          color: Colors.black87,
+                                                        ),
+                                                      ),
+                                                      subtitle: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            error.category,
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: Colors.blue.shade600,
+                                                              fontWeight: FontWeight.w500,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            error.description,
+                                                            style: TextStyle(fontSize: 11, color: Colors.black54),
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      trailing: ElevatedButton(
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            selectedError = error;
+                                                            searchController.clear();
+                                                            searchResults = [];
+                                                          });
+                                                        },
+                                                        child: Text('Auswählen'),
+                                                        style: ElevatedButton.styleFrom(
+                                                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                                          textStyle: TextStyle(fontSize: 11),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList(),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                           ),
                         ],
                       ],
