@@ -1,6 +1,8 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:create_inpection_report/models/models.dart';
+import 'package:create_inpection_report/models/error_catalog.dart';
+import 'package:create_inpection_report/models/inspection_error.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -13,7 +15,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 2,
+      version: 7,
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -91,7 +93,10 @@ class DatabaseService {
             errorId INTEGER PRIMARY KEY AUTOINCREMENT,
             code TEXT UNIQUE,
             description TEXT,
-            category TEXT
+            category TEXT,
+            severity TEXT DEFAULT 'medium',
+            recommendation TEXT DEFAULT '',
+            normReference TEXT DEFAULT ''
           );
         ''');
 
@@ -106,6 +111,21 @@ class DatabaseService {
             notes TEXT,
             resolutionStatus TEXT,
             FOREIGN KEY (inspectionDoorId) REFERENCES inspection_doors (id),
+            FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+          );
+        ''');
+
+        // InspectionErrors table (simplified for direct door errors)
+        await db.execute('''
+          CREATE TABLE inspection_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doorId INTEGER,
+            errorId INTEGER,
+            notes TEXT,
+            status TEXT DEFAULT 'open',
+            reportedDate TEXT,
+            resolvedDate TEXT,
+            FOREIGN KEY (doorId) REFERENCES doors (id),
             FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
           );
         ''');
@@ -127,6 +147,49 @@ class DatabaseService {
 
         // Seed the error catalog on first create
         await _seedErrorCatalog(db);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 7) {
+          // Add missing columns to error_catalog table
+          try {
+            await db.execute('ALTER TABLE error_catalog ADD COLUMN severity TEXT DEFAULT \'medium\'');
+          } catch (e) {
+            print('Severity column already exists or other error: $e');
+          }
+          try {
+            await db.execute('ALTER TABLE error_catalog ADD COLUMN recommendation TEXT DEFAULT \'\'');
+          } catch (e) {
+            print('Recommendation column already exists or other error: $e');
+          }
+          try {
+            await db.execute('ALTER TABLE error_catalog ADD COLUMN normReference TEXT DEFAULT \'\'');
+          } catch (e) {
+            print('NormReference column already exists or other error: $e');
+          }
+          
+          // Create inspection_errors table if it doesn't exist
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                doorId INTEGER,
+                errorId INTEGER,
+                notes TEXT,
+                status TEXT DEFAULT 'open',
+                reportedDate TEXT,
+                resolvedDate TEXT,
+                FOREIGN KEY (doorId) REFERENCES doors (id),
+                FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+              );
+            ''');
+          } catch (e) {
+            print('Inspection errors table creation error: $e');
+          }
+          
+          // Reseed the error catalog with new data
+          await db.delete('error_catalog');
+          await _seedErrorCatalog(db);
+        }
       },
     );
 
@@ -192,16 +255,24 @@ class DatabaseService {
   }
 
   /// Return all entries for a specific category.
-  static Future<List<ErrorCatalog>> getErrorCatalogByCategory(
-      String category) async {
+  static Future<List<ErrorCatalog>> getErrorCatalogByCategory(String category) async {
     final db = await getDb();
     final maps = await db.query(
       'error_catalog',
       where: 'category = ?',
       whereArgs: [category],
-      orderBy: 'code ASC',
+      orderBy: 'code',
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  static Future<void> deleteErrorCatalog(int errorId) async {
+    final db = await getDb();
+    await db.delete(
+      'error_catalog',
+      where: 'errorId = ?',
+      whereArgs: [errorId],
+    );
   }
 
   /// Return all distinct categories in the catalog.
@@ -355,8 +426,104 @@ class DatabaseService {
   // SEED DATA  ← error codes/descriptions supplied by user
   // ─────────────────────────────────────────────────────────────
 
+  // ─────────────────────────────────────────────────────────────
+  // INSPECTION ERRORS
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> insertInspectionError(InspectionError error) async {
+    final db = await getDb();
+    await db.insert(
+      'inspection_errors',
+      error.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<InspectionError>> getInspectionErrorsForDoor(int doorId) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'inspection_errors',
+      where: 'doorId = ?',
+      whereArgs: [doorId],
+      orderBy: 'reportedDate DESC',
+    );
+    return maps.map((m) => InspectionError.fromMap(m)).toList();
+  }
+
+  static Future<void> updateInspectionErrorStatus(int errorId, String status) async {
+    final db = await getDb();
+    await db.update(
+      'inspection_errors',
+      {
+        'status': status,
+        'resolvedDate': status == 'resolved' ? DateTime.now().toIso8601String() : null,
+      },
+      where: 'id = ?',
+      whereArgs: [errorId],
+    );
+  }
+
+  static Future<void> deleteInspectionError(int errorId) async {
+    final db = await getDb();
+    await db.delete(
+      'inspection_errors',
+      where: 'id = ?',
+      whereArgs: [errorId],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ERROR CATALOG
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<void> insertErrorCatalog(ErrorCatalog error) async {
+    final db = await getDb();
+    await db.insert(
+      'error_catalog',
+      error.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<ErrorCatalog>> getAllErrorCatalog() async {
+    final db = await getDb();
+    final maps = await db.query('error_catalog', orderBy: 'category, code');
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // SEED DATA
+  // ─────────────────────────────────────────────────────────────
+
   static Future<void> _seedErrorCatalog(Database db) async {
-    // Errors will be added here in the next step
-    // once codes and descriptions are provided.
+    print('Seeding error catalog...');
+    final standardErrors = DoorErrorCatalog.getStandardErrors();
+    print('Found ${standardErrors.length} errors to seed');
+    
+    for (final error in standardErrors) {
+      try {
+        await db.insert(
+          'error_catalog',
+          error.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      } catch (e) {
+        print('Error seeding ${error.code}: $e');
+      }
+    }
+    print('Error catalog seeding completed');
+  }
+
+  // Manual seeding method for testing
+  static Future<void> seedErrorCatalogManually() async {
+    final db = await getDb();
+    
+    // Clear existing catalog
+    await db.delete('error_catalog');
+    print('Cleared existing error catalog');
+    
+    // Seed with new data
+    await _seedErrorCatalog(db);
+    print('Manual seeding completed');
   }
 }

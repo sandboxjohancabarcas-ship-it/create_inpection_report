@@ -5,7 +5,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/database_service.dart';
 import 'models/models.dart';
 import 'pages/new_door_page.dart';
-import 'pages/DoorListPage.dart'; 
+import 'pages/DoorListPage.dart';
+import 'pages/main_navigation_page.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -98,7 +99,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
-      home: DoorListPage(),
+      home: MainNavigationPage(),
     );
   }
 }

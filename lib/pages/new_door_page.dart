@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
+import '../pages/error_management_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
@@ -462,13 +463,44 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
             const SizedBox(height: 30),
 
-            // Save button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: saveDoor,
-                child: Text(widget.door == null ? "Speichern" : "Aktualisieren"),
-              ),
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: saveDoor,
+                    child: Text(widget.door == null ? "Speichern" : "Aktualisieren"),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      if (widget.door != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ErrorManagementPage(
+                              doorId: widget.door!.id,
+                              doorNumber: widget.door!.doorNumber,
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
+                        );
+                      }
+                    },
+                    icon: Icon(Icons.error_outline),
+                    label: Text('Fehler verwalten'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
