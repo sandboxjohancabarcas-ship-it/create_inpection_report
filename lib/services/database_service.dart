@@ -1,5 +1,4 @@
 import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
 import 'package:create_inpection_report/models/inspection_error.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -484,6 +483,110 @@ class DatabaseService {
       error.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  static Future<ImportResult> mergeErrorCatalog(List<ErrorCatalog> errors) async {
+    final db = await getDb();
+    return await db.transaction<ImportResult>((txn) async {
+      final existingRows = await txn.query('error_catalog');
+      final existingByCode = <String, ErrorCatalog>{};
+      final existingByDescription = <String, ErrorCatalog>{};
+
+      for (final row in existingRows) {
+        final item = ErrorCatalog.fromMap(row);
+        existingByCode[item.code] = item;
+        existingByDescription[item.description.toLowerCase()] = item;
+      }
+
+      int insertedCount = 0;
+      int duplicateCount = 0;
+      final conflicts = <ImportConflict>[];
+
+      for (final error in errors) {
+        final existingForCode = existingByCode[error.code];
+        if (existingForCode != null) {
+          if (existingForCode.isSameContent(error)) {
+            duplicateCount++;
+            continue;
+          }
+
+          conflicts.add(ImportConflict(
+            code: error.code,
+            description: error.description,
+            incoming: error,
+            existing: existingForCode,
+            reason: 'Existing entry with same code has different data',
+          ));
+          continue;
+        }
+
+        final existingForDescription = existingByDescription[error.description.toLowerCase()];
+        if (existingForDescription != null && existingForDescription.code != error.code) {
+          conflicts.add(ImportConflict(
+            code: error.code,
+            description: error.description,
+            incoming: error,
+            existing: existingForDescription,
+            reason: 'Existing entry with same description has a different code (${existingForDescription.code})',
+          ));
+          continue;
+        }
+
+        await txn.insert(
+          'error_catalog',
+          error.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        insertedCount++;
+        existingByCode[error.code] = error;
+        existingByDescription[error.description.toLowerCase()] = error;
+      }
+
+      return ImportResult(
+        insertedCount: insertedCount,
+        duplicateCount: duplicateCount,
+        conflicts: conflicts,
+      );
+    });
+  }
+
+  static Future<void> applyConflictResolutions(List<ConflictResolution> resolutions) async {
+    final db = await getDb();
+    return await db.transaction((txn) async {
+      for (final resolution in resolutions) {
+        switch (resolution.action) {
+          case ResolutionAction.keepExisting:
+            // Do nothing - keep existing record
+            break;
+
+          case ResolutionAction.replaceExisting:
+            // Update existing record with incoming data
+            await txn.update(
+              'error_catalog',
+              resolution.conflict.incoming.toMap(),
+              where: 'code = ?',
+              whereArgs: [resolution.conflict.code],
+            );
+            break;
+
+          case ResolutionAction.addAsNew:
+            // Insert incoming record with new code
+            final newError = resolution.conflict.incoming.copyWith(
+              code: resolution.newCode ?? '${resolution.conflict.code}_new',
+            );
+            await txn.insert(
+              'error_catalog',
+              newError.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+            break;
+
+          case ResolutionAction.skip:
+            // Do nothing - skip incoming record
+            break;
+        }
+      }
+    });
   }
 
   static Future<List<ErrorCatalog>> getAllErrorCatalog() async {

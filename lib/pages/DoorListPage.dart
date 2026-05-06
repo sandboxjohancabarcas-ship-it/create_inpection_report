@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/database_service.dart';
+import '../services/local_database_service.dart';
 import '../models/models.dart';
 import 'new_door_page.dart';
 
@@ -20,12 +20,13 @@ class _DoorListPageState extends State<DoorListPage> {
   }
 
   Future<void> loadDoors() async {
-    final list = await DatabaseService.getAllDoors();
+    final maps = await LocalDatabaseService.getAllDoors();
+    final list = maps.map((m) => Door.fromMap(m)).toList();
     setState(() => doors = list);
   }
 
   Future<void> deleteDoor(int id) async {
-    await DatabaseService.deleteDoor(id);
+    await LocalDatabaseService.deleteDoor(id);
     await loadDoors();
   }
 

@@ -2,7 +2,6 @@
 // This service isolates all database logic from the UI,
 // keeping your architecture clean and maintainable.
 
-import 'package:sqflite/sqflite.dart';
 import '../models/inspection.dart';
 import 'database_service.dart';
 

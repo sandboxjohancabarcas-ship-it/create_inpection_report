@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:create_inpection_report/models/error_catalog.dart';
 import 'package:create_inpection_report/services/database_service.dart';
+import 'package:create_inpection_report/pages/conflict_review_page.dart';
 
 class BulkErrorImportPage extends StatefulWidget {
   const BulkErrorImportPage({super.key});
@@ -15,7 +16,8 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
   bool _isImporting = false;
   int _importedCount = 0;
   int _skippedCount = 0;
-  List<String> _importLog = [];
+  final List<String> _importLog = [];
+  final List<ImportConflict> _importConflicts = [];
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +32,18 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
           ),
         ],
       ),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
             // Import Options
             Card(
               child: Padding(
@@ -110,36 +119,35 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
             SizedBox(height: 16),
             
             // Text Input Area
-            Expanded(
-              child: Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fehler-Daten (Format: Code|Beschreibung|Kategorie|Schwere|Empfehlung|Norm)',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      SizedBox(height: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _textController,
-                          maxLines: null,
-                          expands: true,
-                          decoration: InputDecoration(
-                            hintText: 'Beispiel:\n'
-                                '1.1|Türbeschlag beschädigt|Türbeschlag|medium|Türbeschlag austauschen|DIN 18095\n'
-                                '2.1|Schloss defekt|Schloss|high|Schloss austauschen|DIN 18251\n'
-                                '3.1|Dichtung undicht|Bodenbelag|low|Dichtung ersetzen|',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
-                          ),
-                          style: TextStyle(fontFamily: 'monospace'),
+            Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fehler-Daten (Format: Code|Beschreibung|Kategorie|Schwere|Empfehlung|Norm)',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    SizedBox(height: 8),
+                    SizedBox(
+                      height: 260,
+                      child: TextField(
+                        controller: _textController,
+                        maxLines: null,
+                        expands: true,
+                        decoration: InputDecoration(
+                          hintText: 'Beispiel:\n'
+                              '1.1|Türbeschlag beschädigt|Türbeschlag|medium|Türbeschlag austauschen|DIN 18095\n'
+                              '2.1|Schloss defekt|Schloss|high|Schloss austauschen|DIN 18251\n'
+                              '3.1|Dichtung undicht|Bodenbelag|low|Dichtung ersetzen|',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
                         ),
+                        style: TextStyle(fontFamily: 'monospace'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -155,6 +163,11 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: _isImporting ? null : _parseAndImport,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                            ),
                             child: _isImporting
                                 ? Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -169,11 +182,6 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
                                     ],
                                   )
                                 : Text('Importieren'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.purple,
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                            ),
                           ),
                         ),
                         SizedBox(width: 16),
@@ -244,10 +252,91 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
                 ),
               ),
             ],
+
+            if (_importConflicts.isNotEmpty) ...[
+              SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Konflikte (Manager Review)',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              final resolved = await Navigator.push<bool>(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ConflictReviewPage(conflicts: _importConflicts),
+                                ),
+                              );
+                              if (resolved == true) {
+                                // Conflicts were resolved, clear the list and refresh
+                                setState(() {
+                                  _importConflicts.clear();
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Konflikte erfolgreich gelöst'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                            icon: Icon(Icons.edit, size: 16),
+                            label: Text('Lösen'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 8),
+                      Container(
+                        height: 150,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.red.shade200),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ListView.builder(
+                          itemCount: _importConflicts.length,
+                          itemBuilder: (context, index) {
+                            final conflict = _importConflicts[index];
+                            return Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Text(
+                                '${conflict.code}: ${conflict.reason}',
+                                style: TextStyle(
+                                  color: Colors.red.shade700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+    },
+  ),
+  ),
+  ),
+);
   }
 
   Widget _buildStatCard(String label, int count, Color color) {
@@ -377,6 +466,7 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
     _textController.clear();
     setState(() {
       _importLog.clear();
+      _importConflicts.clear();
       _importedCount = 0;
       _skippedCount = 0;
     });
@@ -428,6 +518,7 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
     setState(() {
       _isImporting = true;
       _importLog.clear();
+      _importConflicts.clear();
       _importedCount = 0;
       _skippedCount = 0;
     });
@@ -435,19 +526,20 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
     try {
       final lines = text.split('\n');
       final errors = <ErrorCatalog>[];
-      
+      int parseSkippedCount = 0;
+
       for (int i = 0; i < lines.length; i++) {
         final line = lines[i].trim();
         if (line.isEmpty) continue;
-        
+
         try {
           final parts = line.split('|');
           if (parts.length < 2) {
             _importLog.add('FEHLER Zeile ${i + 1}: Nicht genügend Felder');
-            _skippedCount++;
+            parseSkippedCount++;
             continue;
           }
-          
+
           final error = ErrorCatalog(
             code: parts[0].trim(),
             description: parts[1].trim(),
@@ -456,28 +548,57 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
             recommendation: parts.length > 4 ? parts[4].trim() : '',
             normReference: parts.length > 5 ? parts[5].trim() : '',
           );
-          
+
           errors.add(error);
           _importLog.add('OK: ${error.code} - ${error.description}');
-          _importedCount++;
         } catch (e) {
           _importLog.add('FEHLER Zeile ${i + 1}: $e');
-          _skippedCount++;
+          parseSkippedCount++;
         }
       }
-      
-      // Clear existing catalog and insert new errors
-      await DatabaseService.clearErrorCatalog();
-      for (final error in errors) {
-        await DatabaseService.insertErrorCatalog(error);
+
+      final result = await DatabaseService.mergeErrorCatalog(errors);
+      _importedCount = result.insertedCount;
+      _skippedCount = parseSkippedCount + result.duplicateCount + result.conflicts.length;
+      _importConflicts.addAll(result.conflicts);
+
+      if (result.duplicateCount > 0) {
+        _importLog.add('DUPLICATE: ${result.duplicateCount} identische Einträge übersprungen');
       }
-      
+      for (final conflict in result.conflicts) {
+        _importLog.add('FEHLER: ${conflict.toString()}');
+      }
+
+      final message = result.conflicts.isNotEmpty
+          ? 'Import abgeschlossen: ${result.insertedCount} Fehler importiert, ${result.conflicts.length} Konflikte'
+          : 'Erfolgreich importiert: ${result.insertedCount} Fehler';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erfolgreich importiert: $_importedCount Fehler'),
-          backgroundColor: Colors.green,
+          content: Text(message),
+          backgroundColor: result.conflicts.isNotEmpty ? Colors.orange : Colors.green,
         ),
       );
+
+      // If there are conflicts, navigate to conflict review
+      if (result.conflicts.isNotEmpty) {
+        final resolved = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ConflictReviewPage(conflicts: result.conflicts),
+          ),
+        );
+
+        if (resolved == true) {
+          // Conflicts were resolved, show final success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Alle Konflikte erfolgreich gelöst'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
     } catch (e) {
       _importLog.add('FEHLER: $e');
       ScaffoldMessenger.of(context).showSnackBar(

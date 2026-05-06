@@ -62,6 +62,71 @@ class ErrorCatalog {
   String toString() {
     return '$code - $category: $description';
   }
+
+  /// Compare the content of this catalog entry with another entry.
+  /// Returns true only if all import-relevant fields are identical.
+  bool isSameContent(ErrorCatalog other) {
+    return code == other.code &&
+        description == other.description &&
+        category == other.category &&
+        severity == other.severity &&
+        recommendation == other.recommendation &&
+        normReference == other.normReference;
+  }
+}
+
+class ImportConflict {
+  final String code;
+  final String description;
+  final ErrorCatalog incoming;
+  final ErrorCatalog? existing;
+  final String reason;
+
+  ImportConflict({
+    required this.code,
+    required this.description,
+    required this.incoming,
+    this.existing,
+    required this.reason,
+  });
+
+  @override
+  String toString() {
+    return 'Konflikt für Code $code: $reason';
+  }
+}
+
+class ImportResult {
+  final int insertedCount;
+  final int duplicateCount;
+  final List<ImportConflict> conflicts;
+
+  ImportResult({
+    required this.insertedCount,
+    required this.duplicateCount,
+    required this.conflicts,
+  });
+}
+
+enum ResolutionAction {
+  keepExisting,
+  replaceExisting,
+  addAsNew,
+  skip,
+}
+
+class ConflictResolution {
+  final ImportConflict conflict;
+  final ResolutionAction action;
+  final String? newCode;
+
+  ConflictResolution({
+    required this.conflict,
+    required this.action,
+    this.newCode,
+  });
+
+  bool get requiresNewCode => action == ResolutionAction.addAsNew;
 }
 
 // Standard door inspection errors

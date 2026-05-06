@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/database_service.dart';
+import '../services/local_database_service.dart';
 import '../models/models.dart';
 import 'error_management_page.dart';
 
@@ -150,6 +150,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       escapeDirectionRespected: escapeDirectionRespected,
       fullPanicStandWing: fullPanicStandWing,
       doorFunctionOK: properFunction,
+      syncStatus: widget.door?.syncStatus ?? 'pending',  // Set to 'pending' for new doors
     );
   }
 
@@ -157,9 +158,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     final door = buildDoor();
 
     if (widget.door == null) {
-      await DatabaseService.insertDoor(door);
+      await LocalDatabaseService.insertDoor(door.toMap());
     } else {
-      await DatabaseService.updateDoor(door);
+      await LocalDatabaseService.updateDoor(door.toMap());
     }
 
     if (mounted) Navigator.pop(context);
@@ -267,7 +268,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Door type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Türart"),
-              value: doorType,
+              initialValue: doorType,
               items: ["T30", "T60", "T90", "RS", "Sonstige"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -277,7 +278,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Wing count
             DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: "Flügelanzahl"),
-              value: wingCount,
+              initialValue: wingCount,
               items: [1, 2, 3]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val.toString())))
                   .toList(),
@@ -287,7 +288,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Material
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Material"),
-              value: material,
+              initialValue: material,
               items: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -303,7 +304,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // DIN configuration
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "DIN-Konfiguration"),
-              value: dinConfiguration,
+              initialValue: dinConfiguration,
               items: ["DIN L", "DIN R", "DIN LR", "Ohne"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -313,7 +314,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Closer type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließerart"),
-              value: closerType,
+              initialValue: closerType,
               items: ["Standard", "Überkopf", "Boden", "Feststell"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -323,7 +324,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Closing sequence system
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließfolgesystem"),
-              value: closingSequenceSystem,
+              initialValue: closingSequenceSystem,
               items: ["Keine", "Einfach", "Doppel", "Mehrfach"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -372,7 +373,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Access control
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Zutrittskontrolle"),
-              value: accessControl,
+              initialValue: accessControl,
               items: ["HID multiclass SE", "Nein", "Primion", "Siedle"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -417,7 +418,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Fitting type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Beschlagart"),
-              value: fittingType,
+              initialValue: fittingType,
               items: ["Drückergarnitur", "Knaufgarnitur", "Hebelgarnitur", "Sonstige"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -427,7 +428,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Panic function
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Panikfunktion"),
-              value: panicFunction,
+              initialValue: panicFunction,
               items: ["A", "B", "E", "Nein"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -470,7 +471,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   child: ElevatedButton(
                     onPressed: () async {
                       final door = buildDoor();
-                      await DatabaseService.insertDoor(door);
+                      await LocalDatabaseService.insertDoor(door.toMap());
                       if (mounted) Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(

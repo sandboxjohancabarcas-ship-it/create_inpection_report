@@ -37,6 +37,9 @@ class Door {
   final bool fullPanicStandWing;
   final bool doorFunctionOK;
 
+  // Add sync status for local DB
+  final String? syncStatus;
+
   Door({
     required this.customerName,
     required this.customerAddress,
@@ -72,6 +75,7 @@ class Door {
     required this.escapeDirectionRespected,
     required this.fullPanicStandWing,
     required this.doorFunctionOK,
+    this.syncStatus,
   });
 
   // ---------------------------------------------------------
@@ -115,6 +119,7 @@ class Door {
     bool? escapeDirectionRespected,
     bool? fullPanicStandWing,
     bool? doorFunctionOK,
+    String? syncStatus,
   }) {
     return Door(
       customerName: customerName ?? this.customerName,
@@ -158,6 +163,7 @@ class Door {
       fullPanicStandWing:
           fullPanicStandWing ?? this.fullPanicStandWing,
       doorFunctionOK: doorFunctionOK ?? this.doorFunctionOK,
+      syncStatus: syncStatus ?? this.syncStatus,
     );
   }
 
@@ -200,6 +206,7 @@ class Door {
             escapeDirectionRespected ? 1 : 0,
         'fullPanicStandWing': fullPanicStandWing ? 1 : 0,
         'doorFunctionOK': doorFunctionOK ? 1 : 0,
+        'syncStatus': syncStatus,
       };
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
@@ -242,5 +249,6 @@ class Door {
         fullPanicStandWing:
             map['fullPanicStandWing'] == 1,
         doorFunctionOK: map['doorFunctionOK'] == 1,
+        syncStatus: map['syncStatus'],
       );
 }

@@ -100,7 +100,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ),
                 SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: severityController.text,
+                  initialValue: severityController.text,
                   decoration: InputDecoration(
                     labelText: 'Schweregrad',
                     border: OutlineInputBorder(),
@@ -441,8 +441,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               );
             },
             backgroundColor: Colors.purple,
-            child: Icon(Icons.bug_report),
             tooltip: 'Diagnostic Test',
+            child: Icon(Icons.bug_report),
           ),
           SizedBox(height: 16),
           FloatingActionButton(
@@ -454,15 +454,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               );
             },
             backgroundColor: Colors.orange,
-            child: Icon(Icons.upload_file),
             tooltip: 'Bulk Import',
+            child: Icon(Icons.upload_file),
           ),
           SizedBox(height: 16),
           FloatingActionButton(
             heroTag: "add_error",
             onPressed: () => _showEditErrorDialog(),
-            child: Icon(Icons.add),
             tooltip: 'Neuen Fehler hinzufügen',
+            child: Icon(Icons.add),
           ),
         ],
       ),

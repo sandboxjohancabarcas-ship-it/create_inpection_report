@@ -394,11 +394,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                                             searchResults = [];
                                                           });
                                                         },
-                                                        child: Text('Auswählen'),
                                                         style: ElevatedButton.styleFrom(
                                                           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                                                           textStyle: TextStyle(fontSize: 11),
                                                         ),
+                                                        child: Text('Auswählen'),
                                                       ),
                                                     ),
                                                   );
@@ -443,7 +443,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       decoration: InputDecoration(labelText: 'Schweregrad'),
-                      value: severityController.text,
+                      initialValue: severityController.text,
                       items: ['low', 'medium', 'high', 'critical'].map((severity) {
                         return DropdownMenuItem<String>(
                           value: severity,
@@ -846,8 +846,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddErrorDialog,
-        child: Icon(Icons.add),
         tooltip: 'Fehler hinzufügen',
+        child: Icon(Icons.add),
       ),
     );
   }
@@ -883,7 +883,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
               SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(labelText: 'Status'),
-                value: status,
+                initialValue: status,
                 items: ['open', 'in_progress', 'resolved'].map((status) {
                   return DropdownMenuItem<String>(
                     value: status,
