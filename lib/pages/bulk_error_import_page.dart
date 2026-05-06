@@ -528,6 +528,7 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
       final errors = <ErrorCatalog>[];
       int parseSkippedCount = 0;
 
+      // Parse all errors first
       for (int i = 0; i < lines.length; i++) {
         final line = lines[i].trim();
         if (line.isEmpty) continue;
@@ -557,30 +558,32 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
         }
       }
 
+      // Phase 1: Import non-conflict items immediately
       final result = await DatabaseService.mergeErrorCatalog(errors);
       _importedCount = result.insertedCount;
-      _skippedCount = parseSkippedCount + result.duplicateCount + result.conflicts.length;
+      _skippedCount = parseSkippedCount + result.duplicateCount;
       _importConflicts.addAll(result.conflicts);
 
       if (result.duplicateCount > 0) {
         _importLog.add('DUPLICATE: ${result.duplicateCount} identische Einträge übersprungen');
       }
       for (final conflict in result.conflicts) {
-        _importLog.add('FEHLER: ${conflict.toString()}');
+        _importLog.add('KONFLIKT: ${conflict.toString()}');
       }
 
-      final message = result.conflicts.isNotEmpty
-          ? 'Import abgeschlossen: ${result.insertedCount} Fehler importiert, ${result.conflicts.length} Konflikte'
+      // Show Phase 1 result
+      final phase1Message = result.conflicts.isNotEmpty
+          ? 'Phase 1 abgeschlossen: ${result.insertedCount} Fehler importiert, ${result.conflicts.length} Konflikte zur Lösung'
           : 'Erfolgreich importiert: ${result.insertedCount} Fehler';
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(message),
+          content: Text(phase1Message),
           backgroundColor: result.conflicts.isNotEmpty ? Colors.orange : Colors.green,
         ),
       );
 
-      // If there are conflicts, navigate to conflict review
+      // Phase 2: Handle conflicts separately if they exist
       if (result.conflicts.isNotEmpty) {
         final resolved = await Navigator.push<bool>(
           context,
@@ -590,11 +593,23 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
         );
 
         if (resolved == true) {
-          // Conflicts were resolved, show final success message
+          // Conflicts were resolved, update final count and show success message
+          setState(() {
+            _importConflicts.clear();
+          });
+          
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Alle Konflikte erfolgreich gelöst'),
+              content: Text('Alle Konflikte erfolgreich gelöst - Import abgeschlossen'),
               backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          // Conflict resolution was cancelled
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Konfliktlösung abgebrochen - ${result.insertedCount} Einträge wurden importiert'),
+              backgroundColor: Colors.orange,
             ),
           );
         }

@@ -487,6 +487,15 @@ class DatabaseService {
 
   static Future<ImportResult> mergeErrorCatalog(List<ErrorCatalog> errors) async {
     final db = await getDb();
+    
+    // Phase 1: Import all non-conflict items immediately
+    final phase1Result = await _importNonConflictItems(db, errors);
+    
+    // Phase 2: Return conflicts for separate processing
+    return phase1Result;
+  }
+
+  static Future<ImportResult> _importNonConflictItems(Database db, List<ErrorCatalog> errors) async {
     return await db.transaction<ImportResult>((txn) async {
       final existingRows = await txn.query('error_catalog');
       final existingByCode = <String, ErrorCatalog>{};
