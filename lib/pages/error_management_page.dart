@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:create_inpection_report/models/error_catalog.dart';
 import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/services/database_service.dart';
+import 'package:create_inpection_report/services/local_database_service.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
@@ -35,8 +35,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     
     try {
       print('Loading error catalog for door ${widget.doorId}...');
-      final errors = await DatabaseService.getAllErrorCatalog();
-      final inspectionErrors = await DatabaseService.getInspectionErrorsForDoor(widget.doorId);
+      final errors = await LocalDatabaseService.searchErrorCatalog(''); 
+      final inspectionErrors = await LocalDatabaseService.getErrorsForInspectionDoor(widget.doorId);
       
       print('Loaded ${errors.length} catalog errors');
       print('Loaded ${inspectionErrors.length} inspection errors');
@@ -68,7 +68,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
 
     try {
-      final results = await DatabaseService.searchErrorCatalog(query);
+      final results = await LocalDatabaseService.searchErrorCatalog(query);
       print('Search results: ${results.length} items found');
       if (mounted) {
         setState(() {
@@ -103,7 +103,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
 
     try {
-      await DatabaseService.insertInspectionError(inspectionError);
+      await LocalDatabaseService.insertInspectionDoorError(inspectionError);
       _loadData();
     } catch (e) {
       if (mounted) {
@@ -518,10 +518,12 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   
                   // Insert provisional error into catalog
                   try {
-                    await DatabaseService.insertErrorCatalog(provisionalError);
+                    // Note: In local-first, we store provisional errors locally 
+                    // until they are synced and approved by the main DB.
+                    await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
                     
                     // Get the inserted error ID
-                    final errors = await DatabaseService.getAllErrorCatalog();
+                    final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
                     final insertedError = errors.firstWhere(
                       (e) => e.code == provisionalError.code,
                       orElse: () => provisionalError,
@@ -536,7 +538,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       severity: insertedError.severity,
                     );
                     
-                    await DatabaseService.insertInspectionError(inspectionError);
+                    await LocalDatabaseService.insertInspectionDoorError(inspectionError);
                     
                     if (mounted) {
                       Navigator.pop(context);
@@ -612,7 +614,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           if (error.resolutionStatus != 'resolved') ...[
             TextButton(
               onPressed: () async {
-                await DatabaseService.updateInspectionErrorStatus(error.id!, 'resolved');
+                final updatedError = error.copyWith(resolutionStatus: 'resolved');
+                await LocalDatabaseService.insertInspectionDoorError(updatedError);
                 if (mounted) {
                   Navigator.pop(context);
                   _loadData();
@@ -915,7 +918,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await DatabaseService.updateInspectionErrorStatus(error.id!, status);
+              final updatedError = error.copyWith(resolutionStatus: status, notes: notesController.text);
+              await LocalDatabaseService.insertInspectionDoorError(updatedError);
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
@@ -943,7 +947,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await DatabaseService.deleteInspectionError(error.id!);
+              await LocalDatabaseService.deleteInspectionDoorError(error.id!);
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();

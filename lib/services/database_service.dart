@@ -1,5 +1,4 @@
 import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/models/inspection.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -315,31 +314,6 @@ class DatabaseService {
       where: 'errorId = ?',
       whereArgs: [errorId],
     );
-  }
-
-  // Compatibility methods for legacy error management calls
-  static Future<List<InspectionDoorError>> getInspectionErrorsForDoor(int doorId) async {
-    final db = await getDb();
-    final List<Map<String, dynamic>> maps = await db.query(
-      'inspection_door_errors',
-      where: 'inspectionDoorId = ?',
-      whereArgs: [doorId],
-    );
-    return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
-  }
-
-  static Future<int> insertInspectionError(InspectionDoorError error) async {
-    return await insertInspectionDoorError(error);
-  }
-
-  /// Delete a door error (compatibility alias)
-  static Future<void> deleteInspectionError(int id) async {
-    await deleteInspectionDoorError(id);
-  }
-
-  static Future<void> updateInspectionErrorStatus(int id, String status) async {
-    final db = await getDb();
-    await db.update('inspection_door_errors', {'resolutionStatus': status}, where: 'id = ?', whereArgs: [id]);
   }
 
   /// Return all distinct categories in the catalog.

@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local Tooling & Clutter
+.windsurf/
+flutter.bat
+flutter.zip
+flutter_setup_backup.bat
+lib/models/settings.json
+*.db

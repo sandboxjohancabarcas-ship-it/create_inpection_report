@@ -312,6 +312,34 @@ class LocalDatabaseService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // INSPECTION DOOR ERRORS (LOCAL)
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<int> insertInspectionDoorError(InspectionDoorError error) async {
+    final db = await getDb();
+    return await db.insert(
+      'inspection_door_errors',
+      error.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(int inspectionDoorId) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'inspection_door_errors',
+      where: 'inspectionDoorId = ?',
+      whereArgs: [inspectionDoorId],
+    );
+    return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
+  }
+
+  static Future<void> deleteInspectionDoorError(int id) async {
+    final db = await getDb();
+    await db.delete('inspection_door_errors', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // SYNC STATUS QUERIES
   // ─────────────────────────────────────────────────────────────
 
@@ -335,9 +363,65 @@ class LocalDatabaseService {
     return await db.query('inspection_door_errors', where: 'syncStatus = ?', whereArgs: ['pending']);
   }
 
+  /// Returns the junction record for a door in a specific inspection
+  static Future<Map<String, dynamic>?> getInspectionDoor(int inspectionId, int doorId) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'inspection_doors',
+      where: 'inspectionId = ? AND doorId = ?',
+      whereArgs: [inspectionId, doorId],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // ERROR CATALOG (LOCAL COPY)
   // ─────────────────────────────────────────────────────────────
+
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'category, code',
+      limit: 50,
+    );
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  static Future<List<String>> getErrorCatalogCategories() async {
+    final db = await getDb();
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT category FROM error_catalog ORDER BY category ASC',
+    );
+    return maps.map((m) => m['category'] as String).toList();
+  }
+
+  static Future<List<ErrorCatalog>> getErrorCatalogByCategory(String category) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'category = ?',
+      whereArgs: [category],
+      orderBy: 'code',
+    );
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  /// Fetch a single catalog entry by its ID from the local copy.
+  static Future<ErrorCatalog?> getErrorCatalogItemById(int errorId) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'errorId = ?',
+      whereArgs: [errorId],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return ErrorCatalog.fromMap(maps.first);
+  }
 
   /// Insert a list of error catalog items into the local DB.
   /// Used during the download phase.
