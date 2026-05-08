@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/models/inspection_error.dart';
 import 'package:create_inpection_report/services/database_service.dart';
 
 class ErrorCatalogTestPage extends StatefulWidget {
@@ -13,7 +12,6 @@ class ErrorCatalogTestPage extends StatefulWidget {
 
 class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
   List<ErrorCatalog> catalogErrors = [];
-  List<InspectionError> inspectionErrors = [];
   List<Map<String, dynamic>> rawDbData = [];
   bool isLoading = true;
   String testResult = '';
@@ -76,7 +74,7 @@ class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
 
       // Test 6: Test getAllErrorCatalogItems method
       _addTestStep('Testing getAllErrorCatalogItems method...');
-      final catalogItems = await DatabaseService.getAllErrorCatalogItems();
+      final catalogItems = await DatabaseService.getAllErrorCatalog();
       setState(() {
         catalogErrors = catalogItems;
       });
@@ -104,23 +102,15 @@ class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
         _addTestStep('  - severity: ${firstError.severity}');
       }
 
-      // Test 10: Check inspection_errors table
-      _addTestStep('Checking inspection_errors table...');
+      // Test 10: Verify inspection_errors table is GONE (Change 2)
+      _addTestStep('Verifying inspection_errors table is removed...');
       final inspectionTables = await db.rawQuery(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='inspection_errors'"
       );
       if (inspectionTables.isEmpty) {
-        _addTestStep('❌ inspection_errors table does not exist');
+        _addTestStep('✅ inspection_errors table successfully removed');
       } else {
-        final inspectionCount = await db.rawQuery('SELECT COUNT(*) as count FROM inspection_errors');
-        final inspCount = inspectionCount.first['count'] as int;
-        _addTestStep('✅ inspection_errors table exists with $inspCount entries');
-
-        final inspectionItems = await DatabaseService.getInspectionErrorsForDoor(1);
-        setState(() {
-          inspectionErrors = inspectionItems;
-        });
-        _addTestStep('✅ getInspectionErrorsForDoor returned ${inspectionItems.length} items');
+        _addTestStep('❌ inspection_errors table STILL EXISTS');
       }
 
       // Final assessment
@@ -244,10 +234,6 @@ class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
                         SizedBox(height: 8),
                         Text(
                           'Catalog Items: ${catalogErrors.length}',
-                          style: TextStyle(fontSize: 14),
-                        ),
-                        Text(
-                          'Inspection Errors: ${inspectionErrors.length}',
                           style: TextStyle(fontSize: 14),
                         ),
                       ],

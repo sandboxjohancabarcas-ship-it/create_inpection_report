@@ -1,8 +1,8 @@
 @echo off
-echo Setting up Flutter from VS Code extension...
+echo Setting up Flutter from local installation...
 
 REM Set Flutter path from VS Code extension
-set FLUTTER_PATH=C:\Users\Cabarcas\.vscode\extensions\dart-code.dart-code-3.134.0\dist\bin
+set FLUTTER_PATH=C:\Users\Cabarcas\flutter\bin
 
 REM Check if flutter.bat exists in VS Code extension
 if exist "%FLUTTER_PATH%\flutter.bat" (

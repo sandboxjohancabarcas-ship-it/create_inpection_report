@@ -41,7 +41,7 @@ class ImportSimulation {
     print('  ✓ Input: ${testData.length} items');
     print('  ✓ Phase 1 Result: ${result.insertedCount} inserted, ${result.conflicts.length} conflicts');
     print('  ✓ Expected: 2 inserted, 0 conflicts');
-    print('  ✓ Status: ${result.insertedCount == 2 && result.conflicts.length == 0 ? 'PASS' : 'FAIL'}\n');
+    print('  ✓ Status: ${result.insertedCount == 2 && result.conflicts.isEmpty ? 'PASS' : 'FAIL'}\n');
   }
   
   static void _testPhase2ConflictHandling() {

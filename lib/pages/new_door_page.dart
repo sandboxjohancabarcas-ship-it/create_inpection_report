@@ -57,6 +57,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   
   // Date field
   DateTime inspectionDate = DateTime.now();
+  int? currentInspectionId;
 
   @override
   void initState() {
@@ -64,12 +65,13 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     final d = widget.door;
 
-    // Initialize inspection metadata controllers
-    customerNameController = TextEditingController(text: d?.customerName ?? '');
-    customerAddressController = TextEditingController(text: d?.customerAddress ?? '');
-    contactPersonController = TextEditingController(text: d?.contactPerson ?? '');
-    jobNumberController = TextEditingController(text: d?.jobNumber ?? '');
-    inspectorNameController = TextEditingController(text: d?.inspectorName ?? '');
+       // Note: These will now be handled separately from the Door object
+    customerNameController = TextEditingController();
+    customerAddressController = TextEditingController();
+    contactPersonController = TextEditingController();
+    jobNumberController = TextEditingController();
+    inspectorNameController = TextEditingController();
+
 
     // Initialize door technical controllers
     doorNumberController = TextEditingController(text: d?.doorNumber ?? '');
@@ -105,23 +107,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     // Initialize numeric fields
     wingCount = d?.wingCount ?? 1;
     pos = d?.pos ?? 0;
-    
-    // Initialize date
-    inspectionDate = d?.inspectionDate ?? DateTime.now();
   }
 
   // Build a Door object from form fields
   Door buildDoor() {
     return Door(
-      // Inspection metadata
-      customerName: customerNameController.text,
-      customerAddress: customerAddressController.text,
-      contactPerson: contactPersonController.text,
-      jobNumber: jobNumberController.text,
-      inspectionDate: inspectionDate,
-      inspectorName: inspectorNameController.text,
-      
-      // Door technical specifications
       id: widget.door?.id ?? DateTime.now().millisecondsSinceEpoch,
       pos: pos,
       doorNumber: doorNumberController.text,
@@ -156,11 +146,41 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   Future<void> saveDoor() async {
     final door = buildDoor();
+    
+    // Save Inspection Metadata first
+    final Map<String, dynamic> inspectionData = {
+      'clientName': customerNameController.text,
+      'objectAddress': customerAddressController.text,
+      'date': inspectionDate.toIso8601String(),
+      'contactPerson': contactPersonController.text,
+      'inspectorName': inspectorNameController.text,
+      'auftragsnummer': jobNumberController.text,
+      'syncStatus': 'pending',
+    };
+    
+    if (currentInspectionId != null) {
+      inspectionData['inspectionId'] = currentInspectionId;
+    }
+
+    final id = await LocalDatabaseService.insertInspection(inspectionData);
+    setState(() => currentInspectionId = id);
 
     if (widget.door == null) {
-      await LocalDatabaseService.insertDoor(door.toMap());
+      final insertedDoorId = await LocalDatabaseService.insertDoor(door);
+      // Link the newly created door to the inspection
+      await LocalDatabaseService.insertInspectionDoor({
+        'inspectionId': currentInspectionId,
+        'doorId': insertedDoorId,
+        'status': 'InProgress', // Default status for a new inspection door
+        'notes': '',
+        'attachments': null,
+        'syncStatus': 'pending',
+      });
     } else {
       await LocalDatabaseService.updateDoor(door.toMap());
+      // For existing doors, we assume the linkage already exists or is handled elsewhere.
+      // If an existing door is being edited, its inspectionId should already be known.
+      // For simplicity, we're not re-creating inspection_doors for updates here.
     }
 
     if (mounted) Navigator.pop(context);
@@ -470,9 +490,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      final door = buildDoor();
-                      await LocalDatabaseService.insertDoor(door.toMap());
-                      if (mounted) Navigator.pop(context);
+                      await saveDoor();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.orange,

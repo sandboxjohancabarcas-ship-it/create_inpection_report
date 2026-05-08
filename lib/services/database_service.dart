@@ -1,5 +1,5 @@
 import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/models/inspection_error.dart';
+import 'package:create_inpection_report/models/inspection.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -14,19 +14,11 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 7,
+      version: 10,
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
           CREATE TABLE doors (
-            -- Inspection Metadata
-            customerName TEXT,
-            customerAddress TEXT,
-            contactPerson TEXT,
-            jobNumber TEXT,
-            inspectionDate TEXT,
-            inspectorName TEXT,
-            
             -- Door Technical Specifications
             id INTEGER PRIMARY KEY,
             pos INTEGER,
@@ -58,6 +50,7 @@ class DatabaseService {
             doorFunctionOK INTEGER
           );
         ''');
+        await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
 
         // Inspections table
         await db.execute('''
@@ -71,6 +64,9 @@ class DatabaseService {
             auftragsnummer TEXT
           );
         ''');
+        await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
+        await db.execute('CREATE INDEX idx_insp_job ON inspections (auftragsnummer)');
+        await db.execute('CREATE INDEX idx_insp_date ON inspections (date)');
 
         // InspectionDoors table
         await db.execute('''
@@ -95,7 +91,11 @@ class DatabaseService {
             category TEXT,
             severity TEXT DEFAULT 'medium',
             recommendation TEXT DEFAULT '',
-            normReference TEXT DEFAULT ''
+            normReference TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'Approved',
+            requestedBy TEXT,
+            requestDate TEXT,
+            sourceInspectionDoorId INTEGER
           );
         ''');
 
@@ -114,40 +114,35 @@ class DatabaseService {
           );
         ''');
 
-        // InspectionErrors table (simplified for direct door errors)
-        await db.execute('''
-          CREATE TABLE inspection_errors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            doorId INTEGER,
-            errorId INTEGER,
-            notes TEXT,
-            status TEXT DEFAULT 'open',
-            reportedDate TEXT,
-            resolvedDate TEXT,
-            FOREIGN KEY (doorId) REFERENCES doors (id),
-            FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
-          );
-        ''');
-
-        // ErrorRequests table
-        await db.execute('''
-          CREATE TABLE error_requests (
-            requestId INTEGER PRIMARY KEY AUTOINCREMENT,
-            proposedCode TEXT,
-            proposedDescription TEXT,
-            category TEXT,
-            inspectionDoorId INTEGER,
-            date TEXT,
-            status TEXT DEFAULT 'pending',
-            managerNotes TEXT,
-            replacedByErrorId INTEGER
-          );
-        ''');
-
+        // ErrorRequests table removed - functionality moved to error_catalog
         // Seed the error catalog on first create
         await _seedErrorCatalog(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 10) {
+          // Change 4: Performance Indices for high volume doors (2,000+ records)
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_doors_number ON doors (doorNumber)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_client ON inspections (clientName)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (auftragsnummer)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
+          print('Database version 10: Performance indices created.');
+        }
+
+        if (oldVersion < 9) {
+          // Change 3: Remove metadata columns from doors table
+          await db.execute('ALTER TABLE doors DROP COLUMN customerName');
+          await db.execute('ALTER TABLE doors DROP COLUMN customerAddress');
+          await db.execute('ALTER TABLE doors DROP COLUMN contactPerson');
+          await db.execute('ALTER TABLE doors DROP COLUMN jobNumber');
+          await db.execute('ALTER TABLE doors DROP COLUMN inspectionDate');
+          await db.execute('ALTER TABLE doors DROP COLUMN inspectorName');
+        }
+
+        if (oldVersion < 8) {
+          // Redundancy Removal: Drop the legacy inspection_errors table
+          await db.execute('DROP TABLE IF EXISTS inspection_errors');
+        }
+
         if (oldVersion < 7) {
           // Add missing columns to error_catalog table
           try {
@@ -165,25 +160,17 @@ class DatabaseService {
           } catch (e) {
             print('NormReference column already exists or other error: $e');
           }
-          
-          // Create inspection_errors table if it doesn't exist
+
+          // Add consolidation columns for Change 1 if not already present
           try {
-            await db.execute('''
-              CREATE TABLE IF NOT EXISTS inspection_errors (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                doorId INTEGER,
-                errorId INTEGER,
-                notes TEXT,
-                status TEXT DEFAULT 'open',
-                reportedDate TEXT,
-                resolvedDate TEXT,
-                FOREIGN KEY (doorId) REFERENCES doors (id),
-                FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
-              );
-            ''');
+            await db.execute("ALTER TABLE error_catalog ADD COLUMN status TEXT NOT NULL DEFAULT 'Approved'");
+            await db.execute("ALTER TABLE error_catalog ADD COLUMN requestedBy TEXT");
+            await db.execute("ALTER TABLE error_catalog ADD COLUMN requestDate TEXT");
+            await db.execute("ALTER TABLE error_catalog ADD COLUMN sourceInspectionDoorId INTEGER");
           } catch (e) {
-            print('Inspection errors table creation error: $e');
+            print('Consolidation columns might already exist: $e');
           }
+          
           
           // Reseed the error catalog with new data
           await db.delete('error_catalog');
@@ -199,13 +186,89 @@ class DatabaseService {
   // DOORS
   // ─────────────────────────────────────────────────────────────
 
-  static Future<void> insertDoor(Door door) async {
+  static Future<int> insertDoor(Door door) async {
     final db = await getDb();
-    await db.insert(
+    // Strip syncStatus as main DB doesn't have this column
+    final data = door.toMap()..remove('syncStatus');
+    await db.insert( // This returns the ID of the inserted row
       'doors',
-      door.toMap(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    return door.id; // Return the ID that was used for insertion
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // INSPECTIONS
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
+    final db = await getDb();
+    // Strip syncStatus as main DB doesn't have this column
+    final data = Map<String, dynamic>.from(inspectionData)..remove('syncStatus');
+    return await db.insert(
+      'inspections',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns all inspections stored in the main database
+  static Future<List<Map<String, dynamic>>> getAllInspections() async {
+    final db = await getDb();
+    return await db.query('inspections', orderBy: 'date DESC');
+  }
+
+  /// Fetches a specific inspection record by its identifying criteria
+  static Future<Map<String, dynamic>?> getInspectionByCriteria({
+    required String clientName,
+    required String jobNumber,
+    required String date,
+  }) async {
+    final db = await getDb();
+    final List<Map<String, dynamic>> maps = await db.query(
+      'inspections',
+      where: 'clientName = ? AND auftragsnummer = ? AND date = ?',
+      whereArgs: [clientName, jobNumber, date],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? maps.first : null;
+  }
+
+  static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
+    final db = await getDb();
+    // Strip syncStatus as main DB doesn't have this column
+    final cleanData = Map<String, dynamic>.from(data)..remove('syncStatus');
+    return await db.insert(
+      'inspection_doors',
+      cleanData,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Returns doors filtered by specific inspection criteria (The "Download" filter)
+  static Future<List<Door>> getDoorsByInspectionCriteria({
+    required String clientName,
+    required String jobNumber,
+    required String date,
+  }) async {
+    final db = await getDb();
+    
+    // Perform a three-way join to isolate the doors for a specific job
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT d.* 
+      FROM doors d
+      INNER JOIN inspection_doors id ON d.id = id.doorId
+      INNER JOIN inspections i ON i.inspectionId = id.inspectionId
+      WHERE i.clientName = ? 
+        AND i.auftragsnummer = ? 
+        AND i.date = ?
+    ''', [clientName, jobNumber, date]);
+
+    if (maps.isEmpty) {
+      print('No doors found for $clientName / $jobNumber');
+    }
+    return maps.map((map) => Door.fromMap(map)).toList();
   }
 
   static Future<List<Door>> getAllDoors() async {
@@ -233,27 +296,6 @@ class DatabaseService {
   // ERROR CATALOG
   // ─────────────────────────────────────────────────────────────
 
-  /// Insert a single error catalog entry.
-  static Future<int> insertErrorCatalogItem(ErrorCatalog item) async {
-    final db = await getDb();
-    return await db.insert(
-      'error_catalog',
-      item.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.ignore, // skip if code already exists
-    );
-  }
-
-  /// Return every entry in the catalog, ordered by category then code.
-  static Future<List<ErrorCatalog>> getAllErrorCatalogItems() async {
-    final db = await getDb();
-    final maps = await db.query(
-      'error_catalog',
-      orderBy: 'category ASC, code ASC',
-    );
-    print('Database query returned ${maps.length} error catalog entries');
-    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
-  }
-
   /// Return all entries for a specific category.
   static Future<List<ErrorCatalog>> getErrorCatalogByCategory(String category) async {
     final db = await getDb();
@@ -273,6 +315,31 @@ class DatabaseService {
       where: 'errorId = ?',
       whereArgs: [errorId],
     );
+  }
+
+  // Compatibility methods for legacy error management calls
+  static Future<List<InspectionDoorError>> getInspectionErrorsForDoor(int doorId) async {
+    final db = await getDb();
+    final List<Map<String, dynamic>> maps = await db.query(
+      'inspection_door_errors',
+      where: 'inspectionDoorId = ?',
+      whereArgs: [doorId],
+    );
+    return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
+  }
+
+  static Future<int> insertInspectionError(InspectionDoorError error) async {
+    return await insertInspectionDoorError(error);
+  }
+
+  /// Delete a door error (compatibility alias)
+  static Future<void> deleteInspectionError(int id) async {
+    await deleteInspectionDoorError(id);
+  }
+
+  static Future<void> updateInspectionErrorStatus(int id, String status) async {
+    final db = await getDb();
+    await db.update('inspection_door_errors', {'resolutionStatus': status}, where: 'id = ?', whereArgs: [id]);
   }
 
   /// Return all distinct categories in the catalog.
@@ -297,16 +364,6 @@ class DatabaseService {
     return ErrorCatalog.fromMap(maps.first);
   }
 
-  /// Delete a catalog entry (admin use only).
-  static Future<void> deleteErrorCatalogItem(int errorId) async {
-    final db = await getDb();
-    await db.delete(
-      'error_catalog',
-      where: 'errorId = ?',
-      whereArgs: [errorId],
-    );
-  }
-
   // ─────────────────────────────────────────────────────────────
   // INSPECTION DOOR ERRORS
   // ─────────────────────────────────────────────────────────────
@@ -315,9 +372,11 @@ class DatabaseService {
   static Future<int> insertInspectionDoorError(
       InspectionDoorError error) async {
     final db = await getDb();
+    // Strip syncStatus as main DB doesn't have this column
+    final data = error.toMap()..remove('syncStatus');
     return await db.insert(
       'inspection_door_errors',
-      error.toMap(),
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -343,138 +402,6 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // ERROR REQUESTS
-  // ─────────────────────────────────────────────────────────────
-
-  /// Submit a new error request (inspector proposes a missing error type).
-  static Future<int> insertErrorRequest(ErrorRequest request) async {
-    final db = await getDb();
-    return await db.insert('error_requests', request.toMap());
-  }
-
-  /// All pending requests — shown in the manager dashboard.
-  static Future<List<ErrorRequest>> getPendingErrorRequests() async {
-    final db = await getDb();
-    final maps = await db.query(
-      'error_requests',
-      where: 'status = ?',
-      whereArgs: ['pending'],
-      orderBy: 'date DESC',
-    );
-    return maps.map((m) => ErrorRequest.fromMap(m)).toList();
-  }
-
-  /// Approve: add to catalog, mark request as approved.
-  static Future<void> approveErrorRequest(
-      int requestId, ErrorCatalog newEntry) async {
-    final db = await getDb();
-    final newId = await db.insert('error_catalog', newEntry.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore);
-    await db.update(
-      'error_requests',
-      {'status': 'approved'},
-      where: 'requestId = ?',
-      whereArgs: [requestId],
-    );
-    // Also update the inspection_door_error that triggered this request
-    // so it now points to the real catalog entry.
-    final req = await db.query('error_requests',
-        where: 'requestId = ?', whereArgs: [requestId], limit: 1);
-    if (req.isNotEmpty && newId > 0) {
-      final inspectionDoorId = req.first['inspectionDoorId'];
-      await db.update(
-        'inspection_door_errors',
-        {'errorId': newId},
-        where: 'inspectionDoorId = ? AND errorId IS NULL',
-        whereArgs: [inspectionDoorId],
-      );
-    }
-  }
-
-  /// Reject: manager picks an existing catalog entry to replace the request.
-  /// The chosen errorId is applied to the inspection_door_error row.
-  static Future<void> rejectErrorRequest(
-      int requestId, int replacedByErrorId, String managerNotes) async {
-    final db = await getDb();
-    await db.update(
-      'error_requests',
-      {
-        'status': 'rejected',
-        'replacedByErrorId': replacedByErrorId,
-        'managerNotes': managerNotes,
-      },
-      where: 'requestId = ?',
-      whereArgs: [requestId],
-    );
-    // Replace the temporary null errorId with the chosen real one
-    final req = await db.query('error_requests',
-        where: 'requestId = ?', whereArgs: [requestId], limit: 1);
-    if (req.isNotEmpty) {
-      final inspectionDoorId = req.first['inspectionDoorId'];
-      await db.update(
-        'inspection_door_errors',
-        {'errorId': replacedByErrorId},
-        where: 'inspectionDoorId = ? AND errorId IS NULL',
-        whereArgs: [inspectionDoorId],
-      );
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // SEED DATA  ← error codes/descriptions supplied by user
-  // ─────────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────────
-  // INSPECTION ERRORS
-  // ─────────────────────────────────────────────────────────────
-
-  static Future<void> insertInspectionError(InspectionError error) async {
-    final db = await getDb();
-    await db.insert(
-      'inspection_errors',
-      error.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  static Future<List<InspectionError>> getInspectionErrorsForDoor(int doorId) async {
-    final db = await getDb();
-    final maps = await db.query(
-      'inspection_errors',
-      where: 'doorId = ?',
-      whereArgs: [doorId],
-      orderBy: 'reportedDate DESC',
-    );
-    return maps.map((m) => InspectionError.fromMap(m)).toList();
-  }
-
-  static Future<void> updateInspectionErrorStatus(int errorId, String status) async {
-    final db = await getDb();
-    await db.update(
-      'inspection_errors',
-      {
-        'status': status,
-        'resolvedDate': status == 'resolved' ? DateTime.now().toIso8601String() : null,
-      },
-      where: 'id = ?',
-      whereArgs: [errorId],
-    );
-  }
-
-  static Future<void> deleteInspectionError(int errorId) async {
-    final db = await getDb();
-    await db.delete(
-      'inspection_errors',
-      where: 'id = ?',
-      whereArgs: [errorId],
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // ERROR CATALOG
-  // ─────────────────────────────────────────────────────────────
 
   static Future<void> insertErrorCatalog(ErrorCatalog error) async {
     final db = await getDb();

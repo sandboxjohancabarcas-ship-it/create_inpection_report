@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/models/inspection_error.dart';
+import 'package:create_inpection_report/models/models.dart';
 import 'package:create_inpection_report/services/database_service.dart';
 
 class ErrorManagementPage extends StatefulWidget {
@@ -19,7 +19,7 @@ class ErrorManagementPage extends StatefulWidget {
 
 class _ErrorManagementPageState extends State<ErrorManagementPage> {
   List<ErrorCatalog> availableErrors = [];
-  List<InspectionError> doorErrors = [];
+  List<InspectionDoorError> doorErrors = [];
   List<ErrorCatalog> searchResults = [];
   ErrorCatalog? selectedError;
   bool isLoading = true;
@@ -35,7 +35,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     
     try {
       print('Loading error catalog for door ${widget.doorId}...');
-      final errors = await DatabaseService.getAllErrorCatalogItems();
+      final errors = await DatabaseService.getAllErrorCatalog();
       final inspectionErrors = await DatabaseService.getInspectionErrorsForDoor(widget.doorId);
       
       print('Loaded ${errors.length} catalog errors');
@@ -94,11 +94,12 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   Future<void> _addCatalogError(ErrorCatalog error, String notes) async {
-    final inspectionError = InspectionError(
-      doorId: widget.doorId,
+    final inspectionError = InspectionDoorError(
+      inspectionDoorId: widget.doorId,
       errorId: error.errorId ?? 0,
       notes: notes,
-      reportedDate: DateTime.now(),
+      quantity: 1,
+      severity: error.severity,
     );
 
     try {
@@ -520,18 +521,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     await DatabaseService.insertErrorCatalog(provisionalError);
                     
                     // Get the inserted error ID
-                    final errors = await DatabaseService.getAllErrorCatalogItems();
+                    final errors = await DatabaseService.getAllErrorCatalog();
                     final insertedError = errors.firstWhere(
                       (e) => e.code == provisionalError.code,
                       orElse: () => provisionalError,
                     );
                     
                     // Add to inspection
-                    final inspectionError = InspectionError(
-                      doorId: widget.doorId,
+                    final inspectionError = InspectionDoorError(
+                      inspectionDoorId: widget.doorId,
                       errorId: insertedError.errorId ?? 0,
                       notes: notesController.text,
-                      reportedDate: DateTime.now(),
+                      quantity: 1,
+                      severity: insertedError.severity,
                     );
                     
                     await DatabaseService.insertInspectionError(inspectionError);
@@ -563,7 +565,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
   }
 
-  void _showErrorDetails(InspectionError error) async {
+  void _showErrorDetails(InspectionDoorError error) async {
     // Find the error catalog entry
     final errorCatalog = availableErrors.firstWhere(
       (e) => e.errorId == error.errorId,
@@ -607,7 +609,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ),
         ),
         actions: [
-          if (error.status != 'resolved') ...[
+          if (error.resolutionStatus != 'resolved') ...[
             TextButton(
               onPressed: () async {
                 await DatabaseService.updateInspectionErrorStatus(error.id!, 'resolved');
@@ -754,9 +756,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: _getStatusColor(error.status),
+                                  backgroundColor: _getStatusColor(error.resolutionStatus ?? 'open'),
                                   child: Icon(
-                                    _getStatusIcon(error.status),
+                                    _getStatusIcon(error.resolutionStatus ?? 'open'),
                                     color: Colors.white,
                                   ),
                                 ),
@@ -852,7 +854,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
   }
 
-  void _showEditDialog(InspectionError error) {
+  void _showEditDialog(InspectionDoorError error) {
     // Find the error catalog entry
     final errorCatalog = availableErrors.firstWhere(
       (e) => e.errorId == error.errorId,
@@ -864,7 +866,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
 
     final notesController = TextEditingController(text: error.notes);
-    String status = error.status;
+    String status = error.resolutionStatus ?? 'open';
 
     if (!mounted) return;
     
@@ -926,7 +928,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
   }
 
-  void _deleteError(InspectionError error) {
+  void _deleteError(InspectionDoorError error) {
     if (!mounted) return;
     
     showDialog(

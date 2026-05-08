@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/local_database_service.dart';
-import 'services/main_database_service.dart';
+import 'services/database_service.dart';
 import 'services/sync_service.dart';
 import 'models/models.dart';
 import 'pages/main_navigation_page.dart';
@@ -17,7 +17,7 @@ void main() async {
 
   // Initialize databases
   await LocalDatabaseService.getDb();
-  await MainDatabaseService.getDb();
+  await DatabaseService.getDb();
 
   // Run proof-of-concept scenario
   await runProofOfConceptScenario();
@@ -30,15 +30,19 @@ void main() async {
 Future<void> runProofOfConceptScenario() async {
   print('\n=== PROOF-OF-CONCEPT: Two-Database Architecture ===\n');
 
-  // 1. Create a test door in local DB (simulating inspector input)
-  print('1. Creating door in LOCAL DB (offline work)...');
-  final testDoor = Door(
-    customerName: 'Test Company GmbH',
-    customerAddress: 'Test Street 123, 12345 Test City',
+  // 1. Create Inspection and Door in local DB (simulating inspector input)
+  print('1. Creating Inspection and Door in LOCAL DB (offline work)...');
+  
+  final testInspection = Inspection(
+    clientName: 'Test Company GmbH',
+    objectAddress: 'Test Street 123, 12345 Test City',
     contactPerson: 'John Doe',
-    jobNumber: 'TEST-2026-001',
-    inspectionDate: DateTime.now(),
+    auftragsnummer: 'TEST-2026-001',
+    date: DateTime.now(),
     inspectorName: 'Inspector Test',
+  );
+
+  final testDoor = Door(
     id: DateTime.now().millisecondsSinceEpoch,
     pos: 1,
     doorNumber: 'T-01',
@@ -70,8 +74,20 @@ Future<void> runProofOfConceptScenario() async {
     syncStatus: 'pending', // New doors start as 'pending'
   );
 
-  await LocalDatabaseService.insertDoor(testDoor.toMap());
-  print('✓ Door created in local DB with syncStatus: ${testDoor.syncStatus}');
+  final localInspectionId = await LocalDatabaseService.insertInspection(testInspection.toMap()); 
+  await LocalDatabaseService.insertDoor(testDoor); // This expects a Door object
+
+  // 1.1 Link the door to the inspection (Crucial for visibility in joins)
+  await LocalDatabaseService.insertInspectionDoor({
+    'inspectionId': localInspectionId,
+    'doorId': testDoor.id,
+    'status': 'InProgress',
+    'notes': 'POC initial link',
+    'syncStatus': 'pending',
+  });
+  
+  print('✓ Inspection and Door created in local DB');
+  print('✓ Door syncStatus: ${testDoor.syncStatus}');
 
   // 2. Verify door exists in local DB
   print('\n2. Verifying door in LOCAL DB...');
@@ -82,7 +98,7 @@ Future<void> runProofOfConceptScenario() async {
 
   // 3. Check main DB is empty initially
   print('\n3. Checking MAIN DB (should be empty initially)...');
-  final mainDoorsBefore = await MainDatabaseService.getAllDoors();
+  final mainDoorsBefore = await DatabaseService.getAllDoors();
   print('✓ Main DB doors before sync: ${mainDoorsBefore.length}');
 
   // 4. Simulate report generation and sync
@@ -92,26 +108,20 @@ Future<void> runProofOfConceptScenario() async {
 
   // 5. Verify door is now in main DB
   print('\n5. Verifying door in MAIN DB after sync...');
-  final mainDoorsAfter = await MainDatabaseService.getAllDoors();
+  final mainDoorsAfter = await DatabaseService.getAllDoors();
   print('✓ Main DB doors after sync: ${mainDoorsAfter.length}');
   if (mainDoorsAfter.isNotEmpty) {
-    final mainDoorMap = mainDoorsAfter.first;
-    print('✓ Door in main DB: doorNumber=${mainDoorMap['doorNumber']}, customer=${mainDoorMap['customerName']}');
+    final mainDoor = mainDoorsAfter.first;
+    print('✓ Door in main DB: doorNumber=${mainDoor.doorNumber}');
   }
 
   // 6. Verify no pending doors remain in local DB after sync
   print('\n6. Verifying pending doors in LOCAL DB after sync...');
   final pendingLocalDoorsAfter = await LocalDatabaseService.getPendingDoors();
   if (pendingLocalDoorsAfter.isEmpty) {
-    print('✓ No pending doors remain in local DB; sync completed successfully');
+    print('✓ No pending doors remain in local DB');
   } else {
-    final pendingDoorMapsAfter = pendingLocalDoorsAfter.map((d) => Door.fromMap(d)).toList();
-    final pendingDoor = pendingDoorMapsAfter.firstWhere((d) => d.doorNumber == 'T-01', orElse: () => Door(id: 0, pos: 0, doorNumber: '', floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 0, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false, doorFunctionOK: false, customerName: '', customerAddress: '', contactPerson: '', jobNumber: '', inspectionDate: DateTime.now(), inspectorName: '', syncStatus: ''));
-    if (pendingDoor.doorNumber.isNotEmpty) {
-      print('⚠️ Door is still pending in local DB: ${pendingDoor.doorNumber}, syncStatus: ${pendingDoor.syncStatus}');
-    } else {
-      print('✓ No pending door with doorNumber T-01 found in local DB');
-    }
+    print('⚠️ There are still ${pendingLocalDoorsAfter.length} pending doors in local DB');
   }
 
   // 7. Verify error catalog is available in main DB

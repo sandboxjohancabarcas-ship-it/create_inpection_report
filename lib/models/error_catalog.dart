@@ -6,6 +6,12 @@ class ErrorCatalog {
   final String severity;     // 'low', 'medium', 'high', 'critical'
   final String recommendation;
   final String normReference; // DIN/EN norm reference
+  
+  // Consolidation fields
+  final String status;        // 'Approved', 'Pending', 'Rejected'
+  final String? requestedBy;
+  final DateTime? requestDate;
+  final int? sourceInspectionDoorId;
 
   ErrorCatalog({
     this.errorId,
@@ -15,6 +21,10 @@ class ErrorCatalog {
     this.severity = 'medium',
     this.recommendation = '',
     this.normReference = '',
+    this.status = 'Approved', // Default for master data
+    this.requestedBy,
+    this.requestDate,
+    this.sourceInspectionDoorId,
   });
 
   // CopyWith method
@@ -26,6 +36,10 @@ class ErrorCatalog {
     String? severity,
     String? recommendation,
     String? normReference,
+    String? status,
+    String? requestedBy,     
+    DateTime? requestDate,
+    int? sourceInspectionDoorId,
   }) {
     return ErrorCatalog(
       errorId: errorId ?? this.errorId,
@@ -35,6 +49,10 @@ class ErrorCatalog {
       severity: severity ?? this.severity,
       recommendation: recommendation ?? this.recommendation,
       normReference: normReference ?? this.normReference,
+      status: status ?? this.status,
+      requestedBy: requestedBy ?? this.requestedBy,
+      requestDate: requestDate ?? this.requestDate, 
+      sourceInspectionDoorId: sourceInspectionDoorId ?? this.sourceInspectionDoorId,
     );
   }
 
@@ -46,6 +64,10 @@ class ErrorCatalog {
         'severity': severity,
         'recommendation': recommendation,
         'normReference': normReference,
+        'status': status, 
+        'requestedBy': requestedBy,
+        'requestDate': requestDate,
+        'sourceInspectionDoorId': sourceInspectionDoorId,
       };
 
   factory ErrorCatalog.fromMap(Map<String, dynamic> map) => ErrorCatalog(
@@ -56,6 +78,12 @@ class ErrorCatalog {
         severity: map['severity'] ?? 'medium',
         recommendation: map['recommendation'] ?? '',
         normReference: map['normReference'] ?? '',
+        status: map['status'] ?? 'Approved',
+        requestedBy: map['requestedBy'],
+        requestDate: map['requestDate'] != null 
+            ? DateTime.tryParse(map['requestDate']) 
+            : null,
+        sourceInspectionDoorId: map['sourceInspectionDoorId'],
       );
 
   @override
