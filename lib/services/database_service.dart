@@ -539,17 +539,19 @@ class DatabaseService {
       return;
     }
     
-    for (final error in standardErrors) {
-      try {
-        await db.insert(
-          'error_catalog',
-          error.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.ignore,
-        );
-      } catch (e) {
-        print('Error seeding ${error.code}: $e');
+    await db.transaction((txn) async {
+      for (final error in standardErrors) {
+        try {
+          await txn.insert(
+            'error_catalog',
+            error.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        } catch (e) {
+          print('Error seeding ${error.code}: $e');
+        }
       }
-    }
+    });
     print('Error catalog seeding completed');
   }
 

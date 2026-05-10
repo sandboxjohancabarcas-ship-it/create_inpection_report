@@ -118,6 +118,9 @@ class LocalDatabaseService {
             sourceInspectionDoorId INTEGER
           );
         ''');
+
+        // Seed the error catalog on first create
+        await _seedErrorCatalog(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -167,6 +170,7 @@ class LocalDatabaseService {
   static Future<void> syncToMainDatabase() async {
     try {
       print('Starting synchronization to main database...');
+      int syncCount = 0;
 
       // 1. Sync Inspections
       final pendingInspections = await getPendingInspections();
@@ -174,6 +178,7 @@ class LocalDatabaseService {
         final data = Map<String, dynamic>.from(inspection)..remove('syncStatus');
         await DatabaseService.insertInspection(data);
         await markAsSynced('inspections', inspection['inspectionId'], idColumn: 'inspectionId');
+        syncCount++;
       }
 
       // 2. Sync Doors
@@ -183,6 +188,7 @@ class LocalDatabaseService {
         // DatabaseService.insertDoor handles syncStatus removal internally now
         await DatabaseService.insertDoor(door);
         await markAsSynced('doors', door.id);
+        syncCount++;
       }
 
       // 3. Sync Inspection Doors
@@ -191,6 +197,7 @@ class LocalDatabaseService {
         final data = Map<String, dynamic>.from(inspDoor)..remove('syncStatus');
         await DatabaseService.insertInspectionDoor(data);
         await markAsSynced('inspection_doors', inspDoor['id']);
+        syncCount++;
       }
 
       // 4. Sync Inspection Door Errors
@@ -200,9 +207,10 @@ class LocalDatabaseService {
         // Ensure models without internal strip logic are handled
         await DatabaseService.insertInspectionDoorError(error);
         await markAsSynced('inspection_door_errors', errorMap['id']);
+        syncCount++;
       }
 
-      print('Synchronization finished successfully.');
+      print('Synchronization finished. Synced $syncCount items.');
     } catch (e) {
       print('Critical error during synchronization: $e');
       // Rethrow to allow the UI to catch and show an error message
@@ -235,10 +243,7 @@ class LocalDatabaseService {
       final db = await getDb();
       await db.transaction((txn) async {
         // 3. Populate local Error Catalog
-        for (var item in masterCatalog) {
-          await txn.insert('error_catalog', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-
+        await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
         // 4. Populate local Inspection metadata
         await txn.insert('inspections', mainInspection, conflictAlgorithm: ConflictAlgorithm.replace);
 
@@ -280,9 +285,9 @@ class LocalDatabaseService {
     return await db.query('doors');
   }
 
-  static Future<void> updateDoor(Map<String, dynamic> door) async {
+  static Future<void> updateDoor(Door door) async {
     final db = await getDb();
-    await db.update('doors', door, where: 'id = ?', whereArgs: [door['id']]);
+    await db.update('doors', door.toMap(), where: 'id = ?', whereArgs: [door.id]);
   }
 
   static Future<void> deleteDoor(int id) async {
@@ -428,10 +433,38 @@ class LocalDatabaseService {
   static Future<void> insertErrorCatalogItems(List<ErrorCatalog> items) async {
     final db = await getDb();
     await db.transaction((txn) async {
-      for (final item in items) {
-        await txn.insert('error_catalog', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
+      await _batchInsertCatalog(txn, items, ConflictAlgorithm.replace);
     });
     print('Inserted ${items.length} error catalog items into local DB.');
+  }
+
+  /// Optimized batch insertion for error catalog
+  static Future<void> _batchInsertCatalog(DatabaseExecutor db, List<ErrorCatalog> items, ConflictAlgorithm algorithm) async {
+    final batch = db.batch();
+    for (final item in items) {
+      batch.insert(
+        'error_catalog',
+        item.toMap(),
+        conflictAlgorithm: algorithm,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  static Future<void> _seedErrorCatalog(Database db) async {
+    final standardErrors = DoorErrorCatalog.getStandardErrors();
+    
+    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
+    final count = existingCount.first['count'] as int;
+    if (count > 0) return;
+    
+    print('Seeding local error catalog with ${standardErrors.length} items...');
+    await db.transaction((txn) async {
+      await _batchInsertCatalog(
+        txn,
+        standardErrors,
+        ConflictAlgorithm.ignore,
+      );
+    });
   }
 }

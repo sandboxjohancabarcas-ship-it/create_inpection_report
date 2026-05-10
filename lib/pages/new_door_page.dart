@@ -5,7 +5,7 @@ import 'error_management_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
-
+ 
   const DoorInspectionForm({super.key, this.door});
 
   @override
@@ -107,6 +107,35 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     // Initialize numeric fields
     wingCount = d?.wingCount ?? 1;
     pos = d?.pos ?? 0;
+
+    if (d != null) {
+      _loadInspectionData();
+    }
+  }
+
+  Future<void> _loadInspectionData() async {
+    final db = await LocalDatabaseService.getDb();
+    // Join inspections with inspection_doors to find the metadata for this specific door
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT i.* 
+      FROM inspections i
+      INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+      WHERE id.doorId = ?
+      LIMIT 1
+    ''', [widget.door!.id]);
+
+    if (results.isNotEmpty) {
+      final insp = results.first;
+      setState(() {
+        currentInspectionId = insp['inspectionId'];
+        customerNameController.text = insp['clientName'] ?? '';
+        customerAddressController.text = insp['objectAddress'] ?? '';
+        contactPersonController.text = insp['contactPerson'] ?? '';
+        jobNumberController.text = insp['auftragsnummer'] ?? '';
+        inspectorNameController.text = insp['inspectorName'] ?? '';
+        inspectionDate = DateTime.parse(insp['date']);
+      });
+    }
   }
 
   // Build a Door object from form fields
@@ -177,10 +206,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         'syncStatus': 'pending',
       });
     } else {
-      await LocalDatabaseService.updateDoor(door.toMap());
-      // For existing doors, we assume the linkage already exists or is handled elsewhere.
-      // If an existing door is being edited, its inspectionId should already be known.
-      // For simplicity, we're not re-creating inspection_doors for updates here.
+      await LocalDatabaseService.updateDoor(door);
     }
 
     if (mounted) Navigator.pop(context);
