@@ -540,19 +540,17 @@ class DatabaseService {
     }
     
     await db.transaction((txn) async {
-      for (final error in standardErrors) {
-        try {
-          await txn.insert(
-            'error_catalog',
-            error.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.ignore,
-          );
-        } catch (e) {
-          print('Error seeding ${error.code}: $e');
-        }
-      }
+      await _batchInsertCatalog(txn, standardErrors, ConflictAlgorithm.ignore);
     });
     print('Error catalog seeding completed');
+  }
+
+  static Future<void> _batchInsertCatalog(DatabaseExecutor db, List<ErrorCatalog> items, ConflictAlgorithm algorithm) async {
+    final batch = db.batch();
+    for (final item in items) {
+      batch.insert('error_catalog', item.toMap(), conflictAlgorithm: algorithm);
+    }
+    await batch.commit(noResult: true);
   }
 
   // Manual seeding method for testing

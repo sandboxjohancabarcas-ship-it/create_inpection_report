@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/local_database_service.dart';
 import 'services/database_service.dart';
-import 'services/sync_service.dart';
-import 'models/models.dart';
 import 'pages/main_navigation_page.dart';
 
 void main() async {
@@ -19,120 +17,8 @@ void main() async {
   await LocalDatabaseService.getDb();
   await DatabaseService.getDb();
 
-  // Run proof-of-concept scenario
-  await runProofOfConceptScenario();
-
   // Start your real app
   runApp(const MyApp());
-}
-
-/// Proof-of-concept scenario demonstrating the two-database architecture
-Future<void> runProofOfConceptScenario() async {
-  print('\n=== PROOF-OF-CONCEPT: Two-Database Architecture ===\n');
-
-  // 1. Create Inspection and Door in local DB (simulating inspector input)
-  print('1. Creating Inspection and Door in LOCAL DB (offline work)...');
-  
-  final testInspection = Inspection(
-    clientName: 'Test Company GmbH',
-    objectAddress: 'Test Street 123, 12345 Test City',
-    contactPerson: 'John Doe',
-    auftragsnummer: 'TEST-2026-001',
-    date: DateTime.now(),
-    inspectorName: 'Inspector Test',
-  );
-
-  final testDoor = Door(
-    id: DateTime.now().millisecondsSinceEpoch,
-    pos: 1,
-    doorNumber: 'T-01',
-    floor: 'EG',
-    roomNumber: '001',
-    roomDesignation: 'Test Room',
-    doorType: 'T30',
-    wingCount: 1,
-    material: 'Steel',
-    manufacturer: 'Test Manufacturer',
-    dinConfiguration: 'DIN L',
-    closerType: 'Standard',
-    closingSequenceSystem: 'None',
-    lockDimensions: '72mm',
-    closerOnHingeSide: true,
-    closerOnOppositeSide: false,
-    lintelHeightUnder1m: false,
-    escapeDoorControl: true,
-    accessControl: 'No',
-    escapeRouteSituation: true,
-    escapeRouteSignage: true,
-    blindCylinder: false,
-    pzCylinder: true,
-    fittingType: 'Handle',
-    panicFunction: 'B',
-    escapeDirectionRespected: true,
-    fullPanicStandWing: false,
-    doorFunctionOK: true,
-    syncStatus: 'pending', // New doors start as 'pending'
-  );
-
-  final localInspectionId = await LocalDatabaseService.insertInspection(testInspection.toMap()); 
-  await LocalDatabaseService.insertDoor(testDoor); // This expects a Door object
-
-  // 1.1 Link the door to the inspection (Crucial for visibility in joins)
-  await LocalDatabaseService.insertInspectionDoor({
-    'inspectionId': localInspectionId,
-    'doorId': testDoor.id,
-    'status': 'InProgress',
-    'notes': 'POC initial link',
-    'syncStatus': 'pending',
-  });
-  
-  print('✓ Inspection and Door created in local DB');
-  print('✓ Door syncStatus: ${testDoor.syncStatus}');
-
-  // 2. Verify door exists in local DB
-  print('\n2. Verifying door in LOCAL DB...');
-  final localDoors = await LocalDatabaseService.getAllDoors();
-  final localDoorMaps = localDoors.map((d) => Door.fromMap(d)).toList();
-  final foundLocalDoor = localDoorMaps.firstWhere((d) => d.doorNumber == 'T-01');
-  print('✓ Found door in local DB: ${foundLocalDoor.doorNumber}, syncStatus: ${foundLocalDoor.syncStatus}');
-
-  // 3. Check main DB is empty initially
-  print('\n3. Checking MAIN DB (should be empty initially)...');
-  final mainDoorsBefore = await DatabaseService.getAllDoors();
-  print('✓ Main DB doors before sync: ${mainDoorsBefore.length}');
-
-  // 4. Simulate report generation and sync
-  print('\n4. Simulating report generation and SYNC to MAIN DB...');
-  await SyncService.syncToMainDB();
-  print('✓ Sync completed');
-
-  // 5. Verify door is now in main DB
-  print('\n5. Verifying door in MAIN DB after sync...');
-  final mainDoorsAfter = await DatabaseService.getAllDoors();
-  print('✓ Main DB doors after sync: ${mainDoorsAfter.length}');
-  if (mainDoorsAfter.isNotEmpty) {
-    final mainDoor = mainDoorsAfter.first;
-    print('✓ Door in main DB: doorNumber=${mainDoor.doorNumber}');
-  }
-
-  // 6. Verify no pending doors remain in local DB after sync
-  print('\n6. Verifying pending doors in LOCAL DB after sync...');
-  final pendingLocalDoorsAfter = await LocalDatabaseService.getPendingDoors();
-  if (pendingLocalDoorsAfter.isEmpty) {
-    print('✓ No pending doors remain in local DB');
-  } else {
-    print('⚠️ There are still ${pendingLocalDoorsAfter.length} pending doors in local DB');
-  }
-
-  // 7. Verify error catalog is available in main DB
-  print('\n7. Verifying ERROR CATALOG in MAIN DB...');
-  // Note: Error catalog seeding happens in MainDatabaseService.getDb()
-
-  print('\n=== SCENARIO COMPLETED SUCCESSFULLY ===');
-  print('✓ Local DB: Used for offline door inspections');
-  print('✓ Main DB: Contains complete history and error catalog');
-  print('✓ Sync: Transfers data after report generation');
-  print('✓ Architecture: Two-database system working as designed\n');
 }
 
 class MyApp extends StatelessWidget {

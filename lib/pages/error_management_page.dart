@@ -6,11 +6,13 @@ import 'package:create_inpection_report/services/local_database_service.dart';
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
   final String doorNumber;
+  final int inspectionId;
 
   const ErrorManagementPage({
     super.key,
     required this.doorId,
     required this.doorNumber,
+    required this.inspectionId,
   });
 
   @override
@@ -22,6 +24,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   List<InspectionDoorError> doorErrors = [];
   List<ErrorCatalog> searchResults = [];
   ErrorCatalog? selectedError;
+  int? _inspectionDoorId;
   bool isLoading = true;
 
   @override
@@ -34,15 +37,22 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     setState(() => isLoading = true);
     
     try {
-      print('Loading error catalog for door ${widget.doorId}...');
-      final errors = await LocalDatabaseService.searchErrorCatalog(''); 
-      final inspectionErrors = await LocalDatabaseService.getErrorsForInspectionDoor(widget.doorId);
+      // Resolve the junction ID for this specific door in this specific inspection session
+      final junction = await LocalDatabaseService.getInspectionDoor(widget.inspectionId, widget.doorId);
+      _inspectionDoorId = junction?['id'];
+
+      print('Loading error catalog for door ${widget.doorId} (Session ID: $_inspectionDoorId)...');
+      final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
       
-      print('Loaded ${errors.length} catalog errors');
+      final inspectionErrors = _inspectionDoorId != null 
+          ? await LocalDatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
+          : <InspectionDoorError>[];
+      
+      print('Loaded ${catalogSuggestions.length} catalog errors');
       print('Loaded ${inspectionErrors.length} inspection errors');
       
       setState(() {
-        availableErrors = errors;
+        availableErrors = catalogSuggestions;
         doorErrors = inspectionErrors;
         isLoading = false;
       });
@@ -94,8 +104,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   Future<void> _addCatalogError(ErrorCatalog error, String notes) async {
+    if (_inspectionDoorId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fehler: Keine aktive Inspektions-Sitzung für diese Tür gefunden.')),
+        );
+      }
+      return;
+    }
+
     final inspectionError = InspectionDoorError(
-      inspectionDoorId: widget.doorId,
+      inspectionDoorId: _inspectionDoorId!,
       errorId: error.errorId ?? 0,
       notes: notes,
       quantity: 1,
@@ -529,9 +548,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       orElse: () => provisionalError,
                     );
                     
-                    // Add to inspection
+                    // Add to inspection using the resolved junction ID
+                    if (_inspectionDoorId == null) {
+                      throw Exception('Keine Inspektions-Sitzung gefunden');
+                    }
+
                     final inspectionError = InspectionDoorError(
-                      inspectionDoorId: widget.doorId,
+                      inspectionDoorId: _inspectionDoorId!,
                       errorId: insertedError.errorId ?? 0,
                       notes: notesController.text,
                       quantity: 1,
@@ -568,15 +591,12 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   void _showErrorDetails(InspectionDoorError error) async {
-    // Find the error catalog entry
-    final errorCatalog = availableErrors.firstWhere(
-      (e) => e.errorId == error.errorId,
-      orElse: () => ErrorCatalog(
-        code: 'Unbekannt',
-        description: 'Fehler nicht im Katalog gefunden',
-        category: 'Unbekannt',
-      ),
-    );
+    final ErrorCatalog currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(error.errorId ?? 0) 
+      ?? ErrorCatalog(
+          code: 'Unbekannt',
+          description: 'Fehler nicht im Katalog gefunden',
+          category: 'Unbekannt',
+        );
 
     if (!mounted) return;
     
@@ -590,20 +610,20 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Code: ${errorCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Code: ${currentCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
-              Text('Beschreibung: ${errorCatalog.description}'),
+              Text('Beschreibung: ${currentCatalog.description}'),
               SizedBox(height: 8),
-              Text('Kategorie: ${errorCatalog.category}'),
+              Text('Kategorie: ${currentCatalog.category}'),
               SizedBox(height: 8),
-              Text('Schweregrad: ${_getSeverityDisplay(errorCatalog.severity)}'),
-              if (errorCatalog.recommendation.isNotEmpty) ...[
+              Text('Schweregrad: ${_getSeverityDisplay(currentCatalog.severity)}'),
+              if (currentCatalog.recommendation.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text('Empfehlung: ${errorCatalog.recommendation}'),
+                Text('Empfehlung: ${currentCatalog.recommendation}'),
               ],
-              if (errorCatalog.normReference.isNotEmpty) ...[
+              if (currentCatalog.normReference.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text('Normreferenz: ${errorCatalog.normReference}'),
+                Text('Normreferenz: ${currentCatalog.normReference}'),
               ],
               SizedBox(height: 16),
               Text('Notizen: ${error.notes}'),
@@ -766,13 +786,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                   ),
                                 ),
                                 title: Text(
-                                  errorCatalog.code,
+                              errorCatalog.code,
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(errorCatalog.description),
+                                Text(errorCatalog.description),
                                     SizedBox(height: 4),
                                     Row(
                                       children: [
@@ -783,7 +803,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
-                                            errorCatalog.category,
+                                        errorCatalog.category,
                                             style: TextStyle(fontSize: 12),
                                           ),
                                         ),
@@ -791,14 +811,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                         Container(
                                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: _getSeverityColor(errorCatalog.severity).withOpacity(0.2),
+                                        color: _getSeverityColor(error.severity ?? 'medium').withOpacity(0.2),
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
-                                            _getSeverityDisplay(errorCatalog.severity),
+                                        _getSeverityDisplay(error.severity ?? 'medium'),
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: _getSeverityColor(errorCatalog.severity),
+                                          color: _getSeverityColor(error.severity ?? 'medium'),
                                             ),
                                           ),
                                         ),
@@ -806,16 +826,16 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                     ),
                                     if (error.notes.isNotEmpty) ...[
                                       SizedBox(height: 4),
-                                      Text('Notizen: ${error.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                  Text('Notizen: ${error.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
                                     ],
                                   ],
                                 ),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (value) {
                                     if (value == 'edit') {
-                                      _showEditDialog(error);
+                                  _showEditDialog(error);
                                     } else if (value == 'delete') {
-                                      _deleteError(error);
+                                  _deleteError(error);
                                     }
                                   },
                                   itemBuilder: (context) => [

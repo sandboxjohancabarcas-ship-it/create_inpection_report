@@ -150,6 +150,7 @@ class LocalDatabaseService {
       },
     );
 
+    // This was the end of the class, but methods below were outside.
     return _db!;
   }
 
@@ -329,6 +330,7 @@ class LocalDatabaseService {
     );
   }
 
+  // This method was missing its body in the previous diff, restoring it.
   static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(int inspectionDoorId) async {
     final db = await getDb();
     final maps = await db.query(
@@ -339,6 +341,15 @@ class LocalDatabaseService {
     return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
   }
 
+  static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
+    final db = await getDb();
+    return await db.rawQuery('''
+      SELECT ide.*, ec.code, ec.description, ec.category
+      FROM inspection_door_errors ide
+      INNER JOIN error_catalog ec ON ide.errorId = ec.errorId
+      WHERE ide.inspectionDoorId = ?
+    ''', [inspectionDoorId]);
+  }
   static Future<void> deleteInspectionDoorError(int id) async {
     final db = await getDb();
     await db.delete('inspection_door_errors', where: 'id = ?', whereArgs: [id]);
@@ -348,25 +359,15 @@ class LocalDatabaseService {
   // SYNC STATUS QUERIES
   // ─────────────────────────────────────────────────────────────
 
-  static Future<List<Map<String, dynamic>>> getPendingDoors() async {
+  static Future<List<Map<String, dynamic>>> _getPending(String table) async {
     final db = await getDb();
-    return await db.query('doors', where: 'syncStatus = ?', whereArgs: ['pending']);
+    return await db.query(table, where: 'syncStatus = ?', whereArgs: ['pending']);
   }
 
-  static Future<List<Map<String, dynamic>>> getPendingInspections() async {
-    final db = await getDb();
-    return await db.query('inspections', where: 'syncStatus = ?', whereArgs: ['pending']);
-  }
-
-  static Future<List<Map<String, dynamic>>> getPendingInspectionDoors() async {
-    final db = await getDb();
-    return await db.query('inspection_doors', where: 'syncStatus = ?', whereArgs: ['pending']);
-  }
-
-  static Future<List<Map<String, dynamic>>> getPendingInspectionDoorErrors() async {
-    final db = await getDb();
-    return await db.query('inspection_door_errors', where: 'syncStatus = ?', whereArgs: ['pending']);
-  }
+  static Future<List<Map<String, dynamic>>> getPendingDoors() => _getPending('doors');
+  static Future<List<Map<String, dynamic>>> getPendingInspections() => _getPending('inspections');
+  static Future<List<Map<String, dynamic>>> getPendingInspectionDoors() => _getPending('inspection_doors');
+  static Future<List<Map<String, dynamic>>> getPendingInspectionDoorErrors() => _getPending('inspection_door_errors');
 
   /// Returns the junction record for a door in a specific inspection
   static Future<Map<String, dynamic>?> getInspectionDoor(int inspectionId, int doorId) async {
@@ -438,19 +439,16 @@ class LocalDatabaseService {
     print('Inserted ${items.length} error catalog items into local DB.');
   }
 
-  /// Optimized batch insertion for error catalog
+  // This helper method needs to be inside the class.
   static Future<void> _batchInsertCatalog(DatabaseExecutor db, List<ErrorCatalog> items, ConflictAlgorithm algorithm) async {
     final batch = db.batch();
     for (final item in items) {
-      batch.insert(
-        'error_catalog',
-        item.toMap(),
-        conflictAlgorithm: algorithm,
-      );
+      batch.insert('error_catalog', item.toMap(), conflictAlgorithm: algorithm);
     }
     await batch.commit(noResult: true);
   }
 
+  // This helper method needs to be inside the class.
   static Future<void> _seedErrorCatalog(Database db) async {
     final standardErrors = DoorErrorCatalog.getStandardErrors();
     
@@ -458,7 +456,6 @@ class LocalDatabaseService {
     final count = existingCount.first['count'] as int;
     if (count > 0) return;
     
-    print('Seeding local error catalog with ${standardErrors.length} items...');
     await db.transaction((txn) async {
       await _batchInsertCatalog(
         txn,

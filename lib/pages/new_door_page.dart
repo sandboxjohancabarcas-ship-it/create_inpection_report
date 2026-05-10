@@ -529,23 +529,24 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      if (widget.door != null) {
+                      if (widget.door != null && currentInspectionId != null) {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => ErrorManagementPage(
                               doorId: widget.door!.id,
                               doorNumber: widget.door!.doorNumber,
+                              inspectionId: currentInspectionId!,
                             ),
                           ),
                         );
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
+                          const SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
                         );
                       }
                     },
-                    child: Text('Fehler verwalten'),
+                    child: const Text('Fehler verwalten'),
                   ),
                 ),
               ],
