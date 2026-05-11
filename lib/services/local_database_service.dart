@@ -211,6 +211,9 @@ class LocalDatabaseService {
         syncCount++;
       }
 
+      // Optional: Clear local data after a successful full sync
+      await clearSyncedData();
+
       print('Synchronization finished. Synced $syncCount items.');
     } catch (e) {
       print('Critical error during synchronization: $e');
@@ -232,19 +235,36 @@ class LocalDatabaseService {
       // 1. Fetch job-specific data from Main DB
       final mainInspection = await DatabaseService.getInspectionByCriteria(
           clientName: clientName, jobNumber: jobNumber, date: date);
+      
+      if (mainInspection == null) throw Exception('Job not found in Main DB');
+
+      final int mainId = mainInspection['inspectionId'];
       final doorList = await DatabaseService.getDoorsByInspectionCriteria(
           clientName: clientName, jobNumber: jobNumber, date: date);
-      if (mainInspection == null) throw Exception('Job not found in Main DB');
+      
+      // Pull the missing state: Junctions and Errors
+      final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(mainId);
+      final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
+      final errorList = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
       // 2. Clear current Working DB to ensure isolation
       await clearSyncedData();
 
       final db = await getDb();
       await db.transaction((txn) async {
-        // 3. Populate local Inspection metadata
-        await txn.insert('inspections', mainInspection, conflictAlgorithm: ConflictAlgorithm.replace);
+        // 3. Populate local Inspection (Marked as synced to lock metadata)
+        final localInsp = Map<String, dynamic>.from(mainInspection)..['syncStatus'] = 'synced';
+        await txn.insert('inspections', localInsp, conflictAlgorithm: ConflictAlgorithm.replace);
 
-        // 4. Populate local Doors
+        // 4. Populate local Junctions and Errors
+        for (var junction in junctionList) {
+          await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        for (var error in errorList) {
+          await txn.insert('inspection_door_errors', error, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        // 5. Populate local Doors
         for (var door in doorList) {
           await txn.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
         }

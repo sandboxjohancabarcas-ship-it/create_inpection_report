@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/local_database_service.dart';
 import '../models/models.dart';
 import 'new_door_page.dart';
+import 'job_selection_page.dart';
 
 class DoorListPage extends StatefulWidget {
   const DoorListPage({super.key});
@@ -12,6 +13,7 @@ class DoorListPage extends StatefulWidget {
 
 class _DoorListPageState extends State<DoorListPage> {
   List<Door> doors = [];
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -30,13 +32,77 @@ class _DoorListPageState extends State<DoorListPage> {
     await loadDoors();
   }
 
+  /// Handles the upload process from Working DB to Main DB
+  Future<void> _handleSync() async {
+    // Prevention: Don't start if already syncing
+    if (_isSyncing) return;
+
+    setState(() => _isSyncing = true);
+
+    try {
+      // Logic: Calls the service that iterates through all 'pending' records
+      // and pushes them to the Main Database Service.
+      await LocalDatabaseService.syncToMainDatabase();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Daten erfolgreich hochgeladen und synchronisiert!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Refresh: After sync, the local DB is typically cleared of the finished job
+        await loadDoors();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Synchronisierungsfehler: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Türenübersicht")),
-      body: doors.isEmpty
-          ? const Center(child: Text("Keine Türen vorhanden"))
-          : ListView.builder(
+      appBar: AppBar(
+        title: const Text("Türenübersicht"),
+        actions: [
+          // Action: Push local data to Main DB
+          IconButton(
+            icon: const Icon(Icons.cloud_upload),
+            tooltip: 'Daten in Haupt-DB hochladen',
+            onPressed: _isSyncing ? null : _handleSync,
+          ),
+          // Action: Fetch job from Main DB
+          IconButton(
+            icon: const Icon(Icons.cloud_download),
+            tooltip: 'Auftrag aus Haupt-DB laden',
+            onPressed: _isSyncing 
+              ? null 
+              : () async {
+                final result = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (context) => const JobSelectionPage()),
+                );
+                if (result == true) {
+                  loadDoors();
+                }
+              },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          doors.isEmpty
+              ? const Center(child: Text("Keine Türen vorhanden"))
+              : ListView.builder(
               itemCount: doors.length,
               itemBuilder: (context, index) {
                 final d = doors[index];
@@ -80,6 +146,29 @@ class _DoorListPageState extends State<DoorListPage> {
                 );
               },
             ),
+          // UI: Loading overlay for the sync process
+          if (_isSyncing)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: Card(
+                  margin: EdgeInsets.all(32),
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text("Synchronisierung läuft..."),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () async {

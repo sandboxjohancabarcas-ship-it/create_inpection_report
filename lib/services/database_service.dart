@@ -270,6 +270,26 @@ class DatabaseService {
     return maps.map((map) => Door.fromMap(map)).toList();
   }
 
+  /// Fetches all junction records for a specific inspection from Main DB
+  static Future<List<Map<String, dynamic>>> getInspectionDoorsByInspectionId(int inspectionId) async {
+    final db = await getDb();
+    return await db.query(
+      'inspection_doors',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+  }
+
+  /// Fetches all errors for a set of inspection door IDs from Main DB
+  static Future<List<Map<String, dynamic>>> getErrorsForInspectionDoorIds(List<int> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await getDb();
+    final String idString = ids.join(',');
+    return await db.rawQuery(
+      'SELECT * FROM inspection_door_errors WHERE inspectionDoorId IN ($idString)'
+    );
+  }
+
   static Future<List<Door>> getAllDoors() async {
     final db = await getDb();
     final maps = await db.query('doors');
