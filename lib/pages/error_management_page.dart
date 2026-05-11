@@ -33,7 +33,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
+  /// Loads data from the local database. 
+  /// If [syncWithMain] is true, it attempts to refresh the catalog from the main DB first.
+  Future<void> _loadData({bool syncWithMain = false}) async {
     setState(() => isLoading = true);
     
     try {
@@ -41,14 +43,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
       final junction = await LocalDatabaseService.getInspectionDoor(widget.inspectionId, widget.doorId);
       _inspectionDoorId = junction?['id'];
 
-      print('Loading error catalog for door ${widget.doorId} (Session ID: $_inspectionDoorId)...');
-
-      // Update the local catalog from the main DB source before fetching suggestions.
-      // We use a nested try-catch to allow the page to work offline even if the main DB is unreachable.
-      try {
-        await LocalDatabaseService.refreshLocalCatalogFromMain();
-      } catch (e) {
-        print('Offline or Main DB unreachable. Continuing with existing local catalog: $e');
+      // Only hit the Main DB if explicitly requested (e.g., initial load or manual refresh)
+      if (syncWithMain) {
+        try {
+          await LocalDatabaseService.refreshLocalCatalogFromMain();
+        } catch (e) {
+          print('Offline or Main DB unreachable. Continuing with existing local catalog: $e');
+        }
       }
 
       final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
@@ -739,7 +740,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
-            onPressed: _loadData,
+            onPressed: () => _loadData(syncWithMain: true),
           ),
         ],
       ),

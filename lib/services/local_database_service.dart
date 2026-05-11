@@ -390,11 +390,8 @@ class LocalDatabaseService {
       // Fetch current master list from main DB
       final masterCatalog = await DatabaseService.getAllErrorCatalog();
       
-      final db = await getDb();
-      await db.transaction((txn) async {
-        // Update local table using Replace algorithm to keep it in sync
-        await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
-      });
+      // Delegate the insertion to the standard catalog update routine
+      await insertErrorCatalogItems(masterCatalog);
       print('Catalog refresh complete. ${masterCatalog.length} items synchronized.');
     } catch (e) {
       print('Error refreshing catalog: $e');
@@ -447,7 +444,7 @@ class LocalDatabaseService {
   }
 
   /// Insert a list of error catalog items into the local DB.
-  /// Used during the download phase.
+  /// Used for synchronizing from the Main DB or saving provisional local errors.
   static Future<void> insertErrorCatalogItems(List<ErrorCatalog> items) async {
     final db = await getDb();
     await db.transaction((txn) async {
