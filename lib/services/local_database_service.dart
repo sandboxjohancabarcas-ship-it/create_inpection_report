@@ -227,15 +227,13 @@ class LocalDatabaseService {
     required String date,
   }) async {
     try {
-      print('Downloading job data for $clientName - $jobNumber...');
+      print('Downloading Job-Specific Data: $clientName - $jobNumber...');
 
-      // 1. Fetch data from the main Authoritative Source
-      final masterCatalog = await DatabaseService.getAllErrorCatalog();
+      // 1. Fetch job-specific data from Main DB
       final mainInspection = await DatabaseService.getInspectionByCriteria(
           clientName: clientName, jobNumber: jobNumber, date: date);
       final doorList = await DatabaseService.getDoorsByInspectionCriteria(
           clientName: clientName, jobNumber: jobNumber, date: date);
-
       if (mainInspection == null) throw Exception('Job not found in Main DB');
 
       // 2. Clear current Working DB to ensure isolation
@@ -243,12 +241,10 @@ class LocalDatabaseService {
 
       final db = await getDb();
       await db.transaction((txn) async {
-        // 3. Populate local Error Catalog
-        await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
-        // 4. Populate local Inspection metadata
+        // 3. Populate local Inspection metadata
         await txn.insert('inspections', mainInspection, conflictAlgorithm: ConflictAlgorithm.replace);
 
-        // 5. Populate local Doors
+        // 4. Populate local Doors
         for (var door in doorList) {
           await txn.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
         }
@@ -268,7 +264,8 @@ class LocalDatabaseService {
     await db.delete('inspections'); // Clear all inspections
     await db.delete('inspection_doors'); // Clear all inspection_doors
     await db.delete('inspection_door_errors'); // Clear all inspection_door_errors
-    await db.delete('error_catalog'); // Clear local error catalog (will be re-downloaded)
+    
+    // Note: error_catalog is NOT deleted here as it is global app data
     print('Local working.db cleared.');
   }
 
@@ -384,6 +381,26 @@ class LocalDatabaseService {
   // ─────────────────────────────────────────────────────────────
   // ERROR CATALOG (LOCAL COPY)
   // ─────────────────────────────────────────────────────────────
+
+  /// Specifically refreshes the local error catalog from the main database
+  /// without clearing other job-related data (doors, inspections).
+  static Future<void> refreshLocalCatalogFromMain() async {
+    try {
+      print('Refreshing local error catalog from main database...');
+      // Fetch current master list from main DB
+      final masterCatalog = await DatabaseService.getAllErrorCatalog();
+      
+      final db = await getDb();
+      await db.transaction((txn) async {
+        // Update local table using Replace algorithm to keep it in sync
+        await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
+      });
+      print('Catalog refresh complete. ${masterCatalog.length} items synchronized.');
+    } catch (e) {
+      print('Error refreshing catalog: $e');
+      rethrow;
+    }
+  }
 
   static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
     final db = await getDb();

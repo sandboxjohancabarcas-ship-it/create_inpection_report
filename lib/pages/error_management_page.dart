@@ -42,6 +42,15 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
       _inspectionDoorId = junction?['id'];
 
       print('Loading error catalog for door ${widget.doorId} (Session ID: $_inspectionDoorId)...');
+
+      // Update the local catalog from the main DB source before fetching suggestions.
+      // We use a nested try-catch to allow the page to work offline even if the main DB is unreachable.
+      try {
+        await LocalDatabaseService.refreshLocalCatalogFromMain();
+      } catch (e) {
+        print('Offline or Main DB unreachable. Continuing with existing local catalog: $e');
+      }
+
       final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
       
       final inspectionErrors = _inspectionDoorId != null 
