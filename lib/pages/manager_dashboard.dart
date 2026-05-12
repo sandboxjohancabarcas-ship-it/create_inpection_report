@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_catalog_test_page.dart';
+import 'error_consolidation_page.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -16,6 +17,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   List<ErrorCatalog> errors = [];
   List<ErrorCatalog> filteredErrors = [];
   String selectedCategory = 'Alle';
+  int pendingCount = 0;
   bool isLoading = true;
   final searchController = TextEditingController();
 
@@ -28,11 +30,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Future<void> _loadErrors() async {
     setState(() => isLoading = true);
     try {
-      final allErrors = await DatabaseService.getAllErrorCatalog();
-      print('Loaded ${allErrors.length} errors from database');
+      // Only show Approved items in the main management list
+      final approved = await DatabaseService.getAllErrorCatalog(status: 'Approved');
+      // Check for Pending items to show in the workflow badge
+      final pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      
+      print('DASHBOARD: Loaded ${approved.length} approved items.');
+      print('DASHBOARD: Found ${pending.length} pending error requests in Main DB.');
+      for (var p in pending) {
+        print('  -> Pending: ${p.code} | ${p.description} (Requested by: ${p.requestedBy})');
+      }
+
       setState(() {
-        errors = allErrors;
-        filteredErrors = allErrors;
+        errors = approved;
+        filteredErrors = approved;
+        pendingCount = pending.length;
         isLoading = false;
       });
     } catch (e) {
@@ -302,6 +314,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           _buildStatItem('Gesamt', filteredErrors.length, Colors.blue),
+                          _buildStatItem('Offen', pendingCount, Colors.orange),
                           _buildStatItem('Kritisch', 
                               filteredErrors.where((e) => e.severity == 'critical').length, Colors.purple),
                           _buildStatItem('Hoch', 
@@ -432,6 +445,20 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+            FloatingActionButton.extended(
+              heroTag: "approval_workflow",
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ErrorConsolidationPage()),
+                );
+                _loadErrors(); // Refresh to update count and list
+              },
+              backgroundColor: pendingCount > 0 ? Colors.orange : Colors.grey,
+              icon: const Icon(Icons.rule),
+              label: Text('$pendingCount Anfragen prüfen'),
+            ),
+          const SizedBox(height: 16),
           FloatingActionButton(
             heroTag: "diagnostic_test",
             onPressed: () {

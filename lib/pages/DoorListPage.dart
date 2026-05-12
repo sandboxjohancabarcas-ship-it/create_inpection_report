@@ -14,6 +14,8 @@ class DoorListPage extends StatefulWidget {
 class _DoorListPageState extends State<DoorListPage> {
   List<Door> doors = [];
   bool _isSyncing = false;
+  bool _isSearching = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -22,7 +24,7 @@ class _DoorListPageState extends State<DoorListPage> {
   }
 
   Future<void> loadDoors() async {
-    final maps = await LocalDatabaseService.getAllDoors();
+    final maps = await LocalDatabaseService.searchDoors(_searchController.text);
     final list = maps.map((m) => Door.fromMap(m)).toList();
     setState(() => doors = list);
   }
@@ -72,8 +74,33 @@ class _DoorListPageState extends State<DoorListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Türenübersicht"),
+        title: _isSearching 
+          ? TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Suchen (Tür, Code, Fehler)...',
+                border: InputBorder.none,
+                hintStyle: TextStyle(color: Colors.white70),
+              ),
+              style: const TextStyle(color: Colors.white),
+              onChanged: (value) => loadDoors(),
+            )
+          : const Text("Türenübersicht"),
         actions: [
+          // Action: Toggle search bar
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                _isSearching = !_isSearching;
+                if (!_isSearching) {
+                  _searchController.clear();
+                  loadDoors();
+                }
+              });
+            },
+          ),
           // Action: Push local data to Main DB
           IconButton(
             icon: const Icon(Icons.cloud_upload),

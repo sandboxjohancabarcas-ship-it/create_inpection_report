@@ -1,0 +1,12 @@
+{
+  "errorLens.enabled": true,
+  "errorLens.fontStyleItalic": true,
+  "errorLens.fontWeight": "600",
+  "errorLens.margin": "4ch",
+  "errorLens.enabledDiagnosticLevels": [
+    "error",
+    "warning"
+  ],
+  "errorLens.scrollbarAnnotations": true,
+  "errorLens.followCursor": "allLines"
+}

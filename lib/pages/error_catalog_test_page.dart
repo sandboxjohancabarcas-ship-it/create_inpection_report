@@ -175,6 +175,30 @@ class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
     }
   }
 
+  Future<void> _createTestPendingError() async {
+    try {
+      _addTestStep('Creating a mock pending error...');
+      final mock = ErrorCatalog(
+        code: 'REQ-${DateTime.now().millisecondsSinceEpoch.toString().substring(10)}',
+        description: 'Test Anfrage vom Inspektor',
+        category: 'Sonstiges',
+        status: 'Pending',
+        requestedBy: 'Test User',
+        requestDate: DateTime.now(),
+      );
+      
+      await DatabaseService.insertErrorCatalog(mock);
+      _addTestStep('✅ Mock pending error created');
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test-Anfrage erstellt! Prüfen Sie jetzt das Manager Dashboard.')),
+      );
+      await _runComprehensiveTest();
+    } catch (e) {
+      _addTestStep('❌ Failed to create mock: $e');
+    }
+  }
+
   Future<void> _clearDatabase() async {
     try {
       _addTestStep('Clearing error catalog...');
@@ -248,6 +272,12 @@ class _ErrorCatalogTestPageState extends State<ErrorCatalogTestPage> {
                       ElevatedButton(
                         onPressed: _seedDatabase,
                         child: Text('Seed Database'),
+                      ),
+                      SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _createTestPendingError,
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                        child: Text('Simulate Pending'),
                       ),
                       SizedBox(width: 8),
                       ElevatedButton(

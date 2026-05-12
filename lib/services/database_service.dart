@@ -218,6 +218,26 @@ class DatabaseService {
     return await db.query('inspections', orderBy: 'date DESC');
   }
 
+  /// Searches inspections by client name, job number, or date.
+  /// Limits results to 50 for performance and utilizes existing indexes.
+  /// Searches inspections by client name, job number, date, or door number.
+  /// Limits results to 50 jobs for performance.
+  static Future<List<Map<String, dynamic>>> searchInspections(String query) async {
+    final db = await getDb();
+    if (query.trim().isEmpty) {
+      return await db.query('inspections', orderBy: 'date DESC', limit: 50);
+    }
+
+    final searchTerm = '%$query%';
+    return await db.query(
+      'inspections',
+      where: 'clientName LIKE ? OR auftragsnummer LIKE ? OR date LIKE ?',
+      whereArgs: [searchTerm, searchTerm, searchTerm],
+      orderBy: 'date DESC',
+      limit: 50,
+    );
+  }
+
   /// Fetches a specific inspection record by its identifying criteria
   static Future<Map<String, dynamic>?> getInspectionByCriteria({
     required String clientName,
@@ -519,9 +539,14 @@ class DatabaseService {
     });
   }
 
-  static Future<List<ErrorCatalog>> getAllErrorCatalog() async {
+  static Future<List<ErrorCatalog>> getAllErrorCatalog({String? status}) async {
     final db = await getDb();
-    final maps = await db.query('error_catalog', orderBy: 'category, code');
+    final maps = await db.query(
+      'error_catalog',
+      where: status != null ? 'status = ?' : null,
+      whereArgs: status != null ? [status] : null,
+      orderBy: 'category, code',
+    );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 

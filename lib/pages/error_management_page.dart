@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
 import 'package:create_inpection_report/models/models.dart';
 import 'package:create_inpection_report/services/local_database_service.dart';
 
@@ -543,7 +542,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     severity: severityController.text,
                     recommendation: recommendationController.text.trim(),
                     normReference: normReferenceController.text.trim(),
+                    status: 'Pending', // Explicitly set to Pending for manager approval
                   );
+                  print('UI: Creating provisional error proposal: ${provisionalError.code} - Status: ${provisionalError.status}');
                   
                   // Insert provisional error into catalog
                   try {

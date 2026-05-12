@@ -17,7 +17,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 2,  // Increment version for schema changes
+      version: 3,  // Increment version for search indices
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -121,6 +121,10 @@ class LocalDatabaseService {
 
         // Seed the error catalog on first create
         await _seedErrorCatalog(db);
+
+        // Add indices for optimized searching
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -147,6 +151,12 @@ class LocalDatabaseService {
 
           print('Local Database upgraded to version $newVersion: Schema aligned with main DB.');
         }
+        if (oldVersion < 3) {
+          // Add indices for optimized searching in existing databases
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
+          print('Local Database upgraded to version 3: Search indices created.');
+        }
       },
     );
 
@@ -172,6 +182,16 @@ class LocalDatabaseService {
     try {
       print('Starting synchronization to main database...');
       int syncCount = 0;
+
+      // 0. Sync New Catalog Proposals
+      // We need to sync the catalog items first so the door errors have a valid foreign key
+      final pendingCatalog = await _getPending('error_catalog');
+      for (var item in pendingCatalog) {
+        final error = ErrorCatalog.fromMap(item);
+        await DatabaseService.insertErrorCatalog(error);
+        await markAsSynced('error_catalog', item['errorId'], idColumn: 'errorId');
+        syncCount++;
+      }
 
       // 1. Sync Inspections
       final pendingInspections = await getPendingInspections();
@@ -303,6 +323,26 @@ class LocalDatabaseService {
     return await db.query('doors');
   }
 
+  /// Searches doors by doorNumber, error code, or error description.
+  /// Uses a join across junctions to find doors with specific errors.
+  static Future<List<Map<String, dynamic>>> searchDoors(String query) async {
+    final db = await getDb();
+    if (query.isEmpty) return await getAllDoors();
+
+    final searchTerm = '%$query%';
+    
+    return await db.rawQuery('''
+      SELECT DISTINCT d.* 
+      FROM doors d
+      LEFT JOIN inspection_doors id ON d.id = id.doorId
+      LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
+      LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
+      WHERE d.doorNumber LIKE ? 
+         OR ec.code LIKE ? 
+         OR ec.description LIKE ?
+    ''', [searchTerm, searchTerm, searchTerm]);
+  }
+
   static Future<void> updateDoor(Door door) async {
     final db = await getDb();
     await db.update('doors', door.toMap(), where: 'id = ?', whereArgs: [door.id]);
@@ -402,13 +442,50 @@ class LocalDatabaseService {
   // ERROR CATALOG (LOCAL COPY)
   // ─────────────────────────────────────────────────────────────
 
+  /// When an inspector creates an error not in the catalog, this method
+  /// creates a 'Pending' catalog entry and links it to the door instance.
+  static Future<void> proposeNewError({
+    required int inspectionDoorId,
+    required String description,
+    required String category,
+    required String severity,
+  }) async {
+    final db = await getDb();
+    
+    await db.transaction((txn) async {
+      // 1. Create a provisional catalog entry
+      final provisionalId = await txn.insert('error_catalog', {
+        'code': 'REQ-${DateTime.now().millisecondsSinceEpoch}',
+        'description': description,
+        'category': category,
+        'status': 'Pending',
+        'requestedBy': 'Inspector', // Ideally pass the actual user name
+        'requestDate': DateTime.now().toIso8601String(),
+        'sourceInspectionDoorId': inspectionDoorId,
+        'syncStatus': 'pending',
+      });
+      print('LOCAL DB: Proposed new error created in catalog. ID: $provisionalId, Status: Pending');
+
+      // 2. Create the door error instance linked to the provisional ID
+      await txn.insert('inspection_door_errors', {
+        'inspectionDoorId': inspectionDoorId,
+        'errorId': provisionalId,
+        'quantity': 1,
+        'severity': severity,
+        'notes': 'Vorgeschlagener Fehler durch Inspektor',
+        'resolutionStatus': 'Open',
+        'syncStatus': 'pending',
+      });
+    });
+  }
+
   /// Specifically refreshes the local error catalog from the main database
   /// without clearing other job-related data (doors, inspections).
   static Future<void> refreshLocalCatalogFromMain() async {
     try {
       print('Refreshing local error catalog from main database...');
       // Fetch current master list from main DB
-      final masterCatalog = await DatabaseService.getAllErrorCatalog();
+      final masterCatalog = await DatabaseService.getAllErrorCatalog(status: 'Approved');
       
       // Delegate the insertion to the standard catalog update routine
       await insertErrorCatalogItems(masterCatalog);
@@ -477,7 +554,11 @@ class LocalDatabaseService {
   static Future<void> _batchInsertCatalog(DatabaseExecutor db, List<ErrorCatalog> items, ConflictAlgorithm algorithm) async {
     final batch = db.batch();
     for (final item in items) {
-      batch.insert('error_catalog', item.toMap(), conflictAlgorithm: algorithm);
+      final data = item.toMap();
+      if (item.status == 'Pending') {
+        data['syncStatus'] = 'pending';
+      }
+      batch.insert('error_catalog', data, conflictAlgorithm: algorithm);
     }
     await batch.commit(noResult: true);
   }
