@@ -47,7 +47,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         try {
           await LocalDatabaseService.refreshLocalCatalogFromMain();
         } catch (e) {
-          print('Offline or Main DB unreachable. Continuing with existing local catalog: $e');
+          print('Haupt-Datenbank nicht erreichbar. Fahre mit lokalem Katalog fort: $e');
         }
       }
 
@@ -538,7 +538,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   final provisionalError = ErrorCatalog(
                     code: codeController.text.trim(),
                     description: descriptionController.text.trim(),
-                    category: categoryController.text.trim().isNotEmpty ? categoryController.text.trim() : 'Provisorisch',
+                    category: categoryController.text.trim().isNotEmpty ? categoryController.text.trim() : 'provisional',
                     severity: severityController.text,
                     recommendation: recommendationController.text.trim(),
                     normReference: normReferenceController.text.trim(),
@@ -900,7 +900,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
 
     final notesController = TextEditingController(text: error.notes);
-    String status = error.resolutionStatus ?? 'open';
+    // Normalize to lowercase to match the dropdown items and prevent crashes
+    String status = (error.resolutionStatus ?? 'open').toLowerCase();
 
     if (!mounted) return;
     
@@ -913,9 +914,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Code: ${errorCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Fehlercode: ${errorCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
-              Text('Beschreibung: ${errorCatalog.description}'),
+              Text('Beschreibung:', style: TextStyle(fontWeight: FontWeight.w500)),
+              Text(errorCatalog.description),
               SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(labelText: 'Status'),

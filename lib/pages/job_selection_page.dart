@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
+import '../services/gaeb_export_service.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -20,6 +21,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   bool _isDownloading = false;
   late Future<InspectionList> _inspectionsFuture;
   final TextEditingController _searchController = TextEditingController();
+  final Set<int> _selectedInspectionIds = {};
 
   /// Initializes the inspection list
   @override
@@ -31,8 +33,52 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
   void _refreshInspections() {
     setState(() {
+      _selectedInspectionIds.clear();
       _inspectionsFuture = DatabaseService.searchInspections(_searchController.text);
     });
+  }
+
+  /// Collects full data for selected inspections including doors and errors
+  Future<List<Map<String, dynamic>>> _prepareExportData() async {
+    List<Map<String, dynamic>> exportData = [];
+    
+    for (int inspectionId in _selectedInspectionIds) {
+      final inspection = (await DatabaseService.searchInspections('')).firstWhere((i) => i['inspectionId'] == inspectionId);
+      
+      final doors = await DatabaseService.getDoorsByInspectionCriteria(
+        clientName: inspection['clientName'],
+        jobNumber: inspection['auftragsnummer'],
+        date: inspection['date'],
+      );
+
+      final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
+      final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
+      final allErrors = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
+
+      List<Map<String, dynamic>> doorDetails = [];
+      for (var door in doors) {
+        final junction = junctionList.firstWhere((j) => j['doorId'] == door.id);
+        final doorErrors = allErrors
+            .where((e) => e['inspectionDoorId'] == junction['id'])
+            .map((e) => e['notes']?.toString() ?? 'Fehler')
+            .toList();
+
+        doorDetails.add({
+          'doorNumber': door.doorNumber,
+          'material': door.material,
+          'doorFunctionOK': door.doorFunctionOK,
+          'floor': door.floor,
+          'roomNumber': door.roomNumber,
+          'errors': doorErrors,
+        });
+      }
+
+      exportData.add({
+        'metadata': inspection,
+        'doors': doorDetails,
+      });
+    }
+    return exportData;
   }
 
   /// Orchestrates the data handoff from Main DB to Working DB.
@@ -124,6 +170,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                       itemCount: inspections.length,
                       itemBuilder: (context, index) {
                         final job = inspections[index];
+                        final id = job['inspectionId'];
+                        final isSelected = _selectedInspectionIds.contains(id);
+
+                        void toggleSelection() {
+                          setState(() {
+                            if (isSelected) _selectedInspectionIds.remove(id);
+                            else _selectedInspectionIds.add(id);
+                          });
+                        }
+
                         return Card(
                           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           child: ListTile(
@@ -136,8 +192,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                                 Text('Datum: ${job['date']}'),
                               ],
                             ),
-                            trailing: const Icon(Icons.cloud_download_outlined),
-                            onTap: _isDownloading ? null : () => _handleJobDownload(job),
+                            trailing: Checkbox(
+                              value: isSelected,
+                              onChanged: (_) => toggleSelection(),
+                            ),
+                            onTap: _isDownloading 
+                                ? null 
+                                : (_selectedInspectionIds.isEmpty 
+                                    ? () => _handleJobDownload(job)
+                                    : toggleSelection),
+                            onLongPress: toggleSelection,
                           ),
                         );
                       },
@@ -166,6 +230,40 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: _selectedInspectionIds.isEmpty ? null : BottomAppBar(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            TextButton.icon(
+              onPressed: () async {
+                final data = await _prepareExportData();
+                final file = await GaebExportService.exportToGaeb90(data, "MultiJob");
+                if (mounted && file != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('GAEB 90 exportiert nach: ${file.path}')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.description),
+              label: const Text('GAEB 90 exportieren'),
+            ),
+            const VerticalDivider(),
+            TextButton.icon(
+              onPressed: () async {
+                final data = await _prepareExportData();
+                final file = await GaebExportService.exportToGaebXml(data, "MultiJob");
+                if (mounted && file != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('GAEB XML exportiert nach: ${file.path}')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.code),
+              label: const Text('GAEB XML exportieren'),
+            ),
+          ],
+        ),
       ),
     );
   }

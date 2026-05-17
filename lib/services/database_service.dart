@@ -197,10 +197,6 @@ class DatabaseService {
     return door.id; // Return the ID that was used for insertion
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // INSPECTIONS
-  // ─────────────────────────────────────────────────────────────
-
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     // Strip syncStatus as main DB doesn't have this column
@@ -210,12 +206,6 @@ class DatabaseService {
       data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-  }
-
-  /// Returns all inspections stored in the main database
-  static Future<List<Map<String, dynamic>>> getAllInspections() async {
-    final db = await getDb();
-    return await db.query('inspections', orderBy: 'date DESC');
   }
 
   /// Searches inspections by client name, job number, or date.
@@ -254,17 +244,6 @@ class DatabaseService {
     return maps.isNotEmpty ? maps.first : null;
   }
 
-  static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
-    final db = await getDb();
-    // Strip syncStatus as main DB doesn't have this column
-    final cleanData = Map<String, dynamic>.from(data)..remove('syncStatus');
-    return await db.insert(
-      'inspection_doors',
-      cleanData,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
   /// Returns doors filtered by specific inspection criteria (The "Download" filter)
   static Future<List<Door>> getDoorsByInspectionCriteria({
     required String clientName,
@@ -288,6 +267,17 @@ class DatabaseService {
       print('No doors found for $clientName / $jobNumber');
     }
     return maps.map((map) => Door.fromMap(map)).toList();
+  }
+
+  static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
+    final db = await getDb();
+    // Strip syncStatus as main DB doesn't have this column
+    final cleanData = Map<String, dynamic>.from(data)..remove('syncStatus');
+    return await db.insert(
+      'inspection_doors',
+      cleanData,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   /// Fetches all junction records for a specific inspection from Main DB
@@ -318,9 +308,10 @@ class DatabaseService {
 
   static Future<void> updateDoor(Door door) async {
     final db = await getDb();
+    final data = door.toMap()..remove('syncStatus');
     await db.update(
       'doors',
-      door.toMap(),
+      data,
       where: 'id = ?',
       whereArgs: [door.id],
     );
@@ -330,10 +321,6 @@ class DatabaseService {
     final db = await getDb();
     await db.delete('doors', where: 'id = ?', whereArgs: [id]);
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // ERROR CATALOG
-  // ─────────────────────────────────────────────────────────────
 
   /// Return all entries for a specific category.
   static Future<List<ErrorCatalog>> getErrorCatalogByCategory(String category) async {
@@ -345,37 +332,6 @@ class DatabaseService {
       orderBy: 'code',
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
-  }
-
-  static Future<void> deleteErrorCatalog(int errorId) async {
-    final db = await getDb();
-    await db.delete(
-      'error_catalog',
-      where: 'errorId = ?',
-      whereArgs: [errorId],
-    );
-  }
-
-  /// Return all distinct categories in the catalog.
-  static Future<List<String>> getErrorCatalogCategories() async {
-    final db = await getDb();
-    final maps = await db.rawQuery(
-      'SELECT DISTINCT category FROM error_catalog ORDER BY category ASC',
-    );
-    return maps.map((m) => m['category'] as String).toList();
-  }
-
-  /// Fetch a single catalog entry by its ID.
-  static Future<ErrorCatalog?> getErrorCatalogItemById(int errorId) async {
-    final db = await getDb();
-    final maps = await db.query(
-      'error_catalog',
-      where: 'errorId = ?',
-      whereArgs: [errorId],
-      limit: 1,
-    );
-    if (maps.isEmpty) return null;
-    return ErrorCatalog.fromMap(maps.first);
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -407,16 +363,6 @@ class DatabaseService {
     return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
   }
 
-  /// Delete a single error entry (e.g. inspector removes it before saving).
-  static Future<void> deleteInspectionDoorError(int id) async {
-    final db = await getDb();
-    await db.delete(
-      'inspection_door_errors',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
   static Future<void> insertErrorCatalog(ErrorCatalog error) async {
     final db = await getDb();
     await db.insert(
@@ -426,17 +372,27 @@ class DatabaseService {
     );
   }
 
+  /// Search error catalog by code or description
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
+      whereArgs: ['%$query%', '%$query%'],
+      orderBy: 'category, code',
+      limit: 50,
+    );
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  static Future<void> clearErrorCatalog() async {
+    final db = await getDb();
+    await db.delete('error_catalog');
+  }
+
   static Future<ImportResult> mergeErrorCatalog(List<ErrorCatalog> errors) async {
     final db = await getDb();
     
-    // Phase 1: Import all non-conflict items immediately
-    final phase1Result = await _importNonConflictItems(db, errors);
-    
-    // Phase 2: Return conflicts for separate processing
-    return phase1Result;
-  }
-
-  static Future<ImportResult> _importNonConflictItems(Database db, List<ErrorCatalog> errors) async {
     return await db.transaction<ImportResult>((txn) async {
       final existingRows = await txn.query('error_catalog');
       final existingByCode = <String, ErrorCatalog>{};
@@ -459,7 +415,6 @@ class DatabaseService {
             duplicateCount++;
             continue;
           }
-
           conflicts.add(ImportConflict(
             code: error.code,
             description: error.description,
@@ -506,11 +461,8 @@ class DatabaseService {
       for (final resolution in resolutions) {
         switch (resolution.action) {
           case ResolutionAction.keepExisting:
-            // Do nothing - keep existing record
             break;
-
           case ResolutionAction.replaceExisting:
-            // Update existing record with incoming data
             await txn.update(
               'error_catalog',
               resolution.conflict.incoming.toMap(),
@@ -518,9 +470,7 @@ class DatabaseService {
               whereArgs: [resolution.conflict.code],
             );
             break;
-
           case ResolutionAction.addAsNew:
-            // Insert incoming record with new code
             final newError = resolution.conflict.incoming.copyWith(
               code: resolution.newCode ?? '${resolution.conflict.code}_new',
             );
@@ -530,9 +480,7 @@ class DatabaseService {
               conflictAlgorithm: ConflictAlgorithm.ignore,
             );
             break;
-
           case ResolutionAction.skip:
-            // Do nothing - skip incoming record
             break;
         }
       }
@@ -550,21 +498,14 @@ class DatabaseService {
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 
-  /// Search error catalog by code or description
-  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
-    print('Database search for: "$query"');
+  static Future<void> deleteErrorCatalog(int errorId) async {
     final db = await getDb();
-    final maps = await db.query(
+    await db.delete(
       'error_catalog',
-      where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
-      whereArgs: ['%$query%', '%$query%'],
-      orderBy: 'category, code',
-      limit: 50, // Limit results to prevent overflow
+      where: 'errorId = ?',
+      whereArgs: [errorId],
     );
-    print('Database search returned ${maps.length} results');
-    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
-
   // ─────────────────────────────────────────────────────────────
   // SEED DATA
   // ─────────────────────────────────────────────────────────────
@@ -609,11 +550,5 @@ class DatabaseService {
     // Seed with new data
     await _seedErrorCatalog(db);
     print('Manual seeding completed');
-  }
-
-  static Future<void> clearErrorCatalog() async {
-    final db = await getDb();
-    await db.delete('error_catalog');
-    print('Error catalog cleared');
   }
 }

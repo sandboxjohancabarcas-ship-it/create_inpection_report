@@ -157,7 +157,7 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: DoorErrorCatalog.getCategories().contains(catController.text) 
+                initialValue: DoorErrorCatalog.getCategories().contains(catController.text) 
                     ? catController.text 
                     : 'Sonstiges',
                 items: DoorErrorCatalog.getCategories().map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),

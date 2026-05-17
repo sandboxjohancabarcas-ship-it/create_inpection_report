@@ -473,7 +473,7 @@ class LocalDatabaseService {
         'quantity': 1,
         'severity': severity,
         'notes': 'Vorgeschlagener Fehler durch Inspektor',
-        'resolutionStatus': 'Open',
+        'resolutionStatus': 'open',
         'syncStatus': 'pending',
       });
     });

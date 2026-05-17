@@ -3,7 +3,6 @@ import 'package:create_inpection_report/models/error_catalog.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';
-import 'error_catalog_test_page.dart';
 import 'error_consolidation_page.dart';
 
 class ManagerDashboard extends StatefulWidget {
@@ -35,12 +34,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       // Check for Pending items to show in the workflow badge
       final pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
       
-      print('DASHBOARD: Loaded ${approved.length} approved items.');
-      print('DASHBOARD: Found ${pending.length} pending error requests in Main DB.');
-      for (var p in pending) {
-        print('  -> Pending: ${p.code} | ${p.description} (Requested by: ${p.requestedBy})');
-      }
-
       setState(() {
         errors = approved;
         filteredErrors = approved;
@@ -452,25 +445,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   context,
                   MaterialPageRoute(builder: (context) => const ErrorConsolidationPage()),
                 );
+                // Re-load errors if we returned from the consolidation page
                 _loadErrors(); // Refresh to update count and list
               },
-              backgroundColor: pendingCount > 0 ? Colors.orange : Colors.grey,
+              // Use a more distinct color to ensure visibility
+              backgroundColor: pendingCount > 0 ? Colors.deepOrange : Colors.blueGrey.shade300,
               icon: const Icon(Icons.rule),
               label: Text('$pendingCount Anfragen prüfen'),
             ),
-          const SizedBox(height: 16),
-          FloatingActionButton(
-            heroTag: "diagnostic_test",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ErrorCatalogTestPage()),
-              );
-            },
-            backgroundColor: Colors.purple,
-            tooltip: 'Diagnostic Test',
-            child: Icon(Icons.bug_report),
-          ),
           SizedBox(height: 16),
           FloatingActionButton(
             heroTag: "bulk_import",
@@ -481,14 +463,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               );
             },
             backgroundColor: Colors.orange,
-            tooltip: 'Bulk Import',
+            tooltip: 'Massen-Import',
             child: Icon(Icons.upload_file),
           ),
           SizedBox(height: 16),
           FloatingActionButton(
             heroTag: "add_error",
             onPressed: () => _showEditErrorDialog(),
-            tooltip: 'Neuen Fehler hinzufügen',
+            tooltip: 'Eintrag hinzufügen',
             child: Icon(Icons.add),
           ),
         ],
