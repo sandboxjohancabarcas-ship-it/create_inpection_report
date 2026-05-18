@@ -22,10 +22,11 @@ class GaebExportService {
 
     for (var job in jobs) {
       final meta = job['metadata'];
-      sb.write(formatLine('01', 'Kunde: ${meta['clientName']} | Job: ${meta['auftragsnummer']}'));
+      sb.write(formatLine('01', 'PROJEKT: ${meta['clientName']} - ${meta['auftragsnummer']}'));
 
       for (var door in job['doors']) {
-        String oz = (door['doorNumber']?.toString() ?? '0').padLeft(9, '0');
+        // OZ in GAEB 90 must be digits only. Removing non-numeric characters for strict compatibility.
+        String oz = (door['doorNumber']?.toString() ?? '0').replaceAll(RegExp(r'[^0-9]'), '').padLeft(9, '0');
         sb.write(formatLine('21', '$oz NNN 00000001000Stck'));
         sb.write(formatLine('25', door['material'] ?? 'Material?'));
         sb.write(formatLine('26', 'Etage: ${door['floor']} | Raum: ${door['roomNumber']}'));
@@ -42,6 +43,16 @@ class GaebExportService {
     return await file.writeAsString(sb.toString());
   }
 
+  /// Escapes special XML characters to prevent syntax errors.
+  static String _escapeXml(String input) {
+    return input
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&apos;');
+  }
+
   /// Exports multiple inspections to GAEB DA XML (X83) format.
   static Future<File?> exportToGaebXml(List<Map<String, dynamic>> jobs, String exportName) async {
     final directory = await getApplicationDocumentsDirectory();
@@ -51,42 +62,85 @@ class GaebExportService {
 
     StringBuffer xml = StringBuffer();
     xml.writeln('<?xml version="1.0" encoding="UTF-8"?>');
-    xml.writeln('<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/200407">');
+    xml.writeln('<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA83/3.2">');
     xml.writeln('  <GAEBInfo>');
     xml.writeln('    <Version>3.2</Version>');
+    xml.writeln('    <VersDate>2013-10</VersDate>');
     xml.writeln('    <Date>$now</Date>');
     xml.writeln('    <Time>$time</Time>');
+    xml.writeln('    <ProgSystem>Mobile Inspector Service</ProgSystem>');
     xml.writeln('  </GAEBInfo>');
+    xml.writeln('  <PrjInfo>');
+    xml.writeln('    <NamePrj>${_escapeXml(exportName)}</NamePrj>');
+    xml.writeln('    <LblPrj>Wartungs-Export</LblPrj>');
+    xml.writeln('    <Cur>EUR</Cur>');
+    xml.writeln('    <CurLbl>Euro</CurLbl>');
+    xml.writeln('  </PrjInfo>');
     xml.writeln('  <Award>');
     xml.writeln('    <DP>83</DP>');
+    xml.writeln('    <AwardInfo>');
+    xml.writeln('      <Cat>SelectCall</Cat>');
+    xml.writeln('      <Cur>EUR</Cur>');
+    xml.writeln('      <CurLbl>Euro</CurLbl>');
+    xml.writeln('    </AwardInfo>');
     xml.writeln('    <BoQ ID="id1">');
+    xml.writeln('      <BoQInfo>');
+    xml.writeln('        <Name>Wartung</Name>');
+    xml.writeln('        <LblBoQ>${_escapeXml(exportName)}</LblBoQ>');
+    xml.writeln('        <OutlCompl>AllTxt</OutlCompl>');
+    xml.writeln('        <BoQBkdn>');
+    xml.writeln('          <Type>BoQLevel</Type>');
+    xml.writeln('          <LblBoQBkdn>Titel</LblBoQBkdn>');
+    xml.writeln('          <Length>2</Length>');
+    xml.writeln('          <Num>Yes</Num>');
+    xml.writeln('        </BoQBkdn>');
+    xml.writeln('      </BoQInfo>');
     xml.writeln('      <BoQBody>');
 
     for (var job in jobs) {
       final meta = job['metadata'];
-      xml.writeln('        <Section ID="job_${meta['inspectionId']}">');
-      xml.writeln('          <LblText>${meta['clientName']} - ${meta['auftragsnummer']}</LblText>');
-      xml.writeln('          <Itemlist>');
+      final jobId = meta['inspectionId'];
+
+      // Using BoQCtgy for grouping as seen in the reference template
+      xml.writeln('        <BoQCtgy ID="job_$jobId" RNoPart="${jobId.toString().padLeft(2, '0')}">');
+      xml.writeln('          <LblTx><p><span>${_escapeXml(meta['clientName'])} - ${_escapeXml(meta['auftragsnummer'])}</span></p></LblTx>');
+      xml.writeln('          <BoQBody>');
+      xml.writeln('            <Itemlist>');
       
+      int itemCounter = 1;
       for (var door in job['doors']) {
         String status = door['doorFunctionOK'] == true ? 'OK' : 'Defekt';
-        xml.writeln('            <Item RNoPart="${door['doorNumber']}">');
-        xml.writeln('              <Qty>1.000</Qty>');
-        xml.writeln('              <QU>Stck</QU>');
-        xml.writeln('              <Description>');
-        xml.writeln('                <CompleteText><DetailTxt><Text>');
-        xml.writeln('                  <span>Etage: ${door['floor']} / Raum: ${door['roomNumber']}</span><br/>');
-        xml.writeln('                  <span>Material: ${door['material']}</span><br/>');
-        xml.writeln('                  <span>Status: $status</span><br/>');
-        if ((door['errors'] as List).isNotEmpty) {
-          xml.writeln('                  <span>Mängel: ${(door['errors'] as List).join(', ')}</span>');
+        String rNo = (door['doorNumber']?.toString() ?? '0').replaceAll(RegExp(r'[^0-9]'), '');
+        if (rNo.isEmpty) rNo = itemCounter.toString();
+        
+        // Every Item requires a unique ID attribute for XML schema validation
+        xml.writeln('              <Item ID="item_${jobId}_$itemCounter" RNoPart="$rNo">');
+        xml.writeln('                <Qty>1.000</Qty>');
+        xml.writeln('                <QU>Stck</QU>');
+        xml.writeln('                <Description>');
+        xml.writeln('                  <CompleteText>');
+        xml.writeln('                    <DetailTxt>');
+        
+        // Constructing an XHTML compliant description block as required by GAEB 3.2
+        xml.writeln('                      <Text>');
+        xml.writeln('                        <p><span>Etage: ${_escapeXml(door['floor'] ?? '')} / Raum: ${_escapeXml(door['roomNumber'] ?? '')}</span><br/>');
+        xml.writeln('                        <span>Material: ${_escapeXml(door['material'] ?? '')}</span><br/>');
+        xml.writeln('                        <span>Status: $status</span></p>');
+        
+        final errors = door['errors'] as List;
+        if (errors.isNotEmpty) {
+          xml.writeln('                        <p><span>Mängel: ${_escapeXml(errors.join(', '))}</span></p>');
         }
-        xml.writeln('                </Text></DetailTxt></CompleteText>');
-        xml.writeln('              </Description>');
-        xml.writeln('            </Item>');
+        xml.writeln('                      </Text>');
+        xml.writeln('                    </DetailTxt>');
+        xml.writeln('                  </CompleteText>');
+        xml.writeln('                </Description>');
+        xml.writeln('              </Item>');
+        itemCounter++;
       }
-      xml.writeln('          </Itemlist>');
-      xml.writeln('        </Section>');
+      xml.writeln('            </Itemlist>');
+      xml.writeln('          </BoQBody>');
+      xml.writeln('        </BoQCtgy>');
     }
 
     xml.writeln('      </BoQBody>');
