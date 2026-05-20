@@ -1,6 +1,6 @@
 {
-    "name": "create_inpection_report",
-    "short_name": "create_inpection_report",
+    "name": "wartungstool",
+    "short_name": "wartungstool",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

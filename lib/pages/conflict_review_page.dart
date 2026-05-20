@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/services/database_service.dart';
+import 'package:wartungstool/models/error_catalog.dart';
+import 'package:wartungstool/services/database_service.dart';
 
 class ConflictReviewPage extends StatefulWidget {
   final List<ImportConflict> conflicts;

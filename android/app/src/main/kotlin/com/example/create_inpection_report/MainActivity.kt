@@ -1,4 +1,4 @@
-package com.example.create_inpection_report
+package com.example.wartungstool
 
 import io.flutter.embedding.android.FlutterActivity
 

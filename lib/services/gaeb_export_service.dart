@@ -6,7 +6,8 @@ class GaebExportService {
   /// Exports multiple inspections to GAEB 90 (D83) format.
   static Future<File?> exportToGaeb90(List<Map<String, dynamic>> jobs, String exportName) async {
     final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/${exportName}_export.d83');
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final file = File('${directory.path}/${exportName}_$timestamp.d83');
     
     StringBuffer sb = StringBuffer();
     int lineCounter = 1;
@@ -56,7 +57,8 @@ class GaebExportService {
   /// Exports multiple inspections to GAEB DA XML (X83) format.
   static Future<File?> exportToGaebXml(List<Map<String, dynamic>> jobs, String exportName) async {
     final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/${exportName}_export.x83');
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final file = File('${directory.path}/${exportName}_$timestamp.x83');
     final now = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final time = DateFormat('HH:mm:ss').format(DateTime.now());
 

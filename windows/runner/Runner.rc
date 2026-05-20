@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "create_inpection_report" "\0"
+            VALUE "CompanyName", "Cabarcas WartungTool" "\0"
+            VALUE "FileDescription", "WartungsTool" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "create_inpection_report" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "create_inpection_report.exe" "\0"
-            VALUE "ProductName", "create_inpection_report" "\0"
+            VALUE "InternalName", "WartungsTool" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2024 Cabarcas. All rights reserved." "\0"
+            VALUE "OriginalFilename", "WartungsTool.exe" "\0"
+            VALUE "ProductName", "WartungsTool" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:create_inpection_report/services/local_database_service.dart';
-import 'package:create_inpection_report/models/models.dart';
+import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/models/models.dart';
+
 
 void main() {
   // Initialize sqflite for local environment testing

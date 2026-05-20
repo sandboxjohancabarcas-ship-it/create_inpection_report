@@ -1,8 +1,8 @@
 // Local Database Service for Inspector Mobile App (Offline Work)
 // Handles temporary data for current inspections: doors, errors, requests
 
-import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/services/database_service.dart';
+import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/services/database_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 

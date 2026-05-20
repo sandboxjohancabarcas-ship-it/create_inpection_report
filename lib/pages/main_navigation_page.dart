@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:create_inpection_report/pages/DoorListPage.dart';
-import 'package:create_inpection_report/pages/manager_dashboard.dart';
+import 'package:wartungstool/pages/DoorListPage.dart';
+import 'package:wartungstool/pages/manager_dashboard.dart';
 
 class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});

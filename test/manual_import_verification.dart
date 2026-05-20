@@ -1,7 +1,7 @@
 // Manual verification script for two-phase import functionality
 // This simulates the import scenarios to verify the fixes work correctly
 
-import 'package:create_inpection_report/models/error_catalog.dart';
+import 'package:wartungstool/models/models.dart';
 
 // Simulation of the two-phase import logic
 class ImportSimulation {

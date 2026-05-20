@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:create_inpection_report/services/gaeb_export_service.dart';
+import 'package:wartungstool/services/gaeb_export_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 

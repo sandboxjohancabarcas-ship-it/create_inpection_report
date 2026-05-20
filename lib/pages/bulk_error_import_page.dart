@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/services/database_service.dart';
-import 'package:create_inpection_report/pages/conflict_review_page.dart';
+import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/pages/conflict_review_page.dart';
 
 class BulkErrorImportPage extends StatefulWidget {
   const BulkErrorImportPage({super.key});

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
-import 'package:create_inpection_report/services/database_service.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/services/database_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {

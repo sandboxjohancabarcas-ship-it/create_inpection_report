@@ -175,8 +175,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
                         void toggleSelection() {
                           setState(() {
-                            if (isSelected) _selectedInspectionIds.remove(id);
-                            else _selectedInspectionIds.add(id);
+                            if (isSelected) {
+                              _selectedInspectionIds.remove(id);
+                            } else {
+                              _selectedInspectionIds.add(id);
+                            }
                           });
                         }
 

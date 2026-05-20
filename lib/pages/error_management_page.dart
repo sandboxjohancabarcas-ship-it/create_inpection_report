@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:create_inpection_report/models/models.dart';
-import 'package:create_inpection_report/services/local_database_service.dart';
+import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/services/local_database_service.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;

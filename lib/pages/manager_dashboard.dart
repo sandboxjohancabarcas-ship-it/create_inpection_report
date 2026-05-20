@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:create_inpection_report/models/error_catalog.dart';
+import 'package:wartungstool/models/error_catalog.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';

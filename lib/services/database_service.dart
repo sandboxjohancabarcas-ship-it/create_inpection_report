@@ -1,4 +1,4 @@
-import 'package:create_inpection_report/models/models.dart';
+import 'package:wartungstool/models/models.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
