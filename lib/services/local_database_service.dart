@@ -631,16 +631,46 @@ class LocalDatabaseService {
   }
 
   /// Imports an external .db file to replace the internal working.db.
+  /// Includes validation for file existence, extension, and schema compatibility.
   static Future<void> importWorkingDb(String sourcePath) async {
-    await closeDb();
-    
     final sourceFile = File(sourcePath);
+    
+    // 1. Basic File Validation
     if (!await sourceFile.exists()) {
       throw Exception('Import fehlgeschlagen: Quelldatei nicht gefunden.');
     }
 
+    if (!sourcePath.toLowerCase().endsWith('.db')) {
+      throw Exception('Import fehlgeschlagen: Ungültiges Dateiformat. Bitte wählen Sie eine .db Datei.');
+    }
+
+    // 2. Schema Compatibility Check
+    // Open the incoming file in read-only mode to verify the version
+    Database? tempDb;
+    try {
+      tempDb = await openDatabase(sourcePath, readOnly: true);
+      final int version = await tempDb.getVersion();
+      const int expectedVersion = 4; // Must match the version in getDb()
+      
+      if (version != expectedVersion) {
+        throw Exception('Inkompatible Paketversion: Erwartet v$expectedVersion, Datei ist v$version.');
+      }
+    } catch (e) {
+      throw Exception('Validierungsfehler: Die Datei ist beschädigt oder keine gültige Datenbank.');
+    } finally {
+      await tempDb?.close();
+    }
+
+    // 3. Execute Import (Replace local working DB)
+    await closeDb();
+    
     final dbDir = await getDatabasesPath();
     final destinationPath = join(dbDir, 'working.db');
-    await sourceFile.copy(destinationPath);
+    try {
+      await sourceFile.copy(destinationPath);
+      print('Database successfully validated and imported.');
+    } catch (e) {
+      throw Exception('Fehler beim Dateizugriff während des Imports: $e');
+    }
   }
 }

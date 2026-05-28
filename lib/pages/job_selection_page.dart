@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
@@ -95,7 +95,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
       // Export the file to the Documents folder for manual handoff
       final appDocDir = await getApplicationDocumentsDirectory();
-      final exportPath = p.join(appDocDir.path, 'inspektion_paket.db');
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final exportPath = p.join(appDocDir.path, 'inspektion_paket_$timestamp.db');
       
       await LocalDatabaseService.exportWorkingDb(exportPath);
 
@@ -107,9 +108,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             duration: const Duration(seconds: 5),
           ),
         );
-        // Navigation: Handoff successful. Return to the previous screen (DoorListPage)
-        // with a success result so it can refresh the list.
-        Navigator.pop(context, true);
+
+        // Clear selection after successful export so manager can continue working
+        _refreshInspections();
       }
     } catch (e) {
       if (mounted) {
@@ -126,7 +127,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Auftrag auswählen')),
+      appBar: AppBar(
+        title: const Text('Auftrag auswählen'),
+      ),
       body: Column(
         children: [
           // Persistent Search Bar Widget

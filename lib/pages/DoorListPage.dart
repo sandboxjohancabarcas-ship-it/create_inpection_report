@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/local_database_service.dart';
 import '../models/models.dart';
 import 'new_door_page.dart';
@@ -69,6 +70,62 @@ class _DoorListPageState extends State<DoorListPage> {
     }
   }
 
+  /// Opens a file picker to select a .db file and imports it into the Working DB.
+  /// This allows inspectors to load packages prepared by the manager.
+  Future<void> _handleImportPaket() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['db'],
+        lockParentWindow: true, // Helpful for Windows/Desktop stability
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+
+        if (!mounted) return;
+
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Paket importieren'),
+            content: const Text(
+              'Möchten Sie dieses Inspektionspaket importieren? '
+              'Bestehende lokale Daten auf diesem Gerät werden überschrieben.'
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Importieren', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+
+        if (confirm != true) return;
+
+        setState(() => _isSyncing = true);
+        await LocalDatabaseService.importWorkingDb(path);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Paket erfolgreich importiert.'), backgroundColor: Colors.green),
+          );
+          await loadDoors();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -100,6 +157,12 @@ class _DoorListPageState extends State<DoorListPage> {
               });
             },
           ),
+          // Action: Import a .db package file
+          IconButton(
+            icon: const Icon(Icons.file_open),
+            tooltip: 'Paket importieren',
+            onPressed: _isSyncing ? null : _handleImportPaket,
+          ),
           // Action: Push local data to Main DB
           IconButton(
             icon: const Icon(Icons.cloud_upload),
@@ -127,7 +190,19 @@ class _DoorListPageState extends State<DoorListPage> {
       body: Stack(
         children: [
           doors.isEmpty
-              ? const Center(child: Text("Keine Türen vorhanden"))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.storage, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      const Text("Keine lokalen Daten vorhanden."),
+                      const SizedBox(height: 8),
+                      const Text("Bitte importieren Sie ein Paket (Ordner-Icon)"),
+                      const Text("oder laden Sie Aufträge aus der Haupt-DB."),
+                    ],
+                  ),
+                )
               : ListView.builder(
               itemCount: doors.length,
               itemBuilder: (context, index) {
