@@ -5,6 +5,7 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'dart:io';
 
 class LocalDatabaseService {
   static Database? _db;
@@ -17,13 +18,14 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 3,  // Increment version for search indices
+      version: 4,  // Increment for Door Alias support
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
           CREATE TABLE doors (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             pos INTEGER,
+            doorAlias TEXT UNIQUE,
             doorNumber TEXT,
             floor TEXT,
             roomNumber TEXT,
@@ -124,6 +126,7 @@ class LocalDatabaseService {
 
         // Add indices for optimized searching
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
+        await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_local_doors_alias ON doors (doorAlias)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -157,8 +160,16 @@ class LocalDatabaseService {
           await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
           print('Local Database upgraded to version 3: Search indices created.');
         }
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE doors ADD COLUMN doorAlias TEXT');
+          await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_local_doors_alias ON doors (doorAlias)');
+          print('Local Database upgraded to version 4: Door Alias added.');
+        }
       },
     );
+
+    // Ensure the catalog is seeded if it's empty
+    await _seedErrorCatalog(_db!);
 
     // This was the end of the class, but methods below were outside.
     return _db!;
@@ -208,7 +219,7 @@ class LocalDatabaseService {
         final door = Door.fromMap(doorMap);
         // DatabaseService.insertDoor handles syncStatus removal internally now
         await DatabaseService.insertDoor(door);
-        await markAsSynced('doors', door.id);
+        await markAsSynced('doors', door.id!);
         syncCount++;
       }
 
@@ -242,57 +253,56 @@ class LocalDatabaseService {
     }
   }
 
-  /// Downloads a complete job from the Main DB to the local Working DB.
-  /// This is the primary "Manager -> Inspector" handoff logic.
-  static Future<void> downloadJobData({
-    required String clientName,
-    required String jobNumber,
-    required String date,
+  /// Downloads a Job Package (one or many inspections) from the Main DB.
+  /// This enables the "Wide Spectrum" of history or single jobs.
+  static Future<void> downloadJobPackage({
+    required List<int> inspectionIds,
   }) async {
     try {
-      print('Downloading Job-Specific Data: $clientName - $jobNumber...');
+      if (inspectionIds.isEmpty) return;
+      print('Downloading Job Package for ${inspectionIds.length} inspections...');
 
-      // 1. Fetch job-specific data from Main DB
-      final mainInspection = await DatabaseService.getInspectionByCriteria(
-          clientName: clientName, jobNumber: jobNumber, date: date);
+      // 1. Fetch all related records from Master DB using our new batch helpers
+      final doorList = await DatabaseService.getDoorsByInspectionIds(inspectionIds);
       
-      if (mainInspection == null) throw Exception('Job not found in Main DB');
-
-      final int mainId = mainInspection['inspectionId'];
-      final doorList = await DatabaseService.getDoorsByInspectionCriteria(
-          clientName: clientName, jobNumber: jobNumber, date: date);
+      final List<Map<String, dynamic>> allJunctions = [];
+      for (int id in inspectionIds) {
+        allJunctions.addAll(await DatabaseService.getInspectionDoorsByInspectionId(id));
+      }
       
-      // Pull the missing state: Junctions and Errors
-      final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(mainId);
-      final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
+      final List<int> junctionIds = allJunctions.map((j) => j['id'] as int).toList();
       final errorList = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
+
+      // Resolve full inspection objects for the local DB
+      final allMainInspections = await DatabaseService.searchInspections('');
+      final selectedInspections = allMainInspections
+          .where((i) => inspectionIds.contains(i['inspectionId']))
+          .toList();
 
       // 2. Clear current Working DB to ensure isolation
       await clearSyncedData();
 
       final db = await getDb();
       await db.transaction((txn) async {
-        // 3. Populate local Inspection (Marked as synced to lock metadata)
-        final localInsp = Map<String, dynamic>.from(mainInspection)..['syncStatus'] = 'synced';
-        await txn.insert('inspections', localInsp, conflictAlgorithm: ConflictAlgorithm.replace);
+        // 3. Populate local Inspections (marked as synced)
+        for (var insp in selectedInspections) {
+          final data = Map<String, dynamic>.from(insp)..['syncStatus'] = 'synced';
+          await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
 
-        // 4. Populate local Junctions and Errors
-        for (var junction in junctionList) {
+        for (var junction in allJunctions) {
           await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         for (var error in errorList) {
           await txn.insert('inspection_door_errors', error, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
-        // 5. Populate local Doors
         for (var door in doorList) {
           await txn.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
-
-      print('Download complete. Ready for offline inspection.');
     } catch (e) {
-      print('Error downloading job: $e');
+      print('Critical error during package download: $e');
       rethrow;
     }
   }
@@ -315,37 +325,51 @@ class LocalDatabaseService {
 
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
-    return await db.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    return await db.insert(
+      'doors', 
+      door.toMap(), 
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
-  static Future<List<Map<String, dynamic>>> getAllDoors() async {
+  static Future<List<Door>> getAllDoors() async {
     final db = await getDb();
-    return await db.query('doors');
+    final maps = await db.query('doors');
+    return maps.map((m) => Door.fromMap(m)).toList();
+  }
+
+  static Future<Door?> getDoorByAlias(String alias) async {
+    final db = await getDb();
+    final maps = await db.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 
   /// Searches doors by doorNumber, error code, or error description.
   /// Uses a join across junctions to find doors with specific errors.
-  static Future<List<Map<String, dynamic>>> searchDoors(String query) async {
+  static Future<List<Door>> searchDoors(String query) async {
     final db = await getDb();
     if (query.isEmpty) return await getAllDoors();
 
     final searchTerm = '%$query%';
     
-    return await db.rawQuery('''
+    final results = await db.rawQuery('''
       SELECT DISTINCT d.* 
       FROM doors d
       LEFT JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
       LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE d.doorNumber LIKE ? 
+         OR d.doorAlias LIKE ?
          OR ec.code LIKE ? 
          OR ec.description LIKE ?
-    ''', [searchTerm, searchTerm, searchTerm]);
+    ''', [searchTerm, searchTerm, searchTerm, searchTerm]);
+
+    return results.map((m) => Door.fromMap(m)).toList();
   }
 
   static Future<void> updateDoor(Door door) async {
     final db = await getDb();
-    await db.update('doors', door.toMap(), where: 'id = ?', whereArgs: [door.id]);
+    await db.update('doors', door.toMap(), where: 'id = ?', whereArgs: [door.id!]);
   }
 
   static Future<void> deleteDoor(int id) async {
@@ -568,7 +592,7 @@ class LocalDatabaseService {
     final standardErrors = DoorErrorCatalog.getStandardErrors();
     
     final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
-    final count = existingCount.first['count'] as int;
+    final count = Sqflite.firstIntValue(existingCount) ?? 0;
     if (count > 0) return;
     
     await db.transaction((txn) async {
@@ -578,5 +602,45 @@ class LocalDatabaseService {
         ConflictAlgorithm.ignore,
       );
     });
+  }
+
+  /// Closes the database connection to allow file-level operations.
+  /// Essential for Windows to release file locks.
+  static Future<void> closeDb() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
+  }
+
+  /// Exports the internal working.db to a specified external path.
+  static Future<void> exportWorkingDb(String destinationPath) async {
+    // Ensure all transactions are committed and file handle is released
+    await closeDb();
+    
+    final dbDir = await getDatabasesPath();
+    final sourcePath = join(dbDir, 'working.db');
+    final sourceFile = File(sourcePath);
+    
+    if (!await sourceFile.exists()) {
+      throw Exception('Export fehlgeschlagen: Quelldatenbank existiert nicht.');
+    }
+
+    await sourceFile.copy(destinationPath);
+    print('Database exported to: $destinationPath');
+  }
+
+  /// Imports an external .db file to replace the internal working.db.
+  static Future<void> importWorkingDb(String sourcePath) async {
+    await closeDb();
+    
+    final sourceFile = File(sourcePath);
+    if (!await sourceFile.exists()) {
+      throw Exception('Import fehlgeschlagen: Quelldatei nicht gefunden.');
+    }
+
+    final dbDir = await getDatabasesPath();
+    final destinationPath = join(dbDir, 'working.db');
+    await sourceFile.copy(destinationPath);
   }
 }

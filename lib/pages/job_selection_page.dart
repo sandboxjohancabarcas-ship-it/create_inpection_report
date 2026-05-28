@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'package:path/path.dart' as p;
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
@@ -45,11 +48,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     for (int inspectionId in _selectedInspectionIds) {
       final inspection = (await DatabaseService.searchInspections('')).firstWhere((i) => i['inspectionId'] == inspectionId);
       
-      final doors = await DatabaseService.getDoorsByInspectionCriteria(
-        clientName: inspection['clientName'],
-        jobNumber: inspection['auftragsnummer'],
-        date: inspection['date'],
-      );
+      final doors = await DatabaseService.getDoorsByInspectionIds([inspectionId]);
 
       final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
       final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
@@ -82,23 +81,31 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   }
 
   /// Orchestrates the data handoff from Main DB to Working DB.
-  /// Called when a user selects a job from the list.
-  Future<void> _handleJobDownload(Map<String, dynamic> job) async {
+  /// Can handle a single job or a 'Wide Spectrum' package of multiple inspections.
+  Future<void> _handleJobDownload(List<int> ids) async {
     // Show the modal loading overlay
     setState(() => _isDownloading = true);
 
     try {
       // Logic: Orchestrates the handoff from Main DB to Working DB.
-      // It fetches main DB records and performs a batch insert into the local SQLite file.
-      await LocalDatabaseService.downloadJobData( 
-        clientName: job['clientName'] ?? '',
-        jobNumber: job['auftragsnummer'] ?? '',
-        date: job['date'] ?? '',
+      // It wipes the old 'working.db' and injects the new package (Isolation Protocol).
+      await LocalDatabaseService.downloadJobPackage(
+        inspectionIds: ids,
       );
+
+      // Export the file to the Documents folder for manual handoff
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final exportPath = p.join(appDocDir.path, 'inspektion_paket.db');
+      
+      await LocalDatabaseService.exportWorkingDb(exportPath);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Daten erfolgreich synchronisiert!')),
+          SnackBar(
+            content: Text('Paket erstellt: $exportPath'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+          ),
         );
         // Navigation: Handoff successful. Return to the previous screen (DoorListPage)
         // with a success result so it can refresh the list.
@@ -202,7 +209,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                             onTap: _isDownloading 
                                 ? null 
                                 : (_selectedInspectionIds.isEmpty 
-                                    ? () => _handleJobDownload(job)
+                                    ? () => _handleJobDownload([job['inspectionId']])
                                     : toggleSelection),
                             onLongPress: toggleSelection,
                           ),
@@ -264,6 +271,15 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               },
               icon: const Icon(Icons.code),
               label: const Text('GAEB XML exportieren'),
+            ),
+            const VerticalDivider(),
+            TextButton.icon(
+              onPressed: () => _handleJobDownload(_selectedInspectionIds.toList()),
+              icon: const Icon(Icons.download_for_offline, color: Colors.green),
+              label: const Text(
+                'Paket laden',
+                style: TextStyle(color: Colors.green),
+              ),
             ),
           ],
         ),

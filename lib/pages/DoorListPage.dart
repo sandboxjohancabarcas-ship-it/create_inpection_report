@@ -24,9 +24,8 @@ class _DoorListPageState extends State<DoorListPage> {
   }
 
   Future<void> loadDoors() async {
-    final maps = await LocalDatabaseService.searchDoors(_searchController.text);
-    final list = maps.map((m) => Door.fromMap(m)).toList();
-    setState(() => doors = list);
+    final results = await LocalDatabaseService.searchDoors(_searchController.text);
+    setState(() => doors = results);
   }
 
   Future<void> deleteDoor(int id) async {
@@ -143,7 +142,7 @@ class _DoorListPageState extends State<DoorListPage> {
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
                   direction: DismissDirection.startToEnd,
-                  onDismissed: (_) => deleteDoor(d.id),
+                  onDismissed: (_) => deleteDoor(d.id!),
                   child: ListTile(
                     title: Text("Tür ${d.doorNumber}"),
                     subtitle: Text(d.roomDesignation),
@@ -153,7 +152,7 @@ class _DoorListPageState extends State<DoorListPage> {
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () async {
-                            await deleteDoor(d.id);
+                            await deleteDoor(d.id!);
                           },
                         ),
                         const Icon(Icons.chevron_right),

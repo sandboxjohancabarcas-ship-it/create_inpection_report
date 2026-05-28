@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/models/models.dart';
@@ -25,6 +26,7 @@ void main() {
       final door = Door(
         id: 101,
         pos: 1,
+        doorAlias: 'CUST-001',
         doorNumber: 'T01',
         floor: 'EG',
         roomNumber: '0.01',
@@ -60,10 +62,124 @@ void main() {
       expect(allDoors.any((d) => d.doorNumber == 'T01'), isTrue);
     });
 
+    test('Door Alias - Should retrieve door by unique alias', () async {
+      final door = Door(
+        id: 500,
+        pos: 1,
+        doorAlias: 'ALIAS-500',
+        doorNumber: 'D500',
+        floor: '1.OG',
+        roomNumber: '101',
+        roomDesignation: 'Office',
+        doorType: 'Holz',
+        wingCount: 1,
+        material: 'Holz',
+        manufacturer: 'Schüco',
+        dinConfiguration: 'DIN R',
+        closerType: 'Keiner',
+        closingSequenceSystem: 'Keines',
+        lockDimensions: 'PZ',
+        closerOnHingeSide: false,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: false,
+        accessControl: 'Nein',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: true,
+        fittingType: 'Drücker',
+        panicFunction: 'Keine',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
+      );
+
+      await DatabaseService.insertDoor(door);
+      final retrieved = await DatabaseService.getDoorByAlias('ALIAS-500');
+
+      expect(retrieved?.doorNumber, 'D500');
+    });
+
+    test('Global Search - Should find doors across different customers via Alias', () async {
+      // Insert doors for different customers with structured aliases
+      final door = Door(
+        id: 1,
+        pos: 1,
+        doorAlias: 'BMW-Munich-001',
+        doorNumber: 'T1',
+        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false, doorFunctionOK: true,
+      );
+      final door2 = Door(
+        id: 2,
+        pos: 1,
+        doorAlias: 'Audi-Ingolstadt-002',
+        doorNumber: 'T2',
+        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false, doorFunctionOK: true,
+      );
+
+      await DatabaseService.insertDoor(door);
+      await DatabaseService.insertDoor(door2);
+
+      // 1. Search by Customer Name
+      var results = await DatabaseService.searchDoorsGlobal('BMW');
+      expect(results.length, 1);
+      expect(results.first.doorAlias, 'BMW-Munich-001');
+
+      // 2. Search by Location
+      results = await DatabaseService.searchDoorsGlobal('Ingolstadt');
+      expect(results.length, 1);
+      expect(results.first.doorAlias, 'Audi-Ingolstadt-002');
+
+      // 3. Partial Match
+      results = await DatabaseService.searchDoorsGlobal('00');
+      expect(results.length, 2);
+    });
+
+    test('Door Alias - Uniqueness Verification', () async {
+      final door = Door(
+        id: 501,
+        pos: 1,
+        doorAlias: 'VerificationCorp-AuditPark-Warehouse-999',
+        doorNumber: 'D500',
+        floor: '1.OG',
+        roomNumber: '101',
+        roomDesignation: 'Office',
+        doorType: 'Holz',
+        wingCount: 1,
+        material: 'Holz',
+        manufacturer: 'Schüco',
+        dinConfiguration: 'DIN R',
+        closerType: 'Keiner',
+        closingSequenceSystem: 'Keines',
+        lockDimensions: 'PZ',
+        closerOnHingeSide: false,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: false,
+        accessControl: 'Nein',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: true,
+        fittingType: 'Drücker',
+        panicFunction: 'Keine',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
+      );
+
+      await DatabaseService.insertDoor(door);
+      final retrieved = await DatabaseService.getDoorByAlias('VerificationCorp-AuditPark-Warehouse-999');
+
+      expect(retrieved?.doorNumber, 'D500');
+    });
+
     test('Inspection Linkage - Should create an inspection and link a door', () async {
       // Create an inspection record
       final inspectionId = await DatabaseService.insertInspection({
         'clientName': 'Global Corp',
+        'objectAddress': 'Test Address 123',
         'auftragsnummer': '2023-XYZ',
         'date': '2023-11-01',
         'inspectorName': 'Test Inspector',
@@ -74,6 +190,7 @@ void main() {
       await DatabaseService.insertDoor(Door(
         id: doorId,
         pos: 2,
+        doorAlias: 'LINK-202',
         doorNumber: 'D-202',
         floor: '',
         roomNumber: '',
@@ -111,11 +228,11 @@ void main() {
       });
 
       // Verify retrieval by criteria
-      final doors = await DatabaseService.getDoorsByInspectionCriteria(
+      final ids = await DatabaseService.getInspectionIdsByCriteria(
         clientName: 'Global Corp',
-        jobNumber: '2023-XYZ',
-        date: '2023-11-01',
+        objectAddress: 'Test Address 123',
       );
+      final doors = await DatabaseService.getDoorsByInspectionIds(ids);
 
       expect(doors.length, 1);
       expect(doors.first.doorNumber, 'D-202');
@@ -164,6 +281,7 @@ void main() {
       final testDoor = Door(
         id: 999,
         pos: 1,
+        doorAlias: 'VER-CORP-WORK-001',
         doorNumber: 'WORK-001',
         floor: 'EG',
         roomNumber: '0.01',

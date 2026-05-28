@@ -66,7 +66,7 @@ class ErrorCatalog {
         'normReference': normReference,
         'status': status, 
         'requestedBy': requestedBy,
-        'requestDate': requestDate,
+        'requestDate': requestDate?.toIso8601String(),
         'sourceInspectionDoorId': sourceInspectionDoorId,
       };
 

@@ -13,7 +13,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 10,
+      version: 11, // Increment for Door Alias support
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -21,6 +21,7 @@ class DatabaseService {
             -- Door Technical Specifications
             id INTEGER PRIMARY KEY,
             pos INTEGER,
+            doorAlias TEXT UNIQUE,
             doorNumber TEXT,
             floor TEXT,
             roomNumber TEXT,
@@ -50,6 +51,7 @@ class DatabaseService {
           );
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
+        await db.execute('CREATE UNIQUE INDEX idx_doors_alias ON doors (doorAlias)');
 
         // Inspections table
         await db.execute('''
@@ -126,6 +128,11 @@ class DatabaseService {
           await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
           print('Database version 10: Performance indices created.');
         }
+        if (oldVersion < 11) {
+          await db.execute('ALTER TABLE doors ADD COLUMN doorAlias TEXT');
+          await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
+          print('Database version 11: Door Alias added.');
+        }
 
         if (oldVersion < 9) {
           // Change 3: Remove metadata columns from doors table
@@ -178,6 +185,9 @@ class DatabaseService {
       },
     );
 
+    // Ensure the catalog is seeded if it's empty (handles existing empty databases)
+    await _seedErrorCatalog(_db!);
+
     return _db!;
   }
 
@@ -185,16 +195,31 @@ class DatabaseService {
   // DOORS
   // ─────────────────────────────────────────────────────────────
 
+  /// Closes the database connection.
+  /// Used primarily in tests to allow for clean setup/teardown.
+  static Future<void> closeDb() async {
+    if (_db != null && _db!.isOpen) {
+      await _db!.close();
+      _db = null;
+    }
+  }
+
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
     // Strip syncStatus as main DB doesn't have this column
     final data = door.toMap()..remove('syncStatus');
-    await db.insert( // This returns the ID of the inserted row
+    final id = await db.insert(
       'doors',
       data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    return door.id; // Return the ID that was used for insertion
+    return id;
+  }
+
+  static Future<Door?> getDoorByAlias(String alias) async {
+    final db = await getDb();
+    final maps = await db.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
@@ -228,44 +253,56 @@ class DatabaseService {
     );
   }
 
-  /// Fetches a specific inspection record by its identifying criteria
-  static Future<Map<String, dynamic>?> getInspectionByCriteria({
+  /// Performs a global search across all doors in the master database.
+  /// Using the doorAlias allows searching by Customer, Address, or Door Number.
+  static Future<List<Door>> searchDoorsGlobal(String query) async {
+    final db = await getDb();
+    if (query.trim().isEmpty) {
+      return await getAllDoors();
+    }
+    final searchTerm = '%$query%';
+    final List<Map<String, dynamic>> results = await db.query(
+      'doors',
+      where: 'doorAlias LIKE ? OR doorNumber LIKE ? OR roomDesignation LIKE ?',
+      whereArgs: [searchTerm, searchTerm, searchTerm],
+      limit: 50,
+    );
+    return results.map((m) => Door.fromMap(m)).toList();
+  }
+
+  /// Fetches inspection IDs based on Client and Object.
+  /// Allows for "Wide Spectrum" selection (Latest vs All History).
+  static Future<List<int>> getInspectionIdsByCriteria({
     required String clientName,
-    required String jobNumber,
-    required String date,
+    required String objectAddress,
+    bool latestOnly = false,
   }) async {
     final db = await getDb();
     final List<Map<String, dynamic>> maps = await db.query(
       'inspections',
-      where: 'clientName = ? AND auftragsnummer = ? AND date = ?',
-      whereArgs: [clientName, jobNumber, date],
-      limit: 1,
+      columns: ['inspectionId'],
+      where: 'clientName = ? AND objectAddress = ?',
+      whereArgs: [clientName, objectAddress],
+      orderBy: 'date DESC',
+      limit: latestOnly ? 1 : null,
     );
-    return maps.isNotEmpty ? maps.first : null;
+    return maps.map((m) => m['inspectionId'] as int).toList();
   }
 
-  /// Returns doors filtered by specific inspection criteria (The "Download" filter)
-  static Future<List<Door>> getDoorsByInspectionCriteria({
-    required String clientName,
-    required String jobNumber,
-    required String date,
-  }) async {
+  /// Returns all doors associated with a list of inspection IDs.
+  /// Used for batch-packaging the "Medical Card".
+  static Future<List<Door>> getDoorsByInspectionIds(List<int> inspectionIds) async {
+    if (inspectionIds.isEmpty) return [];
     final db = await getDb();
-    
-    // Perform a three-way join to isolate the doors for a specific job
+    final String idString = inspectionIds.join(',');
+
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT d.* 
       FROM doors d
       INNER JOIN inspection_doors id ON d.id = id.doorId
-      INNER JOIN inspections i ON i.inspectionId = id.inspectionId
-      WHERE i.clientName = ? 
-        AND i.auftragsnummer = ? 
-        AND i.date = ?
-    ''', [clientName, jobNumber, date]);
+      WHERE id.inspectionId IN ($idString)
+    ''');
 
-    if (maps.isEmpty) {
-      print('No doors found for $clientName / $jobNumber');
-    }
     return maps.map((map) => Door.fromMap(map)).toList();
   }
 
@@ -313,7 +350,7 @@ class DatabaseService {
       'doors',
       data,
       where: 'id = ?',
-      whereArgs: [door.id],
+      whereArgs: [door.id!],
     );
   }
 
@@ -517,7 +554,7 @@ class DatabaseService {
     
     // Check if catalog already has data
     final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
-    final count = existingCount.first['count'] as int;
+    final count = Sqflite.firstIntValue(existingCount) ?? 0;
     print('Existing error catalog entries: $count');
     
     if (count > 0) {

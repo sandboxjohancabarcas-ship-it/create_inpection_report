@@ -245,13 +245,13 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
                               ),
                             );
                           },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+                        ), // ListView
+                      ), // Container
+                    ], // Children
+                  ), // Column
+                ), // Padding
+              ), // Card
+            ], // End of Import Log
 
             if (_importConflicts.isNotEmpty) ...[
               SizedBox(height: 16),
@@ -323,20 +323,20 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
                           },
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-    },
-  ),
-  ),
-  ),
-);
+                    ], // Children
+                  ), // Column
+                ), // Padding
+              ), // Card
+            ], // End of if conflicts
+          ], // End of main Column children
+        ), // Column
+      ), // ConstrainedBox
+    ); // SingleChildScrollView
+            }, // builder
+          ), // LayoutBuilder
+        ), // Padding
+      ), // SafeArea
+    ); // Scaffold
   }
 
   Widget _buildStatCard(String label, int count, Color color) {

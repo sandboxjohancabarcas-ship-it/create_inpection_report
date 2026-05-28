@@ -122,7 +122,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
       WHERE id.doorId = ?
       LIMIT 1
-    ''', [widget.door!.id]);
+    ''', [widget.door!.id!]);
 
     if (results.isNotEmpty) {
       final insp = results.first;
@@ -140,9 +140,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   // Build a Door object from form fields
   Door buildDoor() {
+    // If this is a new door, we concatenate the alias. 
+    // For existing doors, we preserve the original alias.
     return Door(
-      id: widget.door?.id ?? DateTime.now().millisecondsSinceEpoch,
+      id: widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
       pos: pos,
+      doorAlias: widget.door?.doorAlias ?? "${customerNameController.text}-${customerAddressController.text}-${doorNumberController.text}",
       doorNumber: doorNumberController.text,
       floor: floorController.text,
       roomNumber: roomNumberController.text,
@@ -534,7 +537,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ErrorManagementPage(
-                              doorId: widget.door!.id,
+                              doorId: widget.door!.id!,
                               doorNumber: widget.door!.doorNumber,
                               inspectionId: currentInspectionId!,
                             ),

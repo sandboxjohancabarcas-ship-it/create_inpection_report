@@ -1,7 +1,8 @@
 class Door {
   // Door Technical Specifications (Physical data only)
-  final int id;
+  final int? id;
   final int pos;
+  final String? doorAlias; // Business ID: Customer-Address-Building
   final String doorNumber;
   final String floor;
   final String roomNumber;
@@ -35,6 +36,7 @@ class Door {
   Door({
     required this.id,
     required this.pos,
+    this.doorAlias,
     required this.doorNumber,
     required this.floor,
     required this.roomNumber,
@@ -71,6 +73,7 @@ class Door {
     // Door specifications
     int? id,
     int? pos,
+    String? doorAlias,
     String? doorNumber,
     String? floor,
     String? roomNumber,
@@ -102,6 +105,7 @@ class Door {
     return Door(
       id: id ?? this.id,
       pos: pos ?? this.pos,
+      doorAlias: doorAlias ?? this.doorAlias,
       doorNumber: doorNumber ?? this.doorNumber,
       floor: floor ?? this.floor,
       roomNumber: roomNumber ?? this.roomNumber,
@@ -144,6 +148,7 @@ class Door {
         // Door specifications
         'id': id,
         'pos': pos,
+        'doorAlias': doorAlias,
         'doorNumber': doorNumber,
         'floor': floor,
         'roomNumber': roomNumber,
@@ -179,6 +184,7 @@ class Door {
         // Door specifications
         id: map['id'],
         pos: map['pos'],
+        doorAlias: map['doorAlias'],
         doorNumber: map['doorNumber'],
         floor: map['floor'],
         roomNumber: map['roomNumber'],
