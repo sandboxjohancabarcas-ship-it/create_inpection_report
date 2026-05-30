@@ -18,7 +18,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 4,  // Increment for Door Alias support
+      version: 6,  // Increment for Robust Data Normalization
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -51,9 +51,7 @@ class LocalDatabaseService {
             panicFunction TEXT,
             escapeDirectionRespected INTEGER,
             fullPanicStandWing INTEGER,
-            doorFunctionOK INTEGER,            
-            -- Add sync status for local DB
-            syncStatus TEXT DEFAULT 'pending'  -- 'pending', 'synced'
+            doorFunctionOK INTEGER
           );
         ''');
 
@@ -66,8 +64,7 @@ class LocalDatabaseService {
             date TEXT,
             contactPerson TEXT,
             inspectorName TEXT,
-            auftragsnummer TEXT,
-            syncStatus TEXT DEFAULT 'pending'
+            auftragsnummer TEXT
           );
         ''');
 
@@ -80,7 +77,6 @@ class LocalDatabaseService {
             status TEXT,
             notes TEXT,
             attachments TEXT,
-            syncStatus TEXT DEFAULT 'pending',
             FOREIGN KEY (inspectionId) REFERENCES inspections (inspectionId),
             FOREIGN KEY (doorId) REFERENCES doors (id)
           );
@@ -96,7 +92,6 @@ class LocalDatabaseService {
             severity TEXT,
             notes TEXT,
             resolutionStatus TEXT,
-            syncStatus TEXT DEFAULT 'pending',
             FOREIGN KEY (inspectionDoorId) REFERENCES inspection_doors (id)
           );
         ''');
@@ -113,7 +108,6 @@ class LocalDatabaseService {
             severity TEXT DEFAULT 'medium',
             recommendation TEXT DEFAULT '',
             normReference TEXT DEFAULT '',
-            syncStatus TEXT DEFAULT 'synced',  -- Usually synced from main
             status TEXT NOT NULL DEFAULT 'Approved',
             requestedBy TEXT,
             requestDate TEXT,
@@ -165,6 +159,24 @@ class LocalDatabaseService {
           await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_local_doors_alias ON doors (doorAlias)');
           print('Local Database upgraded to version 4: Door Alias added.');
         }
+        if (oldVersion < 5) {
+          // Data Migration: Normalize values to prevent Dropdown crashes in local DB
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000'");
+          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN'");
+          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker'");
+          print('Local Database upgraded to version 5: Values normalized.');
+        }
+        if (oldVersion < 6) {
+          // Comprehensive Normalization for Local DB
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000' OR closerType IS NULL");
+          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
+          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L' OR dinConfiguration IS NULL");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+          print('Local Database upgraded to version 6: Comprehensive values normalized.');
+        }
       },
     );
 
@@ -173,84 +185,6 @@ class LocalDatabaseService {
 
     // This was the end of the class, but methods below were outside.
     return _db!;
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // GENERAL UTILITIES
-  // ─────────────────────────────────────────────────────────────
-
-  // CRUD methods similar to original, but for local DB
-  // e.g., insertDoor, getAllDoors, etc.
-  // Add syncStatus handling
-
-  static Future<void> markAsSynced(String table, int id, {String idColumn = 'id'}) async {
-    final db = await getDb();
-    await db.update(table, {'syncStatus': 'synced'}, where: '$idColumn = ?', whereArgs: [id]);
-  }
-
-  /// Pushes all pending records from working.db (Android) to door_inspection.db (Windows)
-  static Future<void> syncToMainDatabase() async {
-    try {
-      print('Starting synchronization to main database...');
-      int syncCount = 0;
-
-      // 0. Sync New Catalog Proposals
-      // We need to sync the catalog items first so the door errors have a valid foreign key
-      final pendingCatalog = await _getPending('error_catalog');
-      for (var item in pendingCatalog) {
-        final error = ErrorCatalog.fromMap(item);
-        await DatabaseService.insertErrorCatalog(error);
-        await markAsSynced('error_catalog', item['errorId'], idColumn: 'errorId');
-        syncCount++;
-      }
-
-      // 1. Sync Inspections
-      final pendingInspections = await getPendingInspections();
-      for (var inspection in pendingInspections) {
-        final data = Map<String, dynamic>.from(inspection)..remove('syncStatus');
-        await DatabaseService.insertInspection(data);
-        await markAsSynced('inspections', inspection['inspectionId'], idColumn: 'inspectionId');
-        syncCount++;
-      }
-
-      // 2. Sync Doors
-      final pendingDoors = await getPendingDoors();
-      for (var doorMap in pendingDoors) {
-        final door = Door.fromMap(doorMap);
-        // DatabaseService.insertDoor handles syncStatus removal internally now
-        await DatabaseService.insertDoor(door);
-        await markAsSynced('doors', door.id!);
-        syncCount++;
-      }
-
-      // 3. Sync Inspection Doors
-      final pendingInspDoors = await getPendingInspectionDoors();
-      for (var inspDoor in pendingInspDoors) {
-        final data = Map<String, dynamic>.from(inspDoor)..remove('syncStatus');
-        await DatabaseService.insertInspectionDoor(data);
-        await markAsSynced('inspection_doors', inspDoor['id']);
-        syncCount++;
-      }
-
-      // 4. Sync Inspection Door Errors
-      final pendingErrors = await getPendingInspectionDoorErrors();
-      for (var errorMap in pendingErrors) {
-        final error = InspectionDoorError.fromMap(errorMap);
-        // Ensure models without internal strip logic are handled
-        await DatabaseService.insertInspectionDoorError(error);
-        await markAsSynced('inspection_door_errors', errorMap['id']);
-        syncCount++;
-      }
-
-      // Optional: Clear local data after a successful full sync
-      await clearSyncedData();
-
-      print('Synchronization finished. Synced $syncCount items.');
-    } catch (e) {
-      print('Critical error during synchronization: $e');
-      // Rethrow to allow the UI to catch and show an error message
-      rethrow;
-    }
   }
 
   /// Downloads a Job Package (one or many inspections) from the Main DB.
@@ -286,8 +220,7 @@ class LocalDatabaseService {
       await db.transaction((txn) async {
         // 3. Populate local Inspections (marked as synced)
         for (var insp in selectedInspections) {
-          final data = Map<String, dynamic>.from(insp)..['syncStatus'] = 'synced';
-          await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert('inspections', insp, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         for (var junction in allJunctions) {
@@ -304,6 +237,43 @@ class LocalDatabaseService {
     } catch (e) {
       print('Critical error during package download: $e');
       rethrow;
+    }
+  }
+
+  /// Creates a specific result package containing only the selected doors and their inspections.
+  /// This implements the "Inspector Export" requirement.
+  static Future<void> exportSelectiveJobPackage(List<int> doorIds, String destinationPath) async {
+    if (doorIds.isEmpty) throw Exception('Keine Türen ausgewählt.');
+
+    // 1. Create a full copy of the current working DB as a starting point
+    await exportWorkingDb(destinationPath);
+
+    // 2. Open the copy and prune non-selected data
+    final db = await openDatabase(destinationPath);
+    try {
+      await db.transaction((txn) async {
+        final idList = doorIds.join(',');
+
+        // Remove doors not in selection
+        await txn.delete('doors', where: 'id NOT IN ($idList)');
+
+        // Remove junctions not linked to these doors
+        await txn.delete('inspection_doors', where: 'doorId NOT IN ($idList)');
+
+        // Remove inspections that no longer have any linked doors in this package
+        await txn.execute('''
+          DELETE FROM inspections 
+          WHERE inspectionId NOT IN (SELECT DISTINCT inspectionId FROM inspection_doors)
+        ''');
+
+        // Remove errors not linked to remaining junctions
+        await txn.execute('''
+          DELETE FROM inspection_door_errors 
+          WHERE inspectionDoorId NOT IN (SELECT id FROM inspection_doors)
+        ''');
+      });
+    } finally {
+      await db.close();
     }
   }
 
@@ -436,21 +406,6 @@ class LocalDatabaseService {
     await db.delete('inspection_door_errors', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SYNC STATUS QUERIES
-  // ─────────────────────────────────────────────────────────────
-
-  static Future<List<Map<String, dynamic>>> _getPending(String table) async {
-    final db = await getDb();
-    return await db.query(table, where: 'syncStatus = ?', whereArgs: ['pending']);
-  }
-
-  static Future<List<Map<String, dynamic>>> getPendingDoors() => _getPending('doors');
-  static Future<List<Map<String, dynamic>>> getPendingInspections() => _getPending('inspections');
-  static Future<List<Map<String, dynamic>>> getPendingInspectionDoors() => _getPending('inspection_doors');
-  static Future<List<Map<String, dynamic>>> getPendingInspectionDoorErrors() => _getPending('inspection_door_errors');
-
-  /// Returns the junction record for a door in a specific inspection
   static Future<Map<String, dynamic>?> getInspectionDoor(int inspectionId, int doorId) async {
     final db = await getDb();
     final maps = await db.query(
@@ -486,7 +441,6 @@ class LocalDatabaseService {
         'requestedBy': 'Inspector', // Ideally pass the actual user name
         'requestDate': DateTime.now().toIso8601String(),
         'sourceInspectionDoorId': inspectionDoorId,
-        'syncStatus': 'pending',
       });
       print('LOCAL DB: Proposed new error created in catalog. ID: $provisionalId, Status: Pending');
 
@@ -498,7 +452,6 @@ class LocalDatabaseService {
         'severity': severity,
         'notes': 'Vorgeschlagener Fehler durch Inspektor',
         'resolutionStatus': 'open',
-        'syncStatus': 'pending',
       });
     });
   }
@@ -579,9 +532,6 @@ class LocalDatabaseService {
     final batch = db.batch();
     for (final item in items) {
       final data = item.toMap();
-      if (item.status == 'Pending') {
-        data['syncStatus'] = 'pending';
-      }
       batch.insert('error_catalog', data, conflictAlgorithm: algorithm);
     }
     await batch.commit(noResult: true);
@@ -608,8 +558,10 @@ class LocalDatabaseService {
   /// Essential for Windows to release file locks.
   static Future<void> closeDb() async {
     if (_db != null) {
-      await _db!.close();
+      final dbToClose = _db!;
       _db = null;
+      if (dbToClose.isOpen) await dbToClose.close();
+      print('Database connection closed and reference cleared.');
     }
   }
 
@@ -650,7 +602,7 @@ class LocalDatabaseService {
     try {
       tempDb = await openDatabase(sourcePath, readOnly: true);
       final int version = await tempDb.getVersion();
-      const int expectedVersion = 4; // Must match the version in getDb()
+      const int expectedVersion = 6; // Must match the version in getDb()
       
       if (version != expectedVersion) {
         throw Exception('Inkompatible Paketversion: Erwartet v$expectedVersion, Datei ist v$version.');

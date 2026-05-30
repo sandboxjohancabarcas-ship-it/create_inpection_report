@@ -10,10 +10,11 @@ class DatabaseService {
 
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'door_inspection.db');
+    print('[DatabaseService] Opening Master DB at: $path');
 
     _db = await openDatabase(
       path,
-      version: 11, // Increment for Door Alias support
+      version: 16, // Increment for robust technical key normalization
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -133,6 +134,34 @@ class DatabaseService {
           await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
           print('Database version 11: Door Alias added.');
         }
+        if (oldVersion < 12) {
+          // Data Migration: Normalize DIN Configuration values (Fix for Dropdown crash)
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+          print('Database version 12: DIN Configuration values normalized.');
+        }
+        if (oldVersion < 13) {
+          // Data Migration: Normalize CloserType and Manufacturer (Fix for UI Dropdown crashes)
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000'");
+          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN'");
+          print('Database version 13: CloserType and Manufacturer values normalized.');
+        }
+        if (oldVersion < 15) {
+          // Data Migration: Normalize all technical keys to match UI dropdowns
+          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker'");
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000'");
+          print('Database version 15: Technical keys normalized.');
+        }
+
+        if (oldVersion < 16) {
+          // Comprehensive Normalization: Ensure all fields match UI dropdowns exactly
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000' OR closerType IS NULL");
+          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
+          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L' OR dinConfiguration IS NULL");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+          print('Database version 16: Comprehensive technical keys normalized.');
+        }
 
         if (oldVersion < 9) {
           // Change 3: Remove metadata columns from doors table
@@ -191,6 +220,16 @@ class DatabaseService {
     return _db!;
   }
 
+  /// Safely deletes the database file from the system.
+  static Future<void> clearDatabase() async {
+    await closeDb();
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'door_inspection.db');
+    print('[DatabaseService] Deleting database file at: $path');
+    await deleteDatabase(path);
+    print('Database cleared at: $path');
+  }
+
   // ─────────────────────────────────────────────────────────────
   // DOORS
   // ─────────────────────────────────────────────────────────────
@@ -206,11 +245,9 @@ class DatabaseService {
 
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
-    // Strip syncStatus as main DB doesn't have this column
-    final data = door.toMap()..remove('syncStatus');
     final id = await db.insert(
       'doors',
-      data,
+      door.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     return id;
@@ -224,11 +261,9 @@ class DatabaseService {
 
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
     final db = await getDb();
-    // Strip syncStatus as main DB doesn't have this column
-    final data = Map<String, dynamic>.from(inspectionData)..remove('syncStatus');
     return await db.insert(
       'inspections',
-      data,
+      inspectionData,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -246,8 +281,8 @@ class DatabaseService {
     final searchTerm = '%$query%';
     return await db.query(
       'inspections',
-      where: 'clientName LIKE ? OR auftragsnummer LIKE ? OR date LIKE ?',
-      whereArgs: [searchTerm, searchTerm, searchTerm],
+      where: 'clientName LIKE ? OR auftragsnummer LIKE ? OR date LIKE ? OR objectAddress LIKE ?',
+      whereArgs: [searchTerm, searchTerm, searchTerm, searchTerm],
       orderBy: 'date DESC',
       limit: 50,
     );
@@ -308,11 +343,9 @@ class DatabaseService {
 
   static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
     final db = await getDb();
-    // Strip syncStatus as main DB doesn't have this column
-    final cleanData = Map<String, dynamic>.from(data)..remove('syncStatus');
     return await db.insert(
       'inspection_doors',
-      cleanData,
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -345,10 +378,9 @@ class DatabaseService {
 
   static Future<void> updateDoor(Door door) async {
     final db = await getDb();
-    final data = door.toMap()..remove('syncStatus');
     await db.update(
       'doors',
-      data,
+      door.toMap(),
       where: 'id = ?',
       whereArgs: [door.id!],
     );
@@ -379,11 +411,9 @@ class DatabaseService {
   static Future<int> insertInspectionDoorError(
       InspectionDoorError error) async {
     final db = await getDb();
-    // Strip syncStatus as main DB doesn't have this column
-    final data = error.toMap()..remove('syncStatus');
     return await db.insert(
       'inspection_door_errors',
-      data,
+      error.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -425,6 +455,110 @@ class DatabaseService {
   static Future<void> clearErrorCatalog() async {
     final db = await getDb();
     await db.delete('error_catalog');
+  }
+
+  /// Merges an inspection result package (.db file) from an inspector into the Master DB.
+  /// Uses Job Number (auftragsnummer) and Door Alias as correlation keys.
+  static Future<void> importAndMergePackage(String packagePath) async {
+    final masterDb = await getDb();
+    final packageDb = await openDatabase(packagePath, readOnly: true);
+
+    try {
+      await masterDb.transaction((txn) async {
+        // 1. Get all data from package
+        final pDoors = await packageDb.query('doors');
+        final pInspections = await packageDb.query('inspections');
+        final pJunctions = await packageDb.query('inspection_doors');
+        final pErrors = await packageDb.query('inspection_door_errors');
+        final pCatalog = await packageDb.query('error_catalog', where: "status = 'Pending'");
+
+        // 2. Merge Pending Error Catalog Proposals first (Foreign Key dependency)
+        for (var row in pCatalog) {
+          await txn.insert('error_catalog', Map<String, dynamic>.from(row)..remove('errorId'),
+              conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+
+        // 3. Merge Doors and create ID Mapping (Package ID -> Master ID)
+        Map<int, int> doorIdMap = {};
+        for (var row in pDoors) {
+          final alias = row['doorAlias'] as String;
+          final packageId = row['id'] as int;
+
+          // Check if door exists in Master by Alias
+          final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+          
+          int masterId;
+          final data = Map<String, dynamic>.from(row);
+          
+          if (existing.isNotEmpty) {
+            masterId = existing.first['id'] as int;
+            await txn.update('doors', data, where: 'id = ?', whereArgs: [masterId]);
+          } else {
+            masterId = await txn.insert('doors', data..remove('id'));
+          }
+          doorIdMap[packageId] = masterId;
+        }
+
+        // 4. Merge Inspections and create ID Mapping (Package ID -> Master ID)
+        Map<int, int> inspectionIdMap = {};
+        for (var row in pInspections) {
+          final jobNum = row['auftragsnummer'] as String;
+          final packageId = row['inspectionId'] as int;
+
+          final existing = await txn.query('inspections', where: 'auftragsnummer = ?', whereArgs: [jobNum], limit: 1);
+          
+          int masterId;
+          final data = Map<String, dynamic>.from(row);
+
+          if (existing.isNotEmpty) {
+            masterId = existing.first['inspectionId'] as int;
+            await txn.update('inspections', data, where: 'inspectionId = ?', whereArgs: [masterId]);
+          } else {
+            masterId = await txn.insert('inspections', data..remove('inspectionId'));
+          }
+          inspectionIdMap[packageId] = masterId;
+        }
+
+        // 5. Merge Junctions (inspection_doors)
+        Map<int, int> junctionIdMap = {};
+        for (var row in pJunctions) {
+          final packageId = row['id'] as int;
+          final mDoorId = doorIdMap[row['doorId']];
+          final mInspId = inspectionIdMap[row['inspectionId']];
+
+          if (mDoorId == null || mInspId == null) continue;
+
+          final data = Map<String, dynamic>.from(row)
+            ..['doorId'] = mDoorId
+            ..['inspectionId'] = mInspId
+            ..remove('id');
+
+          // Check if this door/job combo already has a junction
+          final existing = await txn.query('inspection_doors', 
+              where: 'inspectionId = ? AND doorId = ?', whereArgs: [mInspId, mDoorId], limit: 1);
+
+          int masterId;
+          if (existing.isNotEmpty) {
+            masterId = existing.first['id'] as int;
+            await txn.update('inspection_doors', data, where: 'id = ?', whereArgs: [masterId]);
+          } else {
+            masterId = await txn.insert('inspection_doors', data);
+          }
+          junctionIdMap[packageId] = masterId;
+        }
+
+        // 6. Merge Errors
+        for (var row in pErrors) {
+          final mJunctionId = junctionIdMap[row['inspectionDoorId']];
+          if (mJunctionId == null) continue;
+
+          final data = Map<String, dynamic>.from(row)..['inspectionDoorId'] = mJunctionId..remove('id');
+          await txn.insert('inspection_door_errors', data, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+    } finally {
+      await packageDb.close();
+    }
   }
 
   static Future<ImportResult> mergeErrorCatalog(List<ErrorCatalog> errors) async {

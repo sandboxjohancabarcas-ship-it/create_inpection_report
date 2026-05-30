@@ -155,8 +155,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       material: material ?? 'Stahl',
       manufacturer: manufacturerController.text,
       dinConfiguration: dinConfiguration ?? 'DIN L',
-      closerType: closerType ?? 'Standard',
-      closingSequenceSystem: closingSequenceSystem ?? 'Keine',
+      closerType: closerType ?? 'TS93',
+      closingSequenceSystem: closingSequenceSystem ?? 'None',
       lockDimensions: lockDimensionsController.text,
       closerOnHingeSide: closerOnHingeSide,
       closerOnOppositeSide: closerOnOppositeSide,
@@ -167,12 +167,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       escapeRouteSignage: escapeSignage,
       blindCylinder: blindCylinder,
       pzCylinder: pzCylinder,
-      fittingType: fittingType ?? 'Drückergarnitur',
+      fittingType: fittingType ?? 'Drücker',
       panicFunction: panicFunction ?? 'Nein',
       escapeDirectionRespected: escapeDirectionRespected,
       fullPanicStandWing: fullPanicStandWing,
       doorFunctionOK: properFunction,
-      syncStatus: widget.door?.syncStatus ?? 'pending',  // Set to 'pending' for new doors
     );
   }
 
@@ -187,7 +186,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       'contactPerson': contactPersonController.text,
       'inspectorName': inspectorNameController.text,
       'auftragsnummer': jobNumberController.text,
-      'syncStatus': 'pending',
     };
     
     if (currentInspectionId != null) {
@@ -206,7 +204,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         'status': 'InProgress', // Default status for a new inspection door
         'notes': '',
         'attachments': null,
-        'syncStatus': 'pending',
       });
     } else {
       await LocalDatabaseService.updateDoor(door);
@@ -317,8 +314,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Door type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Türart"),
-              initialValue: doorType,
-              items: ["T30", "T60", "T90", "RS", "Sonstige"]
+              value: ["T30", "T60", "T90", "RS", "None"].contains(doorType) ? doorType : null,
+              items: ["T30", "T60", "T90", "RS", "None"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => doorType = val),
@@ -327,7 +324,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Wing count
             DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: "Flügelanzahl"),
-              initialValue: wingCount,
+              value: [1, 2, 3].contains(wingCount) ? wingCount : 1,
               items: [1, 2, 3]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val.toString())))
                   .toList(),
@@ -337,8 +334,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Material
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Material"),
-              initialValue: material,
-              items: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas"]
+              value: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas", "None"].contains(material) ? material : "None",
+              items: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas", "None"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => material = val),
@@ -353,8 +350,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // DIN configuration
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "DIN-Konfiguration"),
-              initialValue: dinConfiguration,
-              items: ["DIN L", "DIN R", "DIN LR", "Ohne"]
+              value: ["DIN L", "DIN R", "DIN LR", "None"].contains(dinConfiguration) ? dinConfiguration : null,
+              items: ["DIN L", "DIN R", "DIN LR", "None"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => dinConfiguration = val),
@@ -363,18 +360,21 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Closer type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließerart"),
-              initialValue: closerType,
-              items: ["Standard", "Überkopf", "Boden", "Feststell"]
-                  .map((val) => DropdownMenuItem(value: val, child: Text(val)))
-                  .toList(),
+              value: ["TS93", "GEZE TS 5000", "Boden", "None"].contains(closerType) ? closerType : "None",
+              items: const [
+                DropdownMenuItem(value: "TS93", child: Text("Dorma TS 93")),
+                DropdownMenuItem(value: "GEZE TS 5000", child: Text("GEZE TS 5000")),
+                DropdownMenuItem(value: "Boden", child: Text("Bodenschließer")),
+                DropdownMenuItem(value: "None", child: Text("Kein Schließer")),
+              ],
               onChanged: (val) => setState(() => closerType = val),
             ),
 
             // Closing sequence system
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließfolgesystem"),
-              initialValue: closingSequenceSystem,
-              items: ["Keine", "Einfach", "Doppel", "Mehrfach"]
+              value: ["None", "Einfach", "Doppel", "Mehrfach"].contains(closingSequenceSystem) ? closingSequenceSystem : "None",
+              items: ["None", "Einfach", "Doppel", "Mehrfach"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => closingSequenceSystem = val),
@@ -422,8 +422,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Access control
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Zutrittskontrolle"),
-              initialValue: accessControl,
-              items: ["HID multiclass SE", "Nein", "Primion", "Siedle"]
+              value: ["HID multiclass SE", "Nein", "Primion", "Siedle", "None"].contains(accessControl) ? accessControl : "Nein",
+              items: ["HID multiclass SE", "Nein", "Primion", "Siedle", "None"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => accessControl = val),
@@ -467,8 +467,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Fitting type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Beschlagart"),
-              initialValue: fittingType,
-              items: ["Drückergarnitur", "Knaufgarnitur", "Hebelgarnitur", "Sonstige"]
+              value: ["Drücker", "Knauf", "Hebel", "None"].contains(fittingType) ? fittingType : "None",
+              items: ["Drücker", "Knauf", "Hebel", "None"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => fittingType = val),
@@ -477,7 +477,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Panic function
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Panikfunktion"),
-              initialValue: panicFunction,
+              value: ["A", "B", "E", "Nein"].contains(panicFunction) ? panicFunction : "Nein",
               items: ["A", "B", "E", "Nein"]
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
+import '../services/test_data_generator.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -22,9 +24,11 @@ class JobSelectionPage extends StatefulWidget {
 class _JobSelectionPageState extends State<JobSelectionPage> {
   // State variable to track if a job is currently being transferred between databases
   bool _isDownloading = false;
+  bool _isImporting = false;
   late Future<InspectionList> _inspectionsFuture;
   final TextEditingController _searchController = TextEditingController();
   final Set<int> _selectedInspectionIds = {};
+  InspectionList _currentVisibleResults = [];
 
   /// Initializes the inspection list
   @override
@@ -37,7 +41,20 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   void _refreshInspections() {
     setState(() {
       _selectedInspectionIds.clear();
+      _currentVisibleResults = [];
       _inspectionsFuture = DatabaseService.searchInspections(_searchController.text);
+    });
+  }
+
+  /// Selects all items currently visible in the search results (Block 3)
+  void _selectAllResults() {
+    setState(() {
+      for (var job in _currentVisibleResults) {
+        final id = job['inspectionId'];
+        if (id != null) {
+          _selectedInspectionIds.add(id as int);
+        }
+      }
     });
   }
 
@@ -124,11 +141,147 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     }
   }
 
+  /// Handles the import of an inspector's result package into the Main DB (Block 4)
+  Future<void> _handleImportResultPackage() async {
+    try {
+      // Select the .db file from the inspector
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['db'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+
+        if (!mounted) return;
+
+        // User Confirmation Dialog (German UX)
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Ergebnis-Paket importieren'),
+            content: const Text(
+              'Möchten Sie dieses Paket in die Haupt-Datenbank einspielen? '
+              'Bestehende Daten werden bei Übereinstimmung (Alias/Auftragsnummer) aktualisiert.'
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Importieren', style: TextStyle(color: Colors.blue)),
+              ),
+            ],
+          ),
+        );
+
+        if (confirm != true) return;
+
+        setState(() => _isImporting = true);
+        
+        // Execute the merge logic defined in Block 2
+        await DatabaseService.importAndMergePackage(path);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Paket erfolgreich in Haupt-DB integriert.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          // Refresh to show updated data
+          _refreshInspections();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
+    }
+  }
+
+  /// Interactive Data Generation Dialog for manual testing efficiency
+  void _showSeedDataDialog() {
+    int customers = 2;
+    int objects = 2;
+    int doors = 5;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Testdaten generieren'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Wählen Sie die Parameter für die Massenerstellung:'),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: customers,
+                decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
+                items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
+                onChanged: (v) => setDialogState(() => customers = v!),
+              ),
+              DropdownButtonFormField<int>(
+                value: objects,
+                decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
+                items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
+                onChanged: (v) => setDialogState(() => objects = v!),
+              ),
+              DropdownButtonFormField<int>(
+                value: doors,
+                decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
+                items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
+                onChanged: (v) => setDialogState(() => doors = v!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isDownloading = true);
+                try {
+                  await DatabaseService.clearDatabase(); // Start with a clean slate
+                  await TestDataGenerator.generate(
+                    numCustomers: customers,
+                    numObjectsPerCustomer: objects,
+                    numDoorsPerObject: doors,
+                  );
+                  _refreshInspections();
+                } finally {
+                  setState(() => _isDownloading = false);
+                }
+              },
+              child: const Text('Generieren'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Auftrag auswählen'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.drive_folder_upload),
+            tooltip: 'Ergebnis importieren',
+            onPressed: _isImporting || _isDownloading ? null : _handleImportResultPackage,
+          ),
+          IconButton(
+            icon: const Icon(Icons.science_outlined),
+            tooltip: 'Testdaten generieren',
+            onPressed: _isDownloading ? null : _showSeedDataDialog,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -157,6 +310,28 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               onChanged: (value) => _refreshInspections(),
             ),
           ),
+          // Selection Controls Row (Block 3)
+          if (_searchController.text.isNotEmpty || _selectedInspectionIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Row(
+                children: [
+                  if (_currentVisibleResults.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _selectAllResults,
+                      icon: const Icon(Icons.select_all),
+                      label: const Text('Alle Ergebnisse wählen'),
+                    ),
+                  const Spacer(),
+                  if (_selectedInspectionIds.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () => setState(() => _selectedInspectionIds.clear()),
+                      icon: const Icon(Icons.deselect),
+                      label: Text('Auswahl aufheben (${_selectedInspectionIds.length})'),
+                    ),
+                ],
+              ),
+            ),
           Expanded(
             child: Stack(
               // Stack allows the 'Downloading' indicator to appear on top of the list
@@ -175,6 +350,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     }
 
                     final inspections = snapshot.data!;
+                    
+                    // Cache currently visible results for selection logic
+                    _currentVisibleResults = inspections;
 
                     return ListView.builder(
                       itemCount: inspections.length,
@@ -239,7 +417,25 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                       ),
                     ),
                   ),
-              ],
+                // UI: Overlay for the import process
+                if (_isImporting)
+                  Container(
+                    color: Colors.black45,
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 20),
+                          Text(
+                            'Paket wird importiert...',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ],
             ),
           ),
         ],
