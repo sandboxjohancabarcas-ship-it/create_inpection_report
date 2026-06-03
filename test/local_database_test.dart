@@ -38,8 +38,8 @@ void main() {
         material: 'Stahl',
         manufacturer: 'Dorma',
         dinConfiguration: 'DIN R',
-        closerType: 'Standard',
-        closingSequenceSystem: 'Keine',
+        closerType: 'TS93',
+        closingSequenceSystem: 'None',
         lockDimensions: '92mm',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
@@ -50,12 +50,11 @@ void main() {
         escapeRouteSignage: true,
         blindCylinder: false,
         pzCylinder: true,
-        fittingType: 'Drückergarnitur',
+        fittingType: 'Drücker',
         panicFunction: 'E',
         escapeDirectionRespected: true,
         fullPanicStandWing: false,
         doorFunctionOK: false,
-        syncStatus: 'pending',
       );
 
       // Save the door locally
@@ -84,7 +83,6 @@ void main() {
       
       expect(storedErrors.length, 1, reason: 'Error record missing in working.db');
       expect(storedErrors.first.notes, 'Dichtung im unteren Bereich beschädigt');
-      expect(testDoor.syncStatus, 'pending', reason: 'New data must be marked as pending');
     });
 
     test('Requirement 2: Isolation Verification (Clean Slate)', () async {
@@ -94,7 +92,31 @@ void main() {
         pos: 1,
         doorAlias: 'OldCustomer-SiteX-001',
         doorNumber: 'OLD-1',
-        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false, doorFunctionOK: true,
+        floor: 'UG',
+        roomNumber: '001',
+        roomDesignation: 'Keller',
+        doorType: 'RS',
+        wingCount: 1,
+        material: 'Aluminium',
+        manufacturer: 'GEZE',
+        dinConfiguration: 'DIN L',
+        closerType: 'Boden',
+        closingSequenceSystem: 'None',
+        lockDimensions: '92/10',
+        closerOnHingeSide: false,
+        closerOnOppositeSide: true,
+        lintelHeightUnder1m: true,
+        escapeDoorControl: false,
+        accessControl: 'None',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: false,
+        fittingType: 'Drücker',
+        panicFunction: 'Nein',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
       ));
 
       // Verify it exists before clearing
@@ -115,7 +137,31 @@ void main() {
         pos: 1,
         doorAlias: 'ActiveCustomer-MainSite-001',
         doorNumber: 'D1',
-        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false, doorFunctionOK: true,
+        floor: 'EG',
+        roomNumber: '101',
+        roomDesignation: 'Lobby',
+        doorType: 'T30',
+        wingCount: 2,
+        material: 'Glas',
+        manufacturer: 'Dorma',
+        dinConfiguration: 'DIN LR',
+        closerType: 'TS93',
+        closingSequenceSystem: 'Doppel',
+        lockDimensions: '72/9',
+        closerOnHingeSide: true,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: true,
+        accessControl: 'Siedle',
+        escapeRouteSituation: true,
+        escapeRouteSignage: true,
+        blindCylinder: false,
+        pzCylinder: true,
+        fittingType: 'Drücker',
+        panicFunction: 'Nein',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
       ));
 
       // Search by partial alias string
@@ -137,19 +183,48 @@ void main() {
         'inspectionId': 1001,
         'clientName': 'SpectrumCorp',
         'objectAddress': 'Main St 1',
+        'jobNumber': 'JOB-2023-01',
         'date': '2023-01-01',
       });
       final inspId2 = await DatabaseService.insertInspection({
         'inspectionId': 1002,
         'clientName': 'SpectrumCorp',
         'objectAddress': 'Main St 1',
+        'jobNumber': 'JOB-2024-01',
         'date': '2024-01-01',
       });
 
       final doorId = 55;
       await DatabaseService.insertDoor(Door(
-        id: doorId, pos: 1, doorAlias: 'SC-M1-D1', doorNumber: 'D1', doorFunctionOK: true,
-        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false,
+        id: doorId,
+        pos: 1,
+        doorAlias: 'SC-M1-D1',
+        doorNumber: 'D1',
+        floor: '1.OG',
+        roomNumber: '105',
+        roomDesignation: 'Büro',
+        doorType: 'T30',
+        wingCount: 1,
+        material: 'Stahl',
+        manufacturer: 'Dorma',
+        dinConfiguration: 'DIN R',
+        closerType: 'TS93',
+        closingSequenceSystem: 'None',
+        lockDimensions: '92mm',
+        closerOnHingeSide: true,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: false,
+        accessControl: 'Nein',
+        escapeRouteSituation: true,
+        escapeRouteSignage: true,
+        blindCylinder: false,
+        pzCylinder: true,
+        fittingType: 'Drücker',
+        panicFunction: 'Nein',
+        escapeDirectionRespected: true,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
       ));
       
       // Link door to both inspections (History)
@@ -163,8 +238,35 @@ void main() {
 
       // 2. SETUP LOCAL DB DIRTY STATE (Simulate a previous job for a different customer)
       await LocalDatabaseService.insertDoor(Door(
-        id: 999, pos: 9, doorAlias: 'OLD-CUST-ADDR-001', doorNumber: 'X', doorFunctionOK: true,
-        floor: '', roomNumber: '', roomDesignation: '', doorType: '', wingCount: 1, material: '', manufacturer: '', dinConfiguration: '', closerType: '', closingSequenceSystem: '', lockDimensions: '', closerOnHingeSide: false, closerOnOppositeSide: false, lintelHeightUnder1m: false, escapeDoorControl: false, accessControl: '', escapeRouteSituation: false, escapeRouteSignage: false, blindCylinder: false, pzCylinder: false, fittingType: '', panicFunction: '', escapeDirectionRespected: false, fullPanicStandWing: false,
+        id: 999,
+        pos: 9,
+        doorAlias: 'OLD-CUST-ADDR-001',
+        doorNumber: 'X',
+        floor: 'Dach',
+        roomNumber: '99',
+        roomDesignation: 'Technik',
+        doorType: 'T90',
+        wingCount: 1,
+        material: 'Stahl',
+        manufacturer: 'HÖRMANN',
+        dinConfiguration: 'DIN L',
+        closerType: 'Standard',
+        closingSequenceSystem: 'None',
+        lockDimensions: '92mm',
+        closerOnHingeSide: true,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: false,
+        accessControl: 'None',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: false,
+        fittingType: 'Drücker',
+        panicFunction: 'Nein',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
       ));
 
       // 3. EXECUTE DOWNLOAD (Wide Spectrum)

@@ -220,19 +220,19 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               const Text('Wählen Sie die Parameter für die Massenerstellung:'),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
-                value: customers,
+                initialValue: customers,
                 decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
                 items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => customers = v!),
               ),
               DropdownButtonFormField<int>(
-                value: objects,
+                initialValue: objects,
                 decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
                 items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => objects = v!),
               ),
               DropdownButtonFormField<int>(
-                value: doors,
+                initialValue: doors,
                 decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
                 items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => doors = v!),
@@ -379,7 +379,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Projekt: ${job['auftragsnummer']}'),
+                                Text('Projekt: ${job['jobNumber']}'),
                                 Text('Datum: ${job['date']}'),
                               ],
                             ),

@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/models/models.dart';
@@ -64,7 +63,7 @@ void main() {
         'inspectionId': 1,
         'clientName': 'Kunde A',
         'objectAddress': 'Hauptstrasse 10',
-        'auftragsnummer': 'JOB-100',
+        'jobNumber': 'JOB-100',
         'date': '2023-10-01',
         'contactPerson': 'Hr. Mustermann',
         'inspectorName': 'Prüfer 1'
@@ -103,16 +102,16 @@ void main() {
       
       // 1. Setup two inspections via Service with all required German metadata
       await DatabaseService.insertInspection({
-        'inspectionId': 1, 
-        'auftragsnummer': 'JOB-1', 
+        'inspectionId': 1,
+        'jobNumber': 'JOB-1',
         'clientName': 'Kunde 1', 
         'date': '2024-01-01',
         'objectAddress': 'Teststraße 1',
         'contactPerson': 'Ansprechpartner 1'
       });
       await DatabaseService.insertInspection({
-        'inspectionId': 2, 
-        'auftragsnummer': 'JOB-2', 
+        'inspectionId': 2,
+        'jobNumber': 'JOB-2',
         'clientName': 'Kunde 2', 
         'date': '2024-01-02',
         'objectAddress': 'Teststraße 2',

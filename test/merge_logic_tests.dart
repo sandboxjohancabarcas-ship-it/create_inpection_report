@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/database_service.dart';
-import 'package:wartungstool/models/models.dart';
 import 'dart:io';
 
 void main() {
@@ -51,8 +50,8 @@ void main() {
       // 2. Create a "Result Package" mimicking an inspector's mobile DB
       final pkgDb = await openDatabase(packagePath, version: 15, 
         onCreate: (db, v) async {
-          await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT, roomDesignation TEXT, pos INTEGER, dinConfiguration TEXT, fittingType TEXT, closerType TEXT)');
-          await db.execute('CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, auftragsnummer TEXT)');
+          await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT UNIQUE, roomDesignation TEXT, pos INTEGER, dinConfiguration TEXT, fittingType TEXT, closerType TEXT)');
+          await db.execute('CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, jobNumber TEXT)');
           await db.execute('CREATE TABLE inspection_doors (id INTEGER PRIMARY KEY, inspectionId INTEGER, doorId INTEGER)');
           await db.execute('CREATE TABLE inspection_door_errors (id INTEGER PRIMARY KEY, inspectionDoorId INTEGER)');
           await db.execute('CREATE TABLE error_catalog (errorId INTEGER PRIMARY KEY, status TEXT)');

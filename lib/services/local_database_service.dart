@@ -64,7 +64,7 @@ class LocalDatabaseService {
             date TEXT,
             contactPerson TEXT,
             inspectorName TEXT,
-            auftragsnummer TEXT
+            jobNumber TEXT
           );
         ''');
 
@@ -218,9 +218,14 @@ class LocalDatabaseService {
 
       final db = await getDb();
       await db.transaction((txn) async {
-        // 3. Populate local Inspections (marked as synced)
+        // 3. Populate local Inspections from the downloaded package
         for (var insp in selectedInspections) {
-          await txn.insert('inspections', insp, conflictAlgorithm: ConflictAlgorithm.replace);
+          final data = Map<String, dynamic>.from(insp);
+          // Ensure legacy packages are mapped to new English keys
+          if (data.containsKey('auftragsnummer')) {
+            data['jobNumber'] = data.remove('auftragsnummer');
+          }
+          await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         for (var junction in allJunctions) {

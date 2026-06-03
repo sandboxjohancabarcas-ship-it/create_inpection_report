@@ -63,11 +63,11 @@ class DatabaseService {
             date TEXT,
             contactPerson TEXT,
             inspectorName TEXT,
-            auftragsnummer TEXT
+            jobNumber TEXT
           );
         ''');
         await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
-        await db.execute('CREATE INDEX idx_insp_job ON inspections (auftragsnummer)');
+        await db.execute('CREATE INDEX idx_insp_job ON inspections (jobNumber)');
         await db.execute('CREATE INDEX idx_insp_date ON inspections (date)');
 
         // InspectionDoors table
@@ -121,95 +121,63 @@ class DatabaseService {
         await _seedErrorCatalog(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 10) {
-          // Change 4: Performance Indices for high volume doors (2,000+ records)
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_doors_number ON doors (doorNumber)');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_client ON inspections (clientName)');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (auftragsnummer)');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
-          print('Database version 10: Performance indices created.');
-        }
-        if (oldVersion < 11) {
-          await db.execute('ALTER TABLE doors ADD COLUMN doorAlias TEXT');
-          await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
-          print('Database version 11: Door Alias added.');
-        }
-        if (oldVersion < 12) {
-          // Data Migration: Normalize DIN Configuration values (Fix for Dropdown crash)
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
-          print('Database version 12: DIN Configuration values normalized.');
-        }
-        if (oldVersion < 13) {
-          // Data Migration: Normalize CloserType and Manufacturer (Fix for UI Dropdown crashes)
-          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000'");
-          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN'");
-          print('Database version 13: CloserType and Manufacturer values normalized.');
-        }
-        if (oldVersion < 15) {
-          // Data Migration: Normalize all technical keys to match UI dropdowns
-          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker'");
-          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000'");
-          print('Database version 15: Technical keys normalized.');
-        }
-
-        if (oldVersion < 16) {
-          // Comprehensive Normalization: Ensure all fields match UI dropdowns exactly
-          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType = 'TS 5000' OR closerType IS NULL");
-          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
-          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L' OR dinConfiguration IS NULL");
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
-          print('Database version 16: Comprehensive technical keys normalized.');
-        }
-
-        if (oldVersion < 9) {
-          // Change 3: Remove metadata columns from doors table
-          await db.execute('ALTER TABLE doors DROP COLUMN customerName');
-          await db.execute('ALTER TABLE doors DROP COLUMN customerAddress');
-          await db.execute('ALTER TABLE doors DROP COLUMN contactPerson');
-          await db.execute('ALTER TABLE doors DROP COLUMN jobNumber');
-          await db.execute('ALTER TABLE doors DROP COLUMN inspectionDate');
-          await db.execute('ALTER TABLE doors DROP COLUMN inspectorName');
-        }
-
-        if (oldVersion < 8) {
-          // Redundancy Removal: Drop the legacy inspection_errors table
-          await db.execute('DROP TABLE IF EXISTS inspection_errors');
-        }
-
+        // Reordered to chronological sequence for data integrity
         if (oldVersion < 7) {
-          // Add missing columns to error_catalog table
           try {
             await db.execute('ALTER TABLE error_catalog ADD COLUMN severity TEXT DEFAULT \'medium\'');
-          } catch (e) {
-            print('Severity column already exists or other error: $e');
-          }
-          try {
             await db.execute('ALTER TABLE error_catalog ADD COLUMN recommendation TEXT DEFAULT \'\'');
-          } catch (e) {
-            print('Recommendation column already exists or other error: $e');
-          }
-          try {
             await db.execute('ALTER TABLE error_catalog ADD COLUMN normReference TEXT DEFAULT \'\'');
-          } catch (e) {
-            print('NormReference column already exists or other error: $e');
-          }
-
-          // Add consolidation columns for Change 1 if not already present
-          try {
             await db.execute("ALTER TABLE error_catalog ADD COLUMN status TEXT NOT NULL DEFAULT 'Approved'");
             await db.execute("ALTER TABLE error_catalog ADD COLUMN requestedBy TEXT");
             await db.execute("ALTER TABLE error_catalog ADD COLUMN requestDate TEXT");
             await db.execute("ALTER TABLE error_catalog ADD COLUMN sourceInspectionDoorId INTEGER");
-          } catch (e) {
-            print('Consolidation columns might already exist: $e');
-          }
+          } catch (e) { print('Catalog migration warning: $e'); }
           
-          
-          // Reseed the error catalog with new data
           await db.delete('error_catalog');
           await _seedErrorCatalog(db);
+        }
+
+        if (oldVersion < 8) {
+          await db.execute('DROP TABLE IF EXISTS inspection_errors');
+        }
+
+        if (oldVersion < 9) {
+          // Metadata removal from doors table - now handled in inspections table
+          final cols = ['customerName', 'customerAddress', 'contactPerson', 'jobNumber', 'inspectionDate', 'inspectorName'];
+          for (var col in cols) {
+            try { await db.execute('ALTER TABLE doors DROP COLUMN $col'); } catch (_) {}
+          }
+        }
+
+        if (oldVersion < 10) {
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_doors_number ON doors (doorNumber)');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_client ON inspections (clientName)');
+          // Handle the transition from German to English column naming in migrations
+          try {
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (jobNumber)');
+          } catch (_) {
+            await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (auftragsnummer)');
+          }
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
+        }
+
+        if (oldVersion < 11) {
+          try {
+            await db.execute('ALTER TABLE doors ADD COLUMN doorAlias TEXT');
+            await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
+          } catch (_) {}
+        }
+
+        if (oldVersion < 12) {
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
+          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+        }
+
+        if (oldVersion < 16) {
+          // Normalization of technical keys to match UI dropdowns exactly
+          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType IN ('TS 5000', 'TS93 G') OR closerType IS NULL");
+          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
+          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
         }
       },
     );
@@ -268,8 +236,6 @@ class DatabaseService {
     );
   }
 
-  /// Searches inspections by client name, job number, or date.
-  /// Limits results to 50 for performance and utilizes existing indexes.
   /// Searches inspections by client name, job number, date, or door number.
   /// Limits results to 50 jobs for performance.
   static Future<List<Map<String, dynamic>>> searchInspections(String query) async {
@@ -279,13 +245,18 @@ class DatabaseService {
     }
 
     final searchTerm = '%$query%';
-    return await db.query(
-      'inspections',
-      where: 'clientName LIKE ? OR auftragsnummer LIKE ? OR date LIKE ? OR objectAddress LIKE ?',
-      whereArgs: [searchTerm, searchTerm, searchTerm, searchTerm],
-      orderBy: 'date DESC',
-      limit: 50,
-    );
+    return await db.rawQuery('''
+      SELECT DISTINCT i.* FROM inspections i
+      LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+      LEFT JOIN doors d ON id.doorId = d.id
+      WHERE i.clientName LIKE ? 
+         OR i.jobNumber LIKE ? 
+         OR i.date LIKE ? 
+         OR i.objectAddress LIKE ? 
+         OR d.doorNumber LIKE ?
+      ORDER BY i.date DESC
+      LIMIT 50
+    ''', [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
   }
 
   /// Performs a global search across all doors in the master database.
@@ -502,10 +473,10 @@ class DatabaseService {
         // 4. Merge Inspections and create ID Mapping (Package ID -> Master ID)
         Map<int, int> inspectionIdMap = {};
         for (var row in pInspections) {
-          final jobNum = row['auftragsnummer'] as String;
+          final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
           final packageId = row['inspectionId'] as int;
 
-          final existing = await txn.query('inspections', where: 'auftragsnummer = ?', whereArgs: [jobNum], limit: 1);
+          final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
           
           int masterId;
           final data = Map<String, dynamic>.from(row);
