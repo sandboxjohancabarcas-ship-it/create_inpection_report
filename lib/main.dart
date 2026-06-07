@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'services/local_database_service.dart';
 import 'services/database_service.dart';
@@ -7,17 +8,18 @@ import 'pages/main_navigation_page.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // -----------------------------------------
-  // REQUIRED FOR WINDOWS / MACOS / LINUX
-  // -----------------------------------------
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    
+    // Initialize Master Database (Manager Role)
+    await DatabaseService.getDb();
+  }
 
-  // Initialize databases
+  // Initialize Local Working Database (Both Roles)
+  // Inspector needs it to work; Manager needs it for import/export testing.
   await LocalDatabaseService.getDb();
-  await DatabaseService.getDb();
 
-  // Start your real app
   runApp(const MyApp());
 }
 

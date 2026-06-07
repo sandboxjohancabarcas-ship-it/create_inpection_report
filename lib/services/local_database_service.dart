@@ -220,10 +220,10 @@ class LocalDatabaseService {
       await db.transaction((txn) async {
         // 3. Populate local Inspections from the downloaded package
         for (var insp in selectedInspections) {
-          final data = Map<String, dynamic>.from(insp);
+          final Map<String, dynamic> data = Map<String, dynamic>.from(insp);
           // Ensure legacy packages are mapped to new English keys
-          if (data.containsKey('auftragsnummer')) {
-            data['jobNumber'] = data.remove('auftragsnummer');
+          if (data.containsKey('auftragsnummer') && !data.containsKey('jobNumber')) {
+            data['jobNumber'] = data['auftragsnummer'];
           }
           await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
