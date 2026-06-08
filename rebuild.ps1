@@ -1,6 +1,6 @@
 # Professional Rebuild Script for WartungsTool
 Write-Host "Stopping Gradle Daemons..." -ForegroundColor Cyan
-./android/gradlew --stop
+& .\android\gradlew.bat --stop
 
 Write-Host "Clearing stale caches and build artifacts..." -ForegroundColor Cyan
 if (Test-Path "android/.gradle") { Remove-Item -Recurse -Force "android/.gradle" }

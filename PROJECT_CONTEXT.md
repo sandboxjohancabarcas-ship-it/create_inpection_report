@@ -65,6 +65,9 @@
 ## Session Log: 2024-05-24 10:00
 Confirmed "Door-as-Patient" philosophy. Identified table synchronization inventory. Prioritized Role Separation logic.
 
+## Session Log: 2024-05-24 12:00
+Validated `rebuild.ps1` for Android. Identified build failure resolution: `shrinkResources` depends on `minifyEnabled` in `android/app/build.gradle`.
+
 ---
 ```
 

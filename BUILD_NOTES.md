@@ -14,6 +14,8 @@
    - **Warning**: Do NOT use `options.release.set(17)` in the root script as it breaks Android API linking. Use `sourceCompatibility` and `targetCompatibility` instead.
 3. **Kotlin DSL**: 
    Since Kotlin 2.0 is used, `kotlinOptions` is deprecated. Always use `compilerOptions` with `jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)`.
+4. **Resource Shrinking Dependency**:
+   The Android Gradle Plugin (AGP) 8.x requires `minifyEnabled true` if `shrinkResources true` is used. This is because the resource shrinker relies on the code analyzer (R8) to determine which resources are actually referenced in the code.
 
 ## Recovery Procedure (The "Scorched Earth" Reset)
 If the build fails with "Finalized" or "Unresolved Reference" errors after configuration changes:

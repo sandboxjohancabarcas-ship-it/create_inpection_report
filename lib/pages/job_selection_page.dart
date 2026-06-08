@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -111,9 +112,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
       );
 
       // Export the file to the Documents folder for manual handoff
-      final appDocDir = await getApplicationDocumentsDirectory();
+      final String downloadPath = Platform.isAndroid 
+          ? '/storage/emulated/0/Download' 
+          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(appDocDir.path, 'inspektion_paket_$timestamp.db');
+      final exportPath = p.join(downloadPath, 'inspektion_paket_$timestamp.db');
       
       await LocalDatabaseService.exportWorkingDb(exportPath);
 
@@ -145,10 +148,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   Future<void> _handleImportResultPackage() async {
     try {
       // Select the .db file from the inspector
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['db'],
-      );
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
 
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;

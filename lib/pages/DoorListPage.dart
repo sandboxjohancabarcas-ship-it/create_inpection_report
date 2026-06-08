@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -42,10 +43,7 @@ class _DoorListPageState extends State<DoorListPage> {
   /// This allows inspectors to load packages prepared by the manager.
   Future<void> _handleImportPaket() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['db'],
-      );
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
 
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
@@ -104,9 +102,11 @@ class _DoorListPageState extends State<DoorListPage> {
 
     setState(() => _isSyncing = true);
     try {
-      final appDocDir = await getApplicationDocumentsDirectory();
+      final String downloadPath = Platform.isAndroid 
+          ? '/storage/emulated/0/Download' 
+          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(appDocDir.path, 'inspektion_ergebnis_$timestamp.db');
+      final exportPath = p.join(downloadPath, 'inspektion_ergebnis_$timestamp.db');
 
       await LocalDatabaseService.exportSelectiveJobPackage(
         _selectedDoorIds.toList(),
