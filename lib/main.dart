@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'services/local_database_service.dart';
-import 'services/database_service.dart';
-import 'pages/main_navigation_page.dart';
+import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/pages/main_navigation_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

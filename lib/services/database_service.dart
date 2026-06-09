@@ -2,6 +2,8 @@ import 'package:wartungstool/models/models.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
+/// Master Database Service (Manager Role)
+/// This is a stub to allow the project to compile for Windows.
 class DatabaseService {
   static Database? _db;
 

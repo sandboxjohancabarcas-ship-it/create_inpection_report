@@ -4,8 +4,10 @@
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 
 class LocalDatabaseService {
   static Database? _db;
@@ -13,8 +15,17 @@ class LocalDatabaseService {
   static Future<Database> getDb() async {
     if (_db != null) return _db!;
 
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'working.db');
+    String path;
+    if (Platform.isWindows || Platform.isLinux) {
+      // Initialize FFI for Desktop
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      final directory = await getApplicationSupportDirectory();
+      path = join(directory.path, 'working.db');
+    } else {
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, 'working.db');
+    }
 
     _db = await openDatabase(
       path,
@@ -183,7 +194,6 @@ class LocalDatabaseService {
     // Ensure the catalog is seeded if it's empty
     await _seedErrorCatalog(_db!);
 
-    // This was the end of the class, but methods below were outside.
     return _db!;
   }
 
