@@ -12,20 +12,25 @@ import 'package:path_provider/path_provider.dart';
 class LocalDatabaseService {
   static Database? _db;
 
+  static Future<String> _getWorkingDbPath() async {
+    if (Platform.isWindows || Platform.isLinux) {
+      final directory = await getApplicationSupportDirectory();
+      return join(directory.path, 'working.db');
+    } else {
+      final dbPath = await getDatabasesPath();
+      return join(dbPath, 'working.db');
+    }
+  }
+
   static Future<Database> getDb() async {
     if (_db != null) return _db!;
 
-    String path;
     if (Platform.isWindows || Platform.isLinux) {
-      // Initialize FFI for Desktop
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
-      final directory = await getApplicationSupportDirectory();
-      path = join(directory.path, 'working.db');
-    } else {
-      final dbPath = await getDatabasesPath();
-      path = join(dbPath, 'working.db');
     }
+
+    final path = await _getWorkingDbPath();
 
     _db = await openDatabase(
       path,
@@ -585,8 +590,7 @@ class LocalDatabaseService {
     // Ensure all transactions are committed and file handle is released
     await closeDb();
     
-    final dbDir = await getDatabasesPath();
-    final sourcePath = join(dbDir, 'working.db');
+    final sourcePath = await _getWorkingDbPath();
     final sourceFile = File(sourcePath);
     
     if (!await sourceFile.exists()) {
@@ -631,8 +635,7 @@ class LocalDatabaseService {
     // 3. Execute Import (Replace local working DB)
     await closeDb();
     
-    final dbDir = await getDatabasesPath();
-    final destinationPath = join(dbDir, 'working.db');
+    final destinationPath = await _getWorkingDbPath();
     try {
       await sourceFile.copy(destinationPath);
       print('Database successfully validated and imported.');

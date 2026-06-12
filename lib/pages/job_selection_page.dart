@@ -8,6 +8,8 @@ import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
+import '../models/door.dart';
+import '../services/kinchi_api_service.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -31,11 +33,109 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   final Set<int> _selectedInspectionIds = {};
   InspectionList _currentVisibleResults = [];
 
+  final KinchiApiService _apiService = KinchiApiService();
+
   /// Initializes the inspection list
   @override
   void initState() {
     super.initState();
     // Initialize the future once to prevent re-fetching on every rebuild
+    _refreshInspections();
+  }
+
+  /// Handles the cloud upload of a generated GAEB file
+  Future<void> _uploadToCloud(File file, String jobNumber) async {
+    try {
+      // Using hardcoded test credentials as requested
+      final loggedIn = await _apiService.login(
+        "cabarcas@gottsberg.de", 
+        "KINCHI_HiLdE21042017!"
+      );
+
+      if (!loggedIn) throw Exception("Login fehlgeschlagen");
+
+      // Dynamically fetch directories to find a valid ID, avoiding the 400 ValidationError
+      final List<dynamic> directories = await _apiService.getDirectories();
+      if (directories.isEmpty) {
+        throw Exception("Keine Zielverzeichnisse in der Cloud konfiguriert.");
+      }
+      final int targetDirectoryId = directories.first['id'] as int;
+
+      final docId = await _apiService.uploadGaebFile(file.path, targetDirectoryId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cloud-Upload erfolgreich (ID: $docId)'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cloud-Upload fehlgeschlagen: $e'), backgroundColor: Colors.orange),
+        );
+      }
+    }
+  }
+
+  /// Confirms and executes deletion of specific inspections
+  Future<void> _handleDeleteInspections(List<int> ids) async {
+    final bool confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Löschen bestätigen'),
+        content: Text('${ids.length} Auftrag/Aufträge und zugehörige Prüfungsdaten unwiderruflich löschen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
+    try {
+      await DatabaseService.deleteInspections(ids);
+      _refreshInspections();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ausgewählte Daten gelöscht.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  /// Confirms and executes clearing of all job-related data
+  Future<void> _handlePurgeAll() async {
+    final bool confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Alle Auftragsdaten löschen?'),
+        content: const Text(
+          'Dies wird ALLE Aufträge, Prüfungsdetails und Fehlerzuordnungen löschen.\n\n'
+          'Türen (Stammdaten) und der Fehlerkatalog bleiben erhalten.'
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Alles löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ?? false;
+    if (confirm) await DatabaseService.purgeAllInspections();
     _refreshInspections();
   }
 
@@ -61,41 +161,39 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
   /// Collects full data for selected inspections including doors and errors
   Future<List<Map<String, dynamic>>> _prepareExportData() async {
-    List<Map<String, dynamic>> exportData = [];
+    List<Map<String, dynamic>> flatExportList = [];
     
     for (int inspectionId in _selectedInspectionIds) {
-      final inspection = (await DatabaseService.searchInspections('')).firstWhere((i) => i['inspectionId'] == inspectionId);
-      
       final doors = await DatabaseService.getDoorsByInspectionIds([inspectionId]);
 
       final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
       final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
       final allErrors = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
-      List<Map<String, dynamic>> doorDetails = [];
       for (var door in doors) {
-        final junction = junctionList.firstWhere((j) => j['doorId'] == door.id);
+        // Find the junction that links this door to this inspection
+        final junction = junctionList.firstWhere(
+          (j) => j['doorId'] == door.id, 
+          orElse: () => <String, dynamic>{}
+        );
+        if (junction.isEmpty) continue;
+
         final doorErrors = allErrors
             .where((e) => e['inspectionDoorId'] == junction['id'])
-            .map((e) => e['notes']?.toString() ?? 'Fehler')
+            .map((e) => {
+              'code': e['code'] ?? 'ERR',
+              'description': e['description'] ?? 'Mangel',
+              'notes': e['notes'] ?? '',
+            })
             .toList();
 
-        doorDetails.add({
-          'doorNumber': door.doorNumber,
-          'material': door.material,
-          'doorFunctionOK': door.doorFunctionOK,
-          'floor': door.floor,
-          'roomNumber': door.roomNumber,
+        flatExportList.add({
+          'door': door,
           'errors': doorErrors,
         });
       }
-
-      exportData.add({
-        'metadata': inspection,
-        'doors': doorDetails,
-      });
     }
-    return exportData;
+    return flatExportList;
   }
 
   /// Orchestrates the data handoff from Main DB to Working DB.
@@ -272,6 +370,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         title: const Text('Auftrag auswählen'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined),
+            tooltip: 'Alle Aufträge löschen',
+            onPressed: _isImporting || _isDownloading ? null : _handlePurgeAll,
+          ),
+          IconButton(
             icon: const Icon(Icons.drive_folder_upload),
             tooltip: 'Ergebnis importieren',
             onPressed: _isImporting || _isDownloading ? null : _handleImportResultPackage,
@@ -444,14 +547,30 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
+            IconButton(
+              onPressed: () => _handleDeleteInspections(_selectedInspectionIds.toList()),
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              tooltip: 'Auswahl löschen',
+            ),
+            const VerticalDivider(),
             TextButton.icon(
               onPressed: () async {
+                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
+                final service = GaebExportService(
+                  customer: inspection['clientName'] ?? 'Unbekannt',
+                  projectName: inspection['projectName'] ?? 'Unbekannt',
+                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
+                );
+                
                 final data = await _prepareExportData();
-                final file = await GaebExportService.exportToGaeb90(data, "MultiJob");
+                final file = await service.exportToD83(data);
                 if (mounted && file != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('GAEB 90 exportiert nach: ${file.path}')),
                   );
+                  
+                  // Trigger Cloud Upload
+                  await _uploadToCloud(file, service.jobNumber);
                 }
               },
               icon: const Icon(Icons.description),
@@ -460,12 +579,22 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             const VerticalDivider(),
             TextButton.icon(
               onPressed: () async {
+                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
+                final service = GaebExportService(
+                  customer: inspection['clientName'] ?? 'Unbekannt',
+                  projectName: inspection['projectName'] ?? 'Unbekannt',
+                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
+                );
+
                 final data = await _prepareExportData();
-                final file = await GaebExportService.exportToGaebXml(data, "MultiJob");
+                final file = await service.exportToXml(data);
                 if (mounted && file != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('GAEB XML exportiert nach: ${file.path}')),
                   );
+
+                  // Trigger Cloud Upload
+                  await _uploadToCloud(file, service.jobNumber);
                 }
               },
               icon: const Icon(Icons.code),

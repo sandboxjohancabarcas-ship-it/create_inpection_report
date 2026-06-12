@@ -16,7 +16,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 16, // Increment for robust technical key normalization
+      version: 16, // Rollback to 16: Removed local API tracking table
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -628,6 +628,48 @@ class DatabaseService {
             break;
         }
       }
+    });
+  }
+
+  /// Records a successful API upload for later reference/deletion
+  static Future<void> recordApiUpload(String jobNumber, String fileName, int documentId) async {
+    final db = await getDb();
+    await db.insert('api_uploads', {
+      'jobNumber': jobNumber,
+      'fileName': fileName,
+      'documentId': documentId,
+      'uploadDate': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Deletes specific inspections and their associated data (junctions, errors, API records).
+  static Future<void> deleteInspections(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await getDb();
+    final idString = ids.join(',');
+
+    await db.transaction((txn) async {
+      // 1. Delete associated error instances
+      await txn.execute('''
+        DELETE FROM inspection_door_errors 
+        WHERE inspectionDoorId IN (SELECT id FROM inspection_doors WHERE inspectionId IN ($idString))
+      ''');
+
+      // 2. Delete door-inspection junctions
+      await txn.delete('inspection_doors', where: 'inspectionId IN ($idString)');
+
+      // 3. Delete the job records themselves
+      await txn.delete('inspections', where: 'inspectionId IN ($idString)');
+    });
+  }
+
+  /// Clears all inspection data from the database while preserving Doors and Error Catalog.
+  static Future<void> purgeAllInspections() async {
+    final db = await getDb();
+    await db.transaction((txn) async {
+      await txn.delete('inspection_door_errors');
+      await txn.delete('inspection_doors');
+      await txn.delete('inspections');
     });
   }
 

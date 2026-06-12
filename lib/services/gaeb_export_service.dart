@@ -1,155 +1,207 @@
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import '../models/door.dart';
+import '../models/inspection_door_error.dart';
+import '../models/error_catalog.dart';
 
 class GaebExportService {
-  /// Exports multiple inspections to GAEB 90 (D83) format.
-  static Future<File?> exportToGaeb90(List<Map<String, dynamic>> jobs, String exportName) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final file = File('${directory.path}/${exportName}_$timestamp.d83');
+  final String customer;
+  final String projectName;
+  final String jobNumber;
+
+  GaebExportService({
+    required this.customer,
+    required this.projectName,
+    required this.jobNumber,
+  });
+
+  /// Generates the .x83 XML file with rich text formatting
+  Future<File> exportToXml(List<Map<String, dynamic>> exportData) async {
+    final now = DateTime.now();
+    final dateStr = DateFormat('yyyy-MM-dd').format(now); 
+    final timeStr = DateFormat('HH:mm:ss').format(now);
     
-    StringBuffer sb = StringBuffer();
-    int lineCounter = 1;
+    // Sanitize job number: numbers only as requested
+    final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final String validJobNo = cleanJobNo.isEmpty ? "100" : cleanJobNo;
 
-    String formatLine(String za, String content) {
-      String line = za + content.padRight(72).substring(0, 72) + lineCounter.toString().padLeft(6, '0');
-      lineCounter++;
-      return '$line\r\n';
-    }                                                                                                          
+    StringBuffer buf = StringBuffer();
+    buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+    buf.writeln('<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA83/3.2">');
+    buf.writeln('  <GAEBInfo>');
+    buf.writeln('    <Version>3.2</Version>');
+    buf.writeln('    <VersDate>2013-10</VersDate>');
+    buf.writeln('    <Date>$dateStr</Date>');
+    buf.writeln('    <Time>$timeStr</Time>');
+    buf.writeln('    <ProgSystem>/ GXML Toolbox V3.3 R20200224</ProgSystem>');
+    buf.writeln('    <ProgName>WartungsTool</ProgName>');
+    buf.writeln('  </GAEBInfo>');
+    buf.writeln('  <PrjInfo>');
+    buf.writeln('    <NamePrj>$validJobNo</NamePrj>');
+    buf.writeln('    <LblPrj>$customer - $projectName</LblPrj>');
+    buf.writeln('    <Cur>EUR</Cur>');
+    buf.writeln('    <CurLbl>Euro</CurLbl>');
+    buf.writeln('  </PrjInfo>');
+    buf.writeln('  <Award>');
+    buf.writeln('    <DP>83</DP>');
+    buf.writeln('    <BoQ ID="id$validJobNo">');
+    buf.writeln('      <BoQInfo>');
+    buf.writeln('        <Name>$validJobNo</Name>');
+    buf.writeln('        <LblBoQ>Türwartung Export</LblBoQ>');
+    buf.writeln('        <OutlCompl>AllTxt</OutlCompl>');
+    buf.writeln('        <BoQBkdn>');
+    buf.writeln('          <Type>BoQLevel</Type>');
+    buf.writeln('          <LblBoQBkdn>Titel</LblBoQBkdn>');
+    buf.writeln('          <Length>2</Length>');
+    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('        </BoQBkdn>');
+    buf.writeln('        <BoQBkdn>');
+    buf.writeln('          <Type>BoQLevel</Type>');
+    buf.writeln('          <LblBoQBkdn>Bereich</LblBoQBkdn>');
+    buf.writeln('          <Length>2</Length>');
+    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('        </BoQBkdn>');
+    buf.writeln('        <BoQBkdn>');
+    buf.writeln('          <Type>Item</Type>');
+    buf.writeln('          <Length>3</Length>');
+    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('        </BoQBkdn>');
+    buf.writeln('        <NoUPComps>4</NoUPComps>');
+    buf.writeln('        <LblUPComp1 Type="Wages">Lohn</LblUPComp1>');
+    buf.writeln('        <LblUPComp2 Type="Materials">Material</LblUPComp2>');
+    buf.writeln('        <LblUPComp3 Type="Plant">Gerät</LblUPComp3>');
+    buf.writeln('        <LblUPComp4 Type="Miscellaneous">Sonstiges</LblUPComp4>');
+    buf.writeln('        <LblTime>Stunden</LblTime>');
+    buf.writeln('      </BoQInfo>');
+    buf.writeln('      <BoQBody>');
+    buf.writeln('        <BoQCtgy ID="cat1" RNoPart="01">');
+    buf.writeln('          <LblTx><p><span>Wartungspositionen</span></p></LblTx>');
+    buf.writeln('          <BoQBody>');
+    buf.writeln('            <Itemlist>');
 
-    // ZA 00: Eröffnungssatz (Page 15)        
-    sb.write(formatLine('00', ' 83L 1122PPPPI90'));
+    int itemIdx = 1;
+    for (var entry in exportData) {
+      // Defensive check to avoid the "Null is not a subtype of Door" error
+      final dynamic doorRaw = entry['door'];
+      if (doorRaw == null || doorRaw is! Door) continue;
+      final Door door = doorRaw;
 
-    for (var job in jobs) {
-      final meta = job['metadata'];
-      sb.write(formatLine('01', 'PROJEKT: ${meta['clientName']} - ${meta['auftragsnummer']}'));
+      final List<dynamic> errorsRaw = entry['errors'] ?? [];
 
-      for (var door in job['doors']) {
-        // OZ in GAEB 90 must be digits only. Removing non-numeric characters for strict compatibility.
-        String oz = (door['doorNumber']?.toString() ?? '0').replaceAll(RegExp(r'[^0-9]'), '').padLeft(9, '0');
-        sb.write(formatLine('21', '$oz NNN 00000001000Stck'));
-        sb.write(formatLine('25', door['material'] ?? 'Material?'));
-        sb.write(formatLine('26', 'Etage: ${door['floor']} | Raum: ${door['roomNumber']}'));
-        sb.write(formatLine('26', door['doorFunctionOK'] == true ? 'Status: OK' : 'Status: Defekt'));
-        for (var error in (door['errors'] as List)) {
-          sb.write(formatLine('26', '- $error'));
-        }
-      }
-    }
-
-    // ZA 99: Abschlusssatz
-    sb.write(formatLine('99', ''));
-
-    return await file.writeAsString(sb.toString());
-  }
-
-  /// Escapes special XML characters to prevent syntax errors.
-  static String _escapeXml(String input) {
-    return input
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&apos;');
-  }
-
-  /// Exports multiple inspections to GAEB DA XML (X83) format.
-  static Future<File?> exportToGaebXml(List<Map<String, dynamic>> jobs, String exportName) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final file = File('${directory.path}/${exportName}_$timestamp.x83');
-    final now = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final time = DateFormat('HH:mm:ss').format(DateTime.now());
-
-    StringBuffer xml = StringBuffer();
-    xml.writeln('<?xml version="1.0" encoding="UTF-8"?>');
-    xml.writeln('<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA83/3.2">');
-    xml.writeln('  <GAEBInfo>');
-    xml.writeln('    <Version>3.2</Version>');
-    xml.writeln('    <VersDate>2013-10</VersDate>');
-    xml.writeln('    <Date>$now</Date>');
-    xml.writeln('    <Time>$time</Time>');
-    xml.writeln('    <ProgSystem>Mobile Inspector Service</ProgSystem>');
-    xml.writeln('  </GAEBInfo>');
-    xml.writeln('  <PrjInfo>');
-    xml.writeln('    <NamePrj>${_escapeXml(exportName)}</NamePrj>');
-    xml.writeln('    <LblPrj>Wartungs-Export</LblPrj>');
-    xml.writeln('    <Cur>EUR</Cur>');
-    xml.writeln('    <CurLbl>Euro</CurLbl>');
-    xml.writeln('  </PrjInfo>');
-    xml.writeln('  <Award>');
-    xml.writeln('    <DP>83</DP>');
-    xml.writeln('    <AwardInfo>');
-    xml.writeln('      <Cat>SelectCall</Cat>');
-    xml.writeln('      <Cur>EUR</Cur>');
-    xml.writeln('      <CurLbl>Euro</CurLbl>');
-    xml.writeln('    </AwardInfo>');
-    xml.writeln('    <BoQ ID="id1">');
-    xml.writeln('      <BoQInfo>');
-    xml.writeln('        <Name>Wartung</Name>');
-    xml.writeln('        <LblBoQ>${_escapeXml(exportName)}</LblBoQ>');
-    xml.writeln('        <OutlCompl>AllTxt</OutlCompl>');
-    xml.writeln('        <BoQBkdn>');
-    xml.writeln('          <Type>BoQLevel</Type>');
-    xml.writeln('          <LblBoQBkdn>Titel</LblBoQBkdn>');
-    xml.writeln('          <Length>2</Length>');
-    xml.writeln('          <Num>Yes</Num>');
-    xml.writeln('        </BoQBkdn>');
-    xml.writeln('      </BoQInfo>');
-    xml.writeln('      <BoQBody>');
-
-    for (var job in jobs) {
-      final meta = job['metadata'];
-      final jobId = meta['inspectionId'];
-
-      // Using BoQCtgy for grouping as seen in the reference template
-      xml.writeln('        <BoQCtgy ID="job_$jobId" RNoPart="${jobId.toString().padLeft(2, '0')}">');
-      xml.writeln('          <LblTx><p><span>${_escapeXml(meta['clientName'])} - ${_escapeXml(meta['auftragsnummer'])}</span></p></LblTx>');
-      xml.writeln('          <BoQBody>');
-      xml.writeln('            <Itemlist>');
+      final String posNo = (itemIdx * 10).toString().padLeft(3, '0');
+      buf.writeln('              <Item ID="door$itemIdx" RNoPart="$posNo">');
+      buf.writeln('          <Qty>1.000</Qty>');
+      buf.writeln('          <QU>Stck</QU>');
+      buf.writeln('          <Description>');
+      buf.writeln('            <CompleteText>');
+      buf.writeln('              <DetailTxt>');
+      buf.writeln('                <Text>');
+      buf.writeln('                  <p><span><span style="font-weight:bold;">Tür-Nr: ${door.doorNumber}</span> (${door.roomDesignation})</span></p>');
+      buf.writeln('                  <p><span>Material: ${door.material} | Hersteller: ${door.manufacturer}</span></p>');
+      buf.writeln('                  <p><span>Ort: Etage ${door.floor}, Raum ${door.roomNumber}</span></p>');
       
-      int itemCounter = 1;
-      for (var door in job['doors']) {
-        String status = door['doorFunctionOK'] == true ? 'OK' : 'Defekt';
-        String rNo = (door['doorNumber']?.toString() ?? '0').replaceAll(RegExp(r'[^0-9]'), '');
-        if (rNo.isEmpty) rNo = itemCounter.toString();
-        
-        // Every Item requires a unique ID attribute for XML schema validation
-        xml.writeln('              <Item ID="item_${jobId}_$itemCounter" RNoPart="$rNo">');
-        xml.writeln('                <Qty>1.000</Qty>');
-        xml.writeln('                <QU>Stck</QU>');
-        xml.writeln('                <Description>');
-        xml.writeln('                  <CompleteText>');
-        xml.writeln('                    <DetailTxt>');
-        
-        // Constructing an XHTML compliant description block as required by GAEB 3.2
-        xml.writeln('                      <Text>');
-        xml.writeln('                        <p><span>Etage: ${_escapeXml(door['floor'] ?? '')} / Raum: ${_escapeXml(door['roomNumber'] ?? '')}</span><br/>');
-        xml.writeln('                        <span>Material: ${_escapeXml(door['material'] ?? '')}</span><br/>');
-        xml.writeln('                        <span>Status: $status</span></p>');
-        
-        final errors = door['errors'] as List;
-        if (errors.isNotEmpty) {
-          xml.writeln('                        <p><span>Mängel: ${_escapeXml(errors.join(', '))}</span></p>');
+      if (errorsRaw.isNotEmpty) {
+        buf.writeln('                  <p><span><span style="text-decoration:underline;">Mängelbericht:</span></span></p>');
+        for (var err in errorsRaw) {
+          final String code = err['code'] ?? 'ERR';
+          final String desc = err['description'] ?? 'Mangel';
+          final String note = err['notes'] ?? '';
+          
+          buf.writeln('                  <p><span><span style="color:#FF0000;">[$code] - $desc</span></span></p>');
+          if (note.isNotEmpty) {
+            buf.writeln('                  <p><span><span style="font-style:italic;">Hinweis: $note</span></span></p>');
+          }
         }
-        xml.writeln('                      </Text>');
-        xml.writeln('                    </DetailTxt>');
-        xml.writeln('                  </CompleteText>');
-        xml.writeln('                </Description>');
-        xml.writeln('              </Item>');
-        itemCounter++;
+      } else {
+        buf.writeln('                  <p><span>Status: Keine Mängel festgestellt.</span></p>');
       }
-      xml.writeln('            </Itemlist>');
-      xml.writeln('          </BoQBody>');
-      xml.writeln('        </BoQCtgy>');
+
+      buf.writeln('                </Text>');
+      buf.writeln('              </DetailTxt>');
+      buf.writeln('              <OutlineText>');
+      buf.writeln('                <OutlTxt><TextOutlTxt><p><span>Tür ${door.doorNumber}</span></p></TextOutlTxt></OutlTxt>');
+      buf.writeln('              </OutlineText>');
+      buf.writeln('            </CompleteText>');
+      buf.writeln('          </Description>');
+      buf.writeln('              </Item>');
+      itemIdx++;
     }
 
-    xml.writeln('      </BoQBody>');
-    xml.writeln('    </BoQ>');
-    xml.writeln('  </Award>');
-    xml.writeln('</GAEB>');
+    buf.writeln('            </Itemlist>');
+    buf.writeln('          </BoQBody>');
+    buf.writeln('        </BoQCtgy>');
+    buf.writeln('      </BoQBody>');
+    buf.writeln('    </BoQ>');
+    buf.writeln('  </Award>');
+    buf.writeln('</GAEB>');
 
-    return await file.writeAsString(xml.toString());
+    return _saveFile(buf.toString(), '$validJobNo.x83');
+  }
+
+  /// Generates the .d83 (GAEB 90) file with truncated lines
+  Future<File> exportToD83(List<Map<String, dynamic>> exportData) async {
+    StringBuffer buf = StringBuffer();
+    int lineCount = 1;
+
+    buf.writeln(_fmtD83('00', jobNumber, lineCount++));
+    buf.writeln(_fmtD83('01', '$customer - $projectName', lineCount++));
+
+    for (var entry in exportData) {
+      final dynamic doorRaw = entry['door'];
+      if (doorRaw == null || doorRaw is! Door) continue;
+      final Door door = doorRaw;
+      
+      final List<dynamic> errorsRaw = entry['errors'] ?? [];
+
+      buf.writeln(_fmtD83('21', 'Tür ${door.doorNumber}', lineCount++));
+      buf.writeln(_fmtD83('25', 'Tür: ${door.doorNumber} / ${door.roomDesignation}', lineCount++));
+
+      List<String> textLines = [
+        'Material: ${door.material}',
+        'Hersteller: ${door.manufacturer}',
+        'Ort: Etage ${door.floor} | Raum ${door.roomNumber}',
+        '---------------------------------------',
+      ];
+
+      if (errorsRaw.isNotEmpty) {
+        textLines.add('MAENGELBERICHT:');
+        for (var err in errorsRaw) {
+          final String code = err['code'] ?? 'ERR';
+          final String desc = err['description'] ?? '';
+          final String note = err['notes'] ?? '';
+          textLines.add('[$code] $desc');
+          if (note.isNotEmpty) textLines.add(' -> Hinweis: $note');
+        }
+      } else {
+        textLines.add('Status: Mangelfrei');
+      }
+
+      for (var s in textLines) {
+        buf.writeln(_fmtD83('26', _truncate(s, 70), lineCount++));
+      }
+    }
+
+    buf.writeln(_fmtD83('99', 'END', lineCount++));
+    return _saveFile(buf.toString(), '$jobNumber.d83');
+  }
+
+  String _fmtD83(String type, String content, int count) {
+    String countStr = count.toString().padLeft(6, '0');
+    String paddedContent = content.padRight(72, ' ');
+    return '$type${_truncate(paddedContent, 72)}$countStr';
+  }
+
+  String _truncate(String text, int max) {
+    if (text.length <= max) return text;
+    return '${text.substring(0, max - 3)}...';
+  }
+
+  Future<File> _saveFile(String content, String fileName) async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = '${directory.path}/WartungsTool/Exports/$fileName';
+    final file = File(path);
+    await file.create(recursive: true);
+    return file.writeAsString(content);
   }
 }
