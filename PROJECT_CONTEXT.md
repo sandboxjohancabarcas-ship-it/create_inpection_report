@@ -9,6 +9,9 @@
     - `sqflite` for Android field devices.
     - `sqflite_common_ffi` for the Windows Manager machine.
 - **Data Exchange:** Shared folder file-based sync (No API/Cloud backend).
+- **Data Exchange:** Hybrid Approach.
+    - Legacy: Shared folder file-based sync for `.db` files.
+    - Cloud: KINCHI Process API (Strapi/Keycloak) for document management and GAEB report synchronization.
 
 ## 3. Data Model
 - **Door:** Master technical data. **Door Alias** acts as a unique **"Patient ID"**—it is the permanent, immutable identifier for the door's lifecycle and historical events.
@@ -34,6 +37,12 @@
     1. Imports Job Package (purges existing local data).
     2. Site visits: Edits doors, records errors, creates new error requests.
     3. Exports results to the shared folder.
+
+### C. API Integration (New)
+- **Authentication:** OIDC via Keycloak (`password` grant).
+- **Media Management:** Physical file uploads to Strapi Media Library.
+- **Document Records:** Linking uploaded GAEB files to specific Project Directories.
+- **Orchestrated Purge:** Ability to delete both the database record and the physical storage in one transaction.
 
 ### C. Tables involved in Sync
 - **To Inspector:** `inspections`, `doors`, `inspection_doors`, `error_catalog`.
@@ -76,13 +85,34 @@ Validated `rebuild.ps1` for Android. Identified build failure resolution: `shrin
 - **Job Number Sanitization:** Added logic to strip non-numeric characters from job numbers for use in GAEB IDs, ensuring compliance with GAEB specifications.
 - **Rich Text Styling:** Refined HTML styling within `.x83` exports to use `<span style="...">` attributes, aligning with the provided "Source of Truth" reference file for improved validator compatibility.
 
-### Conclusion of GAEB Integration Phase:
-The GAEB export functionality for both XML (.x83) and GAEB 90 (.d83) is now robust. The implementation adheres to strict GAEB 3.2 schema requirements and business rules, ensuring generated files are valid according to external validators. Data mapping from the application's domain models (Doors, Errors) to the GAEB structure is complete, providing comprehensive maintenance reports. The system is designed for simplicity, focusing on a flat list of door positions within a single category to minimize complexity while maintaining full GAEB compliance.
+## Session Log: 2024-05-24 (API & Cloud Integration Phase)
+- **GAEB Schema Compliance:** Resolved XSD validation errors by completing the `BoQInfo` definition, adding mandatory currency tags, unit price components (Lohn, Material, etc.), and a 3-level `BoQBkdn` hierarchy.
+- **KINCHI API Implementation:** Created `KinchiApiService` to handle OIDC/Keycloak authentication and Strapi v4 file uploads. Implemented dynamic directory fetching (`getDirectories`) to resolve `400 ValidationError` when creating document records, ensuring a valid `directoryId` is used.
+- **Stateless Cloud Strategy:** Decided to roll back local database tracking of KINCHI document IDs (`api_uploads` table removed). The system will now rely on the KINCHI API as the source of truth for remote documents, fetching lists directly when needed for management (e.g., deletion).
+- **Cascading Deletion:** Implemented robust deletion logic in `DatabaseService` and `JobSelectionPage`. Users can now delete single, multiple, or all inspection records, which automatically cleans up associated `inspection_doors` and `inspection_door_errors` entries, while preserving master `doors` and `error_catalog` data.
+- **Windows Path Normalization:** Fixed a critical "Source database not found" error during job package download/export on Windows by standardizing the `working.db` path to consistently use `getApplicationSupportDirectory()` across all `LocalDatabaseService` methods.
+
+### Conclusion of API & Cloud Integration Phase:
+The application now successfully integrates with the KINCHI Process API for GAEB file uploads, adhering to a stateless approach for cloud document management. The GAEB export functionality remains robust and compliant. Critical local database pathing issues on Windows have been resolved, and comprehensive deletion capabilities for inspection data have been added to the Manager UI.
+
+### Current System State:
+The application successfully generates validator-compliant GAEB reports and can synchronize them to the KINCHI cloud. Data isolation between the Manager's Master DB and the Inspector's Working DB is stabilized on Windows, and the management UI now supports full CRUD operations for inspection records.
 
 ---
 - **Validation & Compliance:** Successfully addressed XSD schema and GAEB business rule errors by implementing mandatory `BoQInfo` headers, currency tags, and `BoQCtgy` hierarchies.
 - **Data Transformation:** Overhauled data handoff in `JobSelectionPage` to provide a flattened list of `Door` objects and their associated `ErrorCatalog` details, resolving type-safety crashes.
 - **Position Logic:** Implemented standard GAEB numeration (3-digit `RNoPart` with increments of 10) to support downstream system integration.
+
+## Session Log: 2024-06-13 (Consolidation & Verification Phase)
+- **Database Join Logic:** Enhanced `getErrorsForInspectionDoorIds` with an `INNER JOIN` on `error_catalog`, resolving the issue where error codes and descriptions were missing from the export data.
+- **Streamlined GAEB Export:** Updated `GaebExportService` to omit technical door details (material, floor, room, manufacturer) from both XML and D83 outputs, focusing on clean, error-centric reports.
+- **Robust File Handling:** Fixed variable shadowing and cross-platform pathing in the `_saveFile` routine using `path.join`.
+- **End-to-End Integration Testing:** Created `gaeb_integration_test.dart` to verify the full workflow: generating test data via `TestDataGenerator`, retrieving it through `DatabaseService`, and exporting via `GaebExportService`.
+- **UI & Cloud Finalization:** Integrated `KinchiApiService` into the `JobSelectionPage` to enable authenticated uploads of generated GAEB files to the cloud.
+- **Data Mapping Fixes:** Resolved "MISSING_CODE" and empty description fallbacks by ensuring the correct data keys are populated during the export preparation phase.
+
+### Current System State:
+The application successfully generates validator-compliant GAEB reports and can synchronize them to the KINCHI cloud. Data isolation between the Manager's Master DB and the Inspector's Working DB is stabilized on Windows, and the management UI now supports full CRUD operations for inspection records.
 
 ---
 ```

@@ -338,9 +338,12 @@ class DatabaseService {
     if (ids.isEmpty) return [];
     final db = await getDb();
     final String idString = ids.join(',');
-    return await db.rawQuery(
-      'SELECT * FROM inspection_door_errors WHERE inspectionDoorId IN ($idString)'
-    );
+    return await db.rawQuery('''
+      SELECT ide.*, ec.code, ec.description 
+      FROM inspection_door_errors ide
+      INNER JOIN error_catalog ec ON ide.errorId = ec.errorId
+      WHERE ide.inspectionDoorId IN ($idString)
+    ''');
   }
 
   static Future<List<Door>> getAllDoors() async {
@@ -374,6 +377,18 @@ class DatabaseService {
       orderBy: 'code',
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  /// Fetches a single error catalog entry by its primary key.
+  static Future<ErrorCatalog?> getErrorCatalogItemById(int id) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'error_catalog',
+      where: 'errorId = ?',
+      whereArgs: [id],
+    );
+    if (maps.isEmpty) return null;
+    return ErrorCatalog.fromMap(maps.first);
   }
 
   // ─────────────────────────────────────────────────────────────

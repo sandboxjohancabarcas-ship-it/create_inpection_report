@@ -1,9 +1,8 @@
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/door.dart';
-import '../models/inspection_door_error.dart';
-import '../models/error_catalog.dart';
 
 class GaebExportService {
   final String customer;
@@ -16,13 +15,22 @@ class GaebExportService {
     required this.jobNumber,
   });
 
-  /// Generates the .x83 XML file with rich text formatting
+  /// Generates the .x83 XML file with hierarchical mapping (Door -> Errors)
+  /// High-level method to export and save XML
   Future<File> exportToXml(List<Map<String, dynamic>> exportData) async {
+    final String content = generateXmlString(exportData);
+    final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final String fileName = cleanJobNo.isEmpty ? "100.x83" : "$cleanJobNo.x83";
+    return _saveFile(content, fileName);
+  }
+
+  /// Generates the .x83 XML string content (Pure logic, easy to unit test)
+  String generateXmlString(List<Map<String, dynamic>> exportData) {
     final now = DateTime.now();
-    final dateStr = DateFormat('yyyy-MM-dd').format(now); 
+    final dateStr = DateFormat('yyyy-MM-dd').format(now);
     final timeStr = DateFormat('HH:mm:ss').format(now);
-    
-    // Sanitize job number: numbers only as requested
+
+    // Sanitize job number: numbers only
     final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
     final String validJobNo = cleanJobNo.isEmpty ? "100" : cleanJobNo;
 
@@ -53,19 +61,19 @@ class GaebExportService {
     buf.writeln('        <BoQBkdn>');
     buf.writeln('          <Type>BoQLevel</Type>');
     buf.writeln('          <LblBoQBkdn>Titel</LblBoQBkdn>');
-    buf.writeln('          <Length>2</Length>');
-    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('          <Length>4</Length>');
+    buf.writeln('          <Num>No</Num>');
     buf.writeln('        </BoQBkdn>');
     buf.writeln('        <BoQBkdn>');
     buf.writeln('          <Type>BoQLevel</Type>');
-    buf.writeln('          <LblBoQBkdn>Bereich</LblBoQBkdn>');
-    buf.writeln('          <Length>2</Length>');
-    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('          <LblBoQBkdn>Tür</LblBoQBkdn>');
+    buf.writeln('          <Length>20</Length>');
+    buf.writeln('          <Num>No</Num>');
     buf.writeln('        </BoQBkdn>');
     buf.writeln('        <BoQBkdn>');
     buf.writeln('          <Type>Item</Type>');
-    buf.writeln('          <Length>3</Length>');
-    buf.writeln('          <Num>Yes</Num>');
+    buf.writeln('          <Length>10</Length>');
+    buf.writeln('          <Num>No</Num>');
     buf.writeln('        </BoQBkdn>');
     buf.writeln('        <NoUPComps>4</NoUPComps>');
     buf.writeln('        <LblUPComp1 Type="Wages">Lohn</LblUPComp1>');
@@ -75,76 +83,80 @@ class GaebExportService {
     buf.writeln('        <LblTime>Stunden</LblTime>');
     buf.writeln('      </BoQInfo>');
     buf.writeln('      <BoQBody>');
-    buf.writeln('        <BoQCtgy ID="cat1" RNoPart="01">');
-    buf.writeln('          <LblTx><p><span>Wartungspositionen</span></p></LblTx>');
-    buf.writeln('          <BoQBody>');
-    buf.writeln('            <Itemlist>');
 
-    int itemIdx = 1;
+    int doorIdx = 1;
     for (var entry in exportData) {
-      // Defensive check to avoid the "Null is not a subtype of Door" error
       final dynamic doorRaw = entry['door'];
       if (doorRaw == null || doorRaw is! Door) continue;
       final Door door = doorRaw;
 
       final List<dynamic> errorsRaw = entry['errors'] ?? [];
 
-      final String posNo = (itemIdx * 10).toString().padLeft(3, '0');
-      buf.writeln('              <Item ID="door$itemIdx" RNoPart="$posNo">');
-      buf.writeln('          <Qty>1.000</Qty>');
-      buf.writeln('          <QU>Stck</QU>');
-      buf.writeln('          <Description>');
-      buf.writeln('            <CompleteText>');
-      buf.writeln('              <DetailTxt>');
-      buf.writeln('                <Text>');
-      buf.writeln('                  <p><span><span style="font-weight:bold;">Tür-Nr: ${door.doorNumber}</span> (${door.roomDesignation})</span></p>');
-      buf.writeln('                  <p><span>Material: ${door.material} | Hersteller: ${door.manufacturer}</span></p>');
-      buf.writeln('                  <p><span>Ort: Etage ${door.floor}, Raum ${door.roomNumber}</span></p>');
-      
-      if (errorsRaw.isNotEmpty) {
-        buf.writeln('                  <p><span><span style="text-decoration:underline;">Mängelbericht:</span></span></p>');
-        for (var err in errorsRaw) {
-          final String code = err['code'] ?? 'ERR';
-          final String desc = err['description'] ?? 'Mangel';
-          final String note = err['notes'] ?? '';
-          
-          buf.writeln('                  <p><span><span style="color:#FF0000;">[$code] - $desc</span></span></p>');
-          if (note.isNotEmpty) {
-            buf.writeln('                  <p><span><span style="font-style:italic;">Hinweis: $note</span></span></p>');
-          }
-        }
-      } else {
-        buf.writeln('                  <p><span>Status: Keine Mängel festgestellt.</span></p>');
+      // Requirement: Omit doors with no errors
+      if (errorsRaw.isEmpty) continue;
+
+      // Level 2: Door as Category
+      buf.writeln('        <BoQCtgy ID="${door.doorAlias}" RNoPart="${door.doorNumber}">');
+      buf.writeln('          <LblTx>');
+      buf.writeln('            <p><span><span style="font-weight:bold;">${door.doorNumber}</span></span></p>');
+      buf.writeln('          </LblTx>');
+      buf.writeln('          <BoQBody>');
+      buf.writeln('            <Itemlist>');
+
+      // Level 3: Individual Errors as Items
+      for (int i = 0; i < errorsRaw.length; i++) {
+        final err = errorsRaw[i];
+        final String code = err['code']?.toString() ?? '';
+        final String desc = err['description']?.toString() ?? '';
+
+        buf.writeln('              <Item ID="${door.doorAlias}_err$i" RNoPart="$code">');
+        buf.writeln('                <Qty>1.000</Qty>');
+        buf.writeln('                <QU>Stck</QU>');
+        buf.writeln('                <Description>');
+        buf.writeln('                  <CompleteText>');
+        buf.writeln('                    <DetailTxt>');
+        buf.writeln('                      <Text>');
+        // Applied the bold span styling to the Error Code and Name
+        buf.writeln('                        <p><span><span style="font-weight:bold;">$desc</span></span></p>');
+        buf.writeln('                      </Text>');
+        buf.writeln('                    </DetailTxt>');
+        buf.writeln('                    <OutlineText>');
+        buf.writeln('                      <OutlTxt><TextOutlTxt><p><span>$desc</span></p></TextOutlTxt></OutlTxt>');
+        buf.writeln('                    </OutlineText>');
+        buf.writeln('                  </CompleteText>');
+        buf.writeln('                </Description>');
+        buf.writeln('              </Item>');
       }
 
-      buf.writeln('                </Text>');
-      buf.writeln('              </DetailTxt>');
-      buf.writeln('              <OutlineText>');
-      buf.writeln('                <OutlTxt><TextOutlTxt><p><span>Tür ${door.doorNumber}</span></p></TextOutlTxt></OutlTxt>');
-      buf.writeln('              </OutlineText>');
-      buf.writeln('            </CompleteText>');
-      buf.writeln('          </Description>');
-      buf.writeln('              </Item>');
-      itemIdx++;
+      buf.writeln('            </Itemlist>');
+      buf.writeln('          </BoQBody>');
+      buf.writeln('        </BoQCtgy>');
+      doorIdx++;
     }
 
-    buf.writeln('            </Itemlist>');
-    buf.writeln('          </BoQBody>');
-    buf.writeln('        </BoQCtgy>');
     buf.writeln('      </BoQBody>');
     buf.writeln('    </BoQ>');
     buf.writeln('  </Award>');
     buf.writeln('</GAEB>');
-
-    return _saveFile(buf.toString(), '$validJobNo.x83');
+    return buf.toString();
   }
 
-  /// Generates the .d83 (GAEB 90) file with truncated lines
+  /// High-level method to export and save D83 (GAEB 90)
   Future<File> exportToD83(List<Map<String, dynamic>> exportData) async {
+    final String content = generateD83String(exportData);
+    final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final String fileName = cleanJobNo.isEmpty ? "100.d83" : "$cleanJobNo.d83";
+    return _saveFile(content, fileName);
+  }
+
+  String generateD83String(List<Map<String, dynamic>> exportData) {
     StringBuffer buf = StringBuffer();
     int lineCount = 1;
 
-    buf.writeln(_fmtD83('00', jobNumber, lineCount++));
+    final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    final String validJobNo = cleanJobNo.isEmpty ? "100" : cleanJobNo;
+
+    buf.writeln(_fmtD83('00', validJobNo, lineCount++));
     buf.writeln(_fmtD83('01', '$customer - $projectName', lineCount++));
 
     for (var entry in exportData) {
@@ -153,28 +165,20 @@ class GaebExportService {
       final Door door = doorRaw;
       
       final List<dynamic> errorsRaw = entry['errors'] ?? [];
+      
+      // Omit mangelfrei doors
+      if (errorsRaw.isEmpty) continue;
 
-      buf.writeln(_fmtD83('21', 'Tür ${door.doorNumber}', lineCount++));
-      buf.writeln(_fmtD83('25', 'Tür: ${door.doorNumber} / ${door.roomDesignation}', lineCount++));
+      buf.writeln(_fmtD83('21', door.doorNumber, lineCount++));
+      buf.writeln(_fmtD83('25', door.doorNumber, lineCount++));
 
       List<String> textLines = [
-        'Material: ${door.material}',
-        'Hersteller: ${door.manufacturer}',
-        'Ort: Etage ${door.floor} | Raum ${door.roomNumber}',
         '---------------------------------------',
       ];
 
-      if (errorsRaw.isNotEmpty) {
-        textLines.add('MAENGELBERICHT:');
-        for (var err in errorsRaw) {
-          final String code = err['code'] ?? 'ERR';
-          final String desc = err['description'] ?? '';
-          final String note = err['notes'] ?? '';
-          textLines.add('[$code] $desc');
-          if (note.isNotEmpty) textLines.add(' -> Hinweis: $note');
-        }
-      } else {
-        textLines.add('Status: Mangelfrei');
+      for (var err in errorsRaw) {
+        final String desc = err['description']?.toString() ?? '';
+        if (desc.isNotEmpty) textLines.add(desc);
       }
 
       for (var s in textLines) {
@@ -183,7 +187,7 @@ class GaebExportService {
     }
 
     buf.writeln(_fmtD83('99', 'END', lineCount++));
-    return _saveFile(buf.toString(), '$jobNumber.d83');
+    return buf.toString();
   }
 
   String _fmtD83(String type, String content, int count) {
@@ -199,8 +203,8 @@ class GaebExportService {
 
   Future<File> _saveFile(String content, String fileName) async {
     final directory = await getApplicationDocumentsDirectory();
-    final path = '${directory.path}/WartungsTool/Exports/$fileName';
-    final file = File(path);
+    final exportDirPath = p.join(directory.path, 'WartungsTool', 'Exports');
+    final file = File(p.join(exportDirPath, fileName));
     await file.create(recursive: true);
     return file.writeAsString(content);
   }

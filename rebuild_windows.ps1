@@ -4,8 +4,9 @@
 Write-Host "Starting Windows build sequence..." -ForegroundColor Cyan
 
 # 1. Kill Background Processes (Essential for Windows build to overwrite .exe)
-Write-Host "[1/4] Checking for running instances of WartungsTool..." -ForegroundColor Gray
+Write-Host "[1/4] Checking for running instances of WartungsTool and MSBuild..." -ForegroundColor Gray
 Get-Process "WartungsTool" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process "MSBuild" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 # 2. Deep Clean (Remove root build folder and ephemeral Windows artifacts)
 Write-Host "[2/4] Clearing build artifacts and CMake caches..." -ForegroundColor Gray

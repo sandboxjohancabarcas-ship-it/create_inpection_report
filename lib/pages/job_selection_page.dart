@@ -181,9 +181,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         final doorErrors = allErrors
             .where((e) => e['inspectionDoorId'] == junction['id'])
             .map((e) => {
-              'code': e['code'] ?? 'ERR',
-              'description': e['description'] ?? 'Mangel',
-              'notes': e['notes'] ?? '',
+              'code': e['code']?.toString() ?? 'MISSING_CODE', // Fallback for RNoPart
+              'description': e['description']?.toString() ?? 'Fehlerbeschreibung fehlt', // Fallback for description
             })
             .toList();
 

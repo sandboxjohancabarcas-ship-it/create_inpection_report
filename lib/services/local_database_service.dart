@@ -247,7 +247,11 @@ class LocalDatabaseService {
           await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
         }
         for (var error in errorList) {
-          await txn.insert('inspection_door_errors', error, conflictAlgorithm: ConflictAlgorithm.replace);
+          // Filter out columns that don't exist in the local inspection_door_errors table
+          final data = Map<String, dynamic>.from(error)
+            ..remove('code')
+            ..remove('description');
+          await txn.insert('inspection_door_errors', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         for (var door in doorList) {
