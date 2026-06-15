@@ -11,6 +11,7 @@ class ErrorConsolidationPage extends StatefulWidget {
 
 class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
   late Future<List<ErrorCatalog>> _pendingErrorsFuture;
+  List<String> _categories = [];
 
   @override
   void initState() {
@@ -23,6 +24,12 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
       // Logic: Fetch only items with 'Pending' status from the Main DB
       _pendingErrorsFuture = DatabaseService.getAllErrorCatalog(status: 'Pending');
     });
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final cats = await DatabaseService.getErrorCatalogCategories();
+    setState(() => _categories = cats);
   }
 
   Future<void> _processApproval(ErrorCatalog error, bool approved) async {
@@ -157,10 +164,10 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: DoorErrorCatalog.getCategories().contains(catController.text) 
+                initialValue: _categories.contains(catController.text) 
                     ? catController.text 
                     : 'Sonstiges',
-                items: DoorErrorCatalog.getCategories().map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                items: (_categories.contains('Sonstiges') ? _categories : [..._categories, 'Sonstiges']).map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                 onChanged: (v) => catController.text = v ?? 'Sonstiges',
                 decoration: const InputDecoration(labelText: 'Kategorie', border: OutlineInputBorder()),
               ),

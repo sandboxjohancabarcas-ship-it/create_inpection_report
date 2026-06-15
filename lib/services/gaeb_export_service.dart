@@ -34,6 +34,8 @@ class GaebExportService {
     final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
     final String validJobNo = cleanJobNo.isEmpty ? "100" : cleanJobNo;
 
+    final String sanitizedProjectId = _sanitizeXmlId('$customer-$projectName');
+
     StringBuffer buf = StringBuffer();
     buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
     buf.writeln('<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA83/3.2">');
@@ -67,7 +69,7 @@ class GaebExportService {
     buf.writeln('        <BoQBkdn>');
     buf.writeln('          <Type>BoQLevel</Type>');
     buf.writeln('          <LblBoQBkdn>Tür</LblBoQBkdn>');
-    buf.writeln('          <Length>20</Length>');
+        buf.writeln('          <Length>10</Length>');
     buf.writeln('          <Num>No</Num>');
     buf.writeln('        </BoQBkdn>');
     buf.writeln('        <BoQBkdn>');
@@ -96,9 +98,11 @@ class GaebExportService {
       if (errorsRaw.isEmpty) continue;
 
       // Level 2: Door as Category
-      buf.writeln('        <BoQCtgy ID="${door.doorAlias}" RNoPart="${door.doorNumber}">');
+      final sanitizedId = _sanitizeXmlId(door.doorAlias ?? '');
+      final sanitizedRNo = _sanitizeRNoPart(door.doorNumber ?? '');
+      buf.writeln('        <BoQCtgy ID="$sanitizedId" RNoPart="$sanitizedRNo">');
       buf.writeln('          <LblTx>');
-      buf.writeln('            <p><span><span style="font-weight:bold;">${door.doorNumber}</span></span></p>');
+      buf.writeln('            <p><span style="font-weight:bold;">Tür: ${door.doorNumber ?? ''}</span></p>');
       buf.writeln('          </LblTx>');
       buf.writeln('          <BoQBody>');
       buf.writeln('            <Itemlist>');
@@ -107,17 +111,18 @@ class GaebExportService {
       for (int i = 0; i < errorsRaw.length; i++) {
         final err = errorsRaw[i];
         final String code = err['code']?.toString() ?? '';
+        final String sanitizedCode = _sanitizeRNoPart(code);
         final String desc = err['description']?.toString() ?? '';
+        final String qty = err['quantity']?.toString() ?? '1.000';
 
-        buf.writeln('              <Item ID="${door.doorAlias}_err$i" RNoPart="$code">');
-        buf.writeln('                <Qty>1.000</Qty>');
+        buf.writeln('              <Item ID="${sanitizedProjectId}_$sanitizedCode" RNoPart="$sanitizedCode">');
+        buf.writeln('                <Qty>$qty</Qty>');
         buf.writeln('                <QU>Stck</QU>');
         buf.writeln('                <Description>');
         buf.writeln('                  <CompleteText>');
         buf.writeln('                    <DetailTxt>');
         buf.writeln('                      <Text>');
-        // Applied the bold span styling to the Error Code and Name
-        buf.writeln('                        <p><span><span style="font-weight:bold;">$desc</span></span></p>');
+        buf.writeln('                        <p><span style="font-weight:bold;">$desc</span></p>');
         buf.writeln('                      </Text>');
         buf.writeln('                    </DetailTxt>');
         buf.writeln('                    <OutlineText>');
@@ -207,5 +212,16 @@ class GaebExportService {
     final file = File(p.join(exportDirPath, fileName));
     await file.create(recursive: true);
     return file.writeAsString(content);
+  }
+
+  // Helper to sanitize strings for XML ID attributes (must be NCName compliant)
+  String _sanitizeXmlId(String input) {
+    // Replace invalid characters with underscore, ensure it starts with a letter or underscore
+    return input.replaceAll(RegExp(r'[^a-zA-Z0-9_\-.]'), '_');
+  }
+
+  // Helper to sanitize strings for RNoPart (typically alphanumeric or numeric only)
+  String _sanitizeRNoPart(String input) {
+    return input.replaceAll(RegExp(r'[^0-9]'), ''); // Only numbers
   }
 }

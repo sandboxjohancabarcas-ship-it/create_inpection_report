@@ -83,6 +83,8 @@ class TestDataGenerator {
           print('  Generating Job: $jobNum (Historical Date: $date)');
 
           // 3. Link the same physical doors to this specific job run
+          final allCatalog = await DatabaseService.getAllErrorCatalog(status: 'Approved');
+          
           for (int doorId in physicalDoorIds) {
             // Simulate different outcomes over time
             final bool isDefective = _random.nextDouble() > 0.6; 
@@ -97,14 +99,15 @@ class TestDataGenerator {
             });
 
             // 4. Add specific errors for defective doors
-            if (isDefective) {
+            if (isDefective && allCatalog.isNotEmpty) {
               // Link to seeded Error Catalog items (assuming IDs 1-10 exist from seed)
               int errorsToGenerate = _random.nextInt(2) + 1;
               for (int e = 0; e < errorsToGenerate; e++) {
+                final randomError = allCatalog[_random.nextInt(allCatalog.length)];
                 await DatabaseService.insertInspectionDoorError(InspectionDoorError(
                   id: null,
                   inspectionDoorId: junctionId,
-                  errorId: _random.nextInt(10) + 1, 
+                  errorId: randomError.errorId!, 
                   quantity: 1,
                   severity: 'medium',
                   notes: "Standard-Verschleißprüfung",

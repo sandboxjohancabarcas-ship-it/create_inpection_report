@@ -111,6 +111,20 @@ The application successfully generates validator-compliant GAEB reports and can 
 - **UI & Cloud Finalization:** Integrated `KinchiApiService` into the `JobSelectionPage` to enable authenticated uploads of generated GAEB files to the cloud.
 - **Data Mapping Fixes:** Resolved "MISSING_CODE" and empty description fallbacks by ensuring the correct data keys are populated during the export preparation phase.
 
+## Session Log: 2024-06-14 (Identifier Alignment & Sync Robustness)
+- **GAEB Identifier Alignment:** Synchronized `BoQCtgy ID` and `Item ID` in `.x83` exports to use the `doorAlias` (the "Patient ID") instead of internal database IDs, ensuring consistent tracking across external GAEB readers.
+- **Clean Output Formatting:** Removed "Tür-Nr:" prefixes and placeholder text from GAEB exports (XML and D83), resulting in a cleaner report that displays only the essential door numbers and error descriptions.
+- **Sync Robustness:** Resolved a critical SQL error ("table inspection_door_errors has no column named code") by adding data filtering in `LocalDatabaseService.downloadJobPackage`. Catalog metadata is now stripped before local insertion, preventing schema mismatches.
+- **Build Tooling Improvements:** Updated `rebuild_windows.ps1` to terminate hanging `MSBuild` processes, effectively resolving the `MSB3374` file locking errors that interrupted Windows builds.
+- **Test Suite Alignment:** Updated `gaeb_integration_test.dart` to verify alias-based identifiers and corrected loop logic for error item assertions.
+
+## Session Log: 2024-06-15 (Error Catalog Refactoring & CSV Strategy)
+- **Hardcoded Data Removal:** Completely removed the static `DoorErrorCatalog` from `error_catalog.dart` to separate data from code and reduce binary size.
+- **CSV-Based Initialization:** Implemented `DatabaseService.checkAndInitializeCatalog()` which follows a waterfall logic: DB Check -> CSV File Check (`error_catalog.csv`) -> User Warning. This establishes an external "Source of Truth" for the Master DB.
+- **Database De-seeding:** Removed automatic seeding logic from `DatabaseService` and `LocalDatabaseService` to ensure the system strictly follows the external CSV/Import strategy and prevents stale data.
+- **Dynamic Test Generation:** Updated `TestDataGenerator` to dynamically fetch available `error_catalog` entries from the database instead of using hardcoded IDs, preventing SQL constraint violations.
+- **Migration Planning:** Initiated Phase 1 of the migration module, preparing the structure for Excel-based door and historical error importing.
+
 ### Current System State:
 The application successfully generates validator-compliant GAEB reports and can synchronize them to the KINCHI cloud. Data isolation between the Manager's Master DB and the Inspector's Working DB is stabilized on Windows, and the management UI now supports full CRUD operations for inspection records.
 

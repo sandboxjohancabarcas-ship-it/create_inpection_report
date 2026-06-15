@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:wartungstool/models/models.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -119,8 +120,6 @@ class DatabaseService {
         ''');
 
         // ErrorRequests table removed - functionality moved to error_catalog
-        // Seed the error catalog on first create
-        await _seedErrorCatalog(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         // Reordered to chronological sequence for data integrity
@@ -135,8 +134,6 @@ class DatabaseService {
             await db.execute("ALTER TABLE error_catalog ADD COLUMN sourceInspectionDoorId INTEGER");
           } catch (e) { print('Catalog migration warning: $e'); }
           
-          await db.delete('error_catalog');
-          await _seedErrorCatalog(db);
         }
 
         if (oldVersion < 8) {
@@ -183,9 +180,6 @@ class DatabaseService {
         }
       },
     );
-
-    // Ensure the catalog is seeded if it's empty (handles existing empty databases)
-    await _seedErrorCatalog(_db!);
 
     return _db!;
   }
@@ -699,6 +693,15 @@ class DatabaseService {
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 
+  /// Fetches unique categories currently present in the error catalog.
+  static Future<List<String>> getErrorCatalogCategories() async {
+    final db = await getDb();
+    final maps = await db.rawQuery(
+      'SELECT DISTINCT category FROM error_catalog ORDER BY category ASC',
+    );
+    return maps.map((m) => m['category'] as String).toList();
+  }
+
   static Future<void> deleteErrorCatalog(int errorId) async {
     final db = await getDb();
     await db.delete(
@@ -711,45 +714,53 @@ class DatabaseService {
   // SEED DATA
   // ─────────────────────────────────────────────────────────────
 
-  static Future<void> _seedErrorCatalog(Database db) async {
-    print('Seeding error catalog...');
-    final standardErrors = DoorErrorCatalog.getStandardErrors();
-    print('Found ${standardErrors.length} errors to seed');
-    
-    // Check if catalog already has data
-    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
-    final count = Sqflite.firstIntValue(existingCount) ?? 0;
-    print('Existing error catalog entries: $count');
-    
-    if (count > 0) {
-      print('Error catalog already seeded, skipping...');
-      return;
-    }
-    
-    await db.transaction((txn) async {
-      await _batchInsertCatalog(txn, standardErrors, ConflictAlgorithm.ignore);
-    });
-    print('Error catalog seeding completed');
-  }
-
-  static Future<void> _batchInsertCatalog(DatabaseExecutor db, List<ErrorCatalog> items, ConflictAlgorithm algorithm) async {
-    final batch = db.batch();
-    for (final item in items) {
-      batch.insert('error_catalog', item.toMap(), conflictAlgorithm: algorithm);
-    }
-    await batch.commit(noResult: true);
-  }
-
-  // Manual seeding method for testing
-  static Future<void> seedErrorCatalogManually() async {
+  /// Startup module to check and initialize the Error Catalog.
+  static Future<void> checkAndInitializeCatalog() async {
     final db = await getDb();
     
-    // Clear existing catalog
-    await db.delete('error_catalog');
-    print('Cleared existing error catalog');
+    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
+    final count = Sqflite.firstIntValue(existingCount) ?? 0;
     
-    // Seed with new data
-    await _seedErrorCatalog(db);
-    print('Manual seeding completed');
+    if (count > 0) {
+      print('[Catalog] Database has $count entries. Initialization skipped.');
+      return;
+    }
+
+    final dbPath = await getDatabasesPath();
+    final csvFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.csv'));
+
+    if (await csvFile.exists()) {
+      print('[Catalog] Found CSV at ${csvFile.path}. Importing...');
+      try {
+        final content = await csvFile.readAsString();
+        final List<ErrorCatalog> errors = _parseCsv(content);
+        await mergeErrorCatalog(errors);
+        print('[Catalog] Import successful. ${errors.length} items added.');
+      } catch (e) {
+        print('[Catalog] CSV Parse Error: $e');
+      }
+    } else {
+      print('[Warning] App starting without Error Catalog. No CSV found at ${csvFile.path}');
+    }
+  }
+
+  /// Simple CSV parser for Error Catalog items
+  static List<ErrorCatalog> _parseCsv(String csv) {
+    final List<ErrorCatalog> results = [];
+    final lines = csv.split('\n');
+    for (var line in lines) {
+      final parts = line.split(',').map((p) => p.trim()).toList();
+      if (parts.length >= 2 && parts[0].isNotEmpty) {
+        results.add(ErrorCatalog(
+          code: parts[0],
+          description: parts[1],
+          category: parts.length > 2 ? parts[2] : 'Allgemein',
+          severity: parts.length > 3 ? parts[3] : 'medium',
+          recommendation: parts.length > 4 ? parts[4] : '',
+          normReference: parts.length > 5 ? parts[5] : '',
+        ));
+      }
+    }
+    return results;
   }
 }

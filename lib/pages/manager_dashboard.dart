@@ -15,6 +15,7 @@ class ManagerDashboard extends StatefulWidget {
 class _ManagerDashboardState extends State<ManagerDashboard> {
   List<ErrorCatalog> errors = [];
   List<ErrorCatalog> filteredErrors = [];
+  List<String> categories = ['Alle'];
   String selectedCategory = 'Alle';
   int pendingCount = 0;
   bool isLoading = true;
@@ -33,10 +34,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       final approved = await DatabaseService.getAllErrorCatalog(status: 'Approved');
       // Check for Pending items to show in the workflow badge
       final pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      final dbCategories = await DatabaseService.getErrorCatalogCategories();
       
       setState(() {
         errors = approved;
         filteredErrors = approved;
+        categories = ['Alle', ...dbCategories];
         pendingCount = pending.length;
         isLoading = false;
       });
@@ -242,7 +245,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           IconButton(
             icon: Icon(Icons.storage),
             onPressed: () async {
-              await DatabaseService.seedErrorCatalogManually();
+              await DatabaseService.checkAndInitializeCatalog();
               _loadErrors();
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Fehlerkatalog wurde neu geladen')),
@@ -276,7 +279,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: ['Alle', ...DoorErrorCatalog.getCategories()]
+                          children: categories
                               .map((category) => Padding(
                                     padding: EdgeInsets.only(right: 8),
                                     child: FilterChip(

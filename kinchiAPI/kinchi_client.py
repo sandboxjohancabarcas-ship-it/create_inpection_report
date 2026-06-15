@@ -175,8 +175,8 @@ class KinchiAPIClient:
 
 if __name__ == "__main__":
     # --- CONFIGURATION ---
-    USER = "cabarcas@gottsberg.de"
-    PWD = "KINCHI_HiLdE21042017!"
+    USER = "konzschaefer"
+    PWD = "rihute94!"
 
     client = KinchiAPIClient()
 

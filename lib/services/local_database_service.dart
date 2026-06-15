@@ -131,8 +131,6 @@ class LocalDatabaseService {
           );
         ''');
 
-        // Seed the error catalog on first create
-        await _seedErrorCatalog(db);
 
         // Add indices for optimized searching
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
@@ -196,9 +194,6 @@ class LocalDatabaseService {
       },
     );
 
-    // Ensure the catalog is seeded if it's empty
-    await _seedErrorCatalog(_db!);
-
     return _db!;
   }
 
@@ -228,8 +223,8 @@ class LocalDatabaseService {
           .where((i) => inspectionIds.contains(i['inspectionId']))
           .toList();
 
-      // 2. Clear current Working DB to ensure isolation
-      await clearSyncedData();
+      // Fetch the full approved catalog to include in the package
+      final masterCatalog = await DatabaseService.getAllErrorCatalog(status: 'Approved');
 
       final db = await getDb();
       await db.transaction((txn) async {
@@ -257,6 +252,9 @@ class LocalDatabaseService {
         for (var door in doorList) {
           await txn.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
         }
+
+        // Populate the local catalog for offline availability
+        await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
       });
     } catch (e) {
       print('Critical error during package download: $e');
@@ -313,6 +311,32 @@ class LocalDatabaseService {
     print('Local working.db cleared.');
   }
 
+  /// Purges only the data associated with specific inspections (e.g., after a successful export).
+  static Future<void> purgeExportedData(List<int> inspectionIds) async {
+    if (inspectionIds.isEmpty) return;
+    final db = await getDb();
+    final idStr = inspectionIds.join(',');
+    
+    print('Purging exported data for inspections: $idStr');
+    
+    await db.transaction((txn) async {
+      // 1. Delete errors associated with the junctions of these inspections
+      await txn.execute('''
+        DELETE FROM inspection_door_errors 
+        WHERE inspectionDoorId IN (SELECT id FROM inspection_doors WHERE inspectionId IN ($idStr))
+      ''');
+      
+      // 2. Delete the junctions
+      await txn.delete('inspection_doors', where: 'inspectionId IN ($idStr)');
+      
+      // 3. Delete the inspection records
+      await txn.delete('inspections', where: 'inspectionId IN ($idStr)');
+      
+      // 4. Delete doors that are no longer linked to ANY remaining inspection
+      await txn.execute('DELETE FROM doors WHERE id NOT IN (SELECT DISTINCT doorId FROM inspection_doors)');
+    });
+  }
+
   // ─────────────────────────────────────────────────────────────
   // DOORS
   // ─────────────────────────────────────────────────────────────
@@ -324,6 +348,43 @@ class LocalDatabaseService {
       door.toMap(), 
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Creates a new door record found by an inspector in the field.
+  /// Uses a manual door number and generates a TEMP- alias for tracking.
+  static Future<int> createNewDoorInField(String doorNumber) async {
+    final door = Door(
+      id: null, // Pass null for auto-incrementing ID
+      pos: 0, // Default position for new field entries
+      doorNumber: doorNumber, // Inspector manually enters this
+      doorAlias: 'TEMP-${DateTime.now().millisecondsSinceEpoch}-$doorNumber',
+      floor: '',
+      roomNumber: '',
+      roomDesignation: '',
+      doorType: '',
+      wingCount: 1,
+      material: '',
+      manufacturer: '',
+      dinConfiguration: 'DIN L',
+      closerType: 'TS93',
+      closingSequenceSystem: '', // Added this parameter
+      lockDimensions: '',
+      closerOnHingeSide: false,
+      closerOnOppositeSide: false,
+      lintelHeightUnder1m: false,
+      escapeDoorControl: false,
+      accessControl: '',
+      escapeRouteSituation: false,
+      escapeRouteSignage: false,
+      blindCylinder: false,
+      pzCylinder: false,
+      fittingType: '',
+      panicFunction: '',
+      escapeDirectionRespected: true,
+      fullPanicStandWing: false,
+      doorFunctionOK: true,
+    );
+    return await insertDoor(door);
   }
 
   static Future<List<Door>> getAllDoors() async {
@@ -559,23 +620,6 @@ class LocalDatabaseService {
       batch.insert('error_catalog', data, conflictAlgorithm: algorithm);
     }
     await batch.commit(noResult: true);
-  }
-
-  // This helper method needs to be inside the class.
-  static Future<void> _seedErrorCatalog(Database db) async {
-    final standardErrors = DoorErrorCatalog.getStandardErrors();
-    
-    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
-    final count = Sqflite.firstIntValue(existingCount) ?? 0;
-    if (count > 0) return;
-    
-    await db.transaction((txn) async {
-      await _batchInsertCatalog(
-        txn,
-        standardErrors,
-        ConflictAlgorithm.ignore,
-      );
-    });
   }
 
   /// Closes the database connection to allow file-level operations.

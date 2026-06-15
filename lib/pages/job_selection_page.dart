@@ -48,8 +48,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     try {
       // Using hardcoded test credentials as requested
       final loggedIn = await _apiService.login(
-        "cabarcas@gottsberg.de", 
-        "KINCHI_HiLdE21042017!"
+        "konzschaefer  ", 
+        "rihute94"
       );
 
       if (!loggedIn) throw Exception("Login fehlgeschlagen");
