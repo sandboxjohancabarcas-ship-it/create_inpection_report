@@ -175,8 +175,9 @@ class KinchiAPIClient:
 
 if __name__ == "__main__":
     # --- CONFIGURATION ---
-    USER = "konzschaefer"
-    PWD = "rihute94!"
+    USER = "s.bluemel@konzschaefer.de"
+    PWD = "Konz2006"
+    TARGET_DIR_ID = 542
 
     client = KinchiAPIClient()
 
@@ -191,12 +192,13 @@ if __name__ == "__main__":
             f.write("Hello KINCHI API! This is a test document upload.")
 
         dirs = client.get_directories()
-        if dirs:
-            target_dir = dirs[0]
+        target_dir = next((d for d in dirs if d.get('id') == TARGET_DIR_ID), None)
+
+        if target_dir:
             print(f"🚀 Operation: Create Document")
-            print(f"Uploading '{test_file}' to folder '{target_dir.get('name')}'...")
+            print(f"Uploading '{test_file}' to folder ID {TARGET_DIR_ID} ('{target_dir.get('name')}')")
             
-            doc_id = client.upload_and_create_document(test_file, target_dir['id'])
+            doc_id = client.upload_and_create_document(test_file, TARGET_DIR_ID)
             print(f"✅ Created Document Record ID: {doc_id}\n")
 
             # 2. OPERATION: VERIFY (Download Content)
@@ -228,7 +230,7 @@ if __name__ == "__main__":
                 print(f"🚫 Document ID {doc_id} and its associated files were NOT deleted.")
 
         else:
-            print("⚠️ No directories found. Document record skipped (but file remains in Media Library).")
+            print(f"⚠️ Directory ID {TARGET_DIR_ID} not found. Document record skipped.")
 
         # Cleanup
         os.remove(test_file)

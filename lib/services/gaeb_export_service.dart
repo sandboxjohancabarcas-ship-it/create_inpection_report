@@ -18,9 +18,11 @@ class GaebExportService {
   /// Generates the .x83 XML file with hierarchical mapping (Door -> Errors)
   /// High-level method to export and save XML
   Future<File> exportToXml(List<Map<String, dynamic>> exportData) async {
+    final now = DateTime.now();
     final String content = generateXmlString(exportData);
-    final String cleanJobNo = jobNumber.replaceAll(RegExp(r'[^0-9]'), '');
-    final String fileName = cleanJobNo.isEmpty ? "100.x83" : "$cleanJobNo.x83";
+    final String sanitizedCustomer = _sanitizeXmlId(customer);
+    final String dateTimeString = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final String fileName = "${sanitizedCustomer}_Wartung_$dateTimeString.x83";
     return _saveFile(content, fileName);
   }
 

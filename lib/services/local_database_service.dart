@@ -428,8 +428,24 @@ class LocalDatabaseService {
   }
 
   static Future<void> deleteDoor(int id) async {
+    await deleteDoors([id]);
+  }
+
+  static Future<void> deleteDoors(List<int> ids) async {
+    if (ids.isEmpty) return;
     final db = await getDb();
-    await db.delete('doors', where: 'id = ?', whereArgs: [id]);
+    final idList = ids.join(',');
+    await db.transaction((txn) async {
+      // 1. Delete errors associated with junctions of these doors
+      await txn.execute('''
+        DELETE FROM inspection_door_errors 
+        WHERE inspectionDoorId IN (SELECT id FROM inspection_doors WHERE doorId IN ($idList))
+      ''');
+      // 2. Delete the junctions linked to these doors
+      await txn.delete('inspection_doors', where: 'doorId IN ($idList)');
+      // 3. Delete the door records themselves
+      await txn.delete('doors', where: 'id IN ($idList)');
+    });
   }
 
   // ─────────────────────────────────────────────────────────────

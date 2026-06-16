@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import '../services/local_database_service.dart';
-import '../models/models.dart';
+import '../models/models.dart' hide JobSelectionPage;
 import 'new_door_page.dart';
 import 'job_selection_page.dart';
 
@@ -34,9 +34,53 @@ class _DoorListPageState extends State<DoorListPage> {
     setState(() => doors = results);
   }
 
-  Future<void> deleteDoor(int id) async {
-    await LocalDatabaseService.deleteDoor(id);
-    await loadDoors();
+  /// Confirms deletion with the user, consistent with JobSelectionPage logic.
+  Future<bool> _confirmDeletion(int count) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Löschen bestätigen'),
+        content: Text('$count Tür(en) und zugehörige Prüfungsdaten unwiderruflich löschen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  /// Handles both single and bulk deletion of doors.
+  Future<void> _handleDeleteDoors(List<int> ids) async {
+    if (ids.isEmpty) return;
+
+    final confirmed = await _confirmDeletion(ids.length);
+    if (!confirmed) return;
+
+    try {
+      setState(() => _isSyncing = true);
+      await LocalDatabaseService.deleteDoors(ids);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ausgewählte Türen gelöscht.')),
+        );
+        setState(() {
+          _selectedDoorIds.clear();
+        });
+        await loadDoors();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   /// Opens a file picker to select a .db file and imports it into the Working DB.
@@ -189,11 +233,6 @@ class _DoorListPageState extends State<DoorListPage> {
                   tooltip: 'Alle auswählen',
                   onPressed: _selectAll,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.upload_file),
-                  tooltip: 'Selektiver Export',
-                  onPressed: _handleSelectiveExport,
-                ),
               ]
             : [
                 IconButton(
@@ -249,7 +288,8 @@ class _DoorListPageState extends State<DoorListPage> {
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
                   direction: DismissDirection.startToEnd,
-                  onDismissed: (_) => deleteDoor(d.id!),
+                  confirmDismiss: (_) => _confirmDeletion(1),
+                  onDismissed: (_) => LocalDatabaseService.deleteDoor(d.id!).then((_) => loadDoors()),
                   child: Card(
                     color: isSelected ? Colors.blue.shade50 : null,
                     margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -303,6 +343,26 @@ class _DoorListPageState extends State<DoorListPage> {
             ),
         ],
       ),
+      bottomNavigationBar: !isSelectionMode
+          ? null
+          : BottomAppBar(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    onPressed: () => _handleDeleteDoors(_selectedDoorIds.toList()),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Auswahl löschen',
+                  ),
+                  const VerticalDivider(),
+                  TextButton.icon(
+                    onPressed: _handleSelectiveExport,
+                    icon: const Icon(Icons.upload_file),
+                    label: const Text('Exportieren'),
+                  ),
+                ],
+              ),
+            ),
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () async {

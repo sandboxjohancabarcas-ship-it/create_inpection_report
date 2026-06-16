@@ -1,5 +1,6 @@
 # WartungsTool - Windows Build Script
 # Focused exclusively on the Windows Manager Terminal build.
+Set-Location $PSScriptRoot
 
 Write-Host "Starting Windows build sequence..." -ForegroundColor Cyan
 
