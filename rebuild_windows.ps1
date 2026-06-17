@@ -19,8 +19,8 @@ if (!(Test-Path "error_catalog.csv")) {
 }
 
 # 4. Run Application
-Write-Host "[3/4] Launching Windows application..." -ForegroundColor Cyan
-flutter run -d windows
+Write-Host "[3/4] Launching Windows application in Release Mode..." -ForegroundColor Cyan
+flutter run --release -d windows
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed. If you see path errors, verify that lib/pages/inspection_summary_card.dart exists." -ForegroundColor Red

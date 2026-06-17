@@ -13,6 +13,7 @@ import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import 'inspection_doors_page.dart';
 import 'DoorListPage.dart'; // Import DoorListPage for navigation
+import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
@@ -498,14 +499,14 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Auftrag auswählen (Projektleiter)'),
+        title: const Text('Manager / Projektleiter'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.build), // Icon for Service Techniker
-            tooltip: 'Service Techniker Ansicht',
-            onPressed: () => Navigator.pushReplacement(
+            icon: const Icon(Icons.list_alt),
+            tooltip: 'Fehlerkatalog verwalten',
+            onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const DoorListPage()),
+              MaterialPageRoute(builder: (context) => const ManagerDashboard()),
             ),
           ),
           IconButton(
@@ -531,6 +532,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               controller: _searchController,
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
               decoration: InputDecoration(
                 labelText: 'Aufträge durchsuchen',
                 hintText: 'Kunde, Projekt oder Datum...',

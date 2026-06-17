@@ -158,7 +158,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                           ? Checkbox(value: isSelected, onChanged: (_) => _toggleSelection(door.id!))
                           : const Icon(Icons.door_front_door, color: Colors.blue),
                         title: Text('Tür ${door.doorNumber}'),
-                        subtitle: Text('${door.floor} | ${door.roomDesignation}'),
+                        subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
                         trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
                         onTap: () async {
                           if (isSelectionMode) {
@@ -166,7 +166,12 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                           } else {
                             await Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (_) => DoorInspectionForm(door: door)),
+                              MaterialPageRoute(
+                                builder: (_) => DoorInspectionForm(
+                                  door: door,
+                                  isManagerMode: widget.isManagerMode,
+                                ),
+                              ),
                             );
                             _loadDoors();
                           }
@@ -203,7 +208,11 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               onPressed: () async {
                 await Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const DoorInspectionForm()),
+                  MaterialPageRoute(
+                    builder: (_) => DoorInspectionForm(
+                      isManagerMode: widget.isManagerMode,
+                    ),
+                  ),
                 );
                 _loadDoors();
               },

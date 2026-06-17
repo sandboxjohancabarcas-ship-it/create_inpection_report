@@ -30,12 +30,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         },
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.admin_panel_settings),
-            label: 'Projektleiter',
+            icon: Icon(Icons.manage_accounts),
+            label: 'Manager',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.build),
-            label: 'Techniker',
+            icon: Icon(Icons.door_front_door),
+            label: 'Türen',
           ),
         ],
       ),

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/local_database_service.dart';
+import '../services/database_service.dart';
 import '../models/models.dart';
 import 'error_management_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
+  final bool isManagerMode;
  
-  const DoorInspectionForm({super.key, this.door});
+  const DoorInspectionForm({super.key, this.door, this.isManagerMode = false});
 
   @override
   _DoorInspectionFormState createState() => _DoorInspectionFormState();
@@ -114,7 +116,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   }
 
   Future<void> _loadInspectionData() async {
-    final db = await LocalDatabaseService.getDb();
+    // Select correct database based on role
+    final db = widget.isManagerMode 
+        ? await DatabaseService.getDb() 
+        : await LocalDatabaseService.getDb();
+        
     // Join inspections with inspection_doors to find the metadata for this specific door
     final List<Map<String, dynamic>> results = await db.rawQuery('''
       SELECT i.* 
@@ -192,21 +198,38 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       inspectionData['inspectionId'] = currentInspectionId;
     }
 
-    final id = await LocalDatabaseService.insertInspection(inspectionData);
-    setState(() => currentInspectionId = id);
+    if (widget.isManagerMode) {
+      final id = await DatabaseService.insertInspection(inspectionData);
+      setState(() => currentInspectionId = id);
 
-    if (widget.door == null) {
-      final insertedDoorId = await LocalDatabaseService.insertDoor(door);
-      // Link the newly created door to the inspection
-      await LocalDatabaseService.insertInspectionDoor({
-        'inspectionId': currentInspectionId,
-        'doorId': insertedDoorId,
-        'status': 'InProgress', // Default status for a new inspection door
-        'notes': '',
-        'attachments': null,
-      });
+      if (widget.door == null) {
+        final insertedDoorId = await DatabaseService.insertDoor(door);
+        await DatabaseService.insertInspectionDoor({
+          'inspectionId': currentInspectionId,
+          'doorId': insertedDoorId,
+          'status': 'InProgress',
+          'notes': '',
+          'attachments': null,
+        });
+      } else {
+        await DatabaseService.updateDoor(door);
+      }
     } else {
-      await LocalDatabaseService.updateDoor(door);
+      final id = await LocalDatabaseService.insertInspection(inspectionData);
+      setState(() => currentInspectionId = id);
+
+      if (widget.door == null) {
+        final insertedDoorId = await LocalDatabaseService.insertDoor(door);
+        await LocalDatabaseService.insertInspectionDoor({
+          'inspectionId': currentInspectionId,
+          'doorId': insertedDoorId,
+          'status': 'InProgress',
+          'notes': '',
+          'attachments': null,
+        });
+      } else {
+        await LocalDatabaseService.updateDoor(door);
+      }
     }
 
     if (mounted) Navigator.pop(context);
@@ -221,6 +244,13 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.door?.doorAlias != null) ...[
+              const Text("Tür-Identität (Alias)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              SelectableText(widget.door!.doorAlias!, style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500)),
+              const Divider(height: 32),
+            ],
+
             // Inspection Metadata Section
             const Text("Inspektionsdaten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),

@@ -221,12 +221,12 @@ class _DoorListPageState extends State<DoorListPage> {
                 ? TextField(
                     controller: _searchController,
                     autofocus: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Suchen (Tür, Code, Fehler)...',
                       border: InputBorder.none,
-                      hintStyle: TextStyle(color: Colors.white70),
+                      hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
                     ),
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                     onChanged: (value) => loadInspections(),
                   )
                 : const Text("Prüfpakete (Techniker)"),
@@ -247,14 +247,6 @@ class _DoorListPageState extends State<DoorListPage> {
                 ),
               ]
             : [
-                IconButton(
-                  icon: const Icon(Icons.admin_panel_settings),
-                  tooltip: 'Projektleiter',
-                  onPressed: () => Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => const JobSelectionPage()),
-                  ),
-                ),
                 IconButton(
                   icon: Icon(_isSearching ? Icons.close : Icons.search),
                   onPressed: () {
@@ -377,7 +369,9 @@ class _DoorListPageState extends State<DoorListPage> {
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const DoorInspectionForm(),
+              builder: (_) => const DoorInspectionForm(
+                isManagerMode: false,
+              ),
             ),
           );
           loadInspections();

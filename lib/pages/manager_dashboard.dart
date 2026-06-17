@@ -356,6 +356,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       // Search bar
                       TextField(
                         controller: searchController,
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Suchen',
                           prefixIcon: Icon(Icons.search),
