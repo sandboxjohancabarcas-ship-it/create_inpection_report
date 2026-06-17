@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:wartungstool/models/models.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 /// Master Database Service (Manager Role)
 /// This is a stub to allow the project to compile for Windows.
@@ -728,7 +729,6 @@ class DatabaseService {
 
     final dbPath = await getDatabasesPath();
     final csvFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.csv'));
-    print('[Catalog] Database initialized. Looking for external CSV at: ${csvFile.path}');
 
     if (await csvFile.exists()) {
       print('[Catalog] Found CSV at ${csvFile.path}. Importing...');
@@ -741,7 +741,15 @@ class DatabaseService {
         print('[Catalog] CSV Parse Error: $e');
       }
     } else {
-      print('[Warning] App starting without Error Catalog. No CSV found at ${csvFile.path}');
+      print('[Catalog] No external CSV found. Loading from internal assets...');
+      try {
+        final content = await rootBundle.loadString('error_catalog.csv');
+        final List<ErrorCatalog> errors = _parseCsv(content);
+        await mergeErrorCatalog(errors);
+        print('[Catalog] Internal Seed successful.');
+      } catch (e) {
+        print('[Catalog] Asset Load Error: $e');
+      }
     }
   }
 
