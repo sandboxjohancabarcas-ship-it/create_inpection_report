@@ -21,6 +21,8 @@ class KinchiApiService {
         },
       ).timeout(const Duration(seconds: 30));
 
+      print('[API] Auth Login Status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _token = data['access_token'];
@@ -75,6 +77,8 @@ class KinchiApiService {
         headers: {'Authorization': 'Bearer $_token'},
       ).timeout(const Duration(seconds: 30));
 
+      print('[API] Get Directories Status: ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final decodedBody = jsonDecode(response.body);
         final dynamic flattened = _flatten(decodedBody);
@@ -125,6 +129,8 @@ class KinchiApiService {
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 
+    print('[API] Media Upload Status: ${response.statusCode}');
+
     if (response.statusCode != 200) {
       throw Exception("Upload failed: ${response.body}");
     }
@@ -148,6 +154,8 @@ class KinchiApiService {
         }
       }),
     );
+
+    print('[API] Document Record Creation Status: ${docResponse.statusCode}');
 
     if (docResponse.statusCode != 200 && docResponse.statusCode != 201) {
       throw Exception("Document record creation failed: ${docResponse.body}");

@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
+import 'package:wartungstool/pages/read_customer_data.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -25,6 +26,38 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   void initState() {
     super.initState();
     _loadErrors();
+  }
+
+  void _showOcrImportDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('PDF OCR Text importieren'),
+        content: TextField(
+          controller: controller,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            hintText: 'Fügen Sie hier den OCR-Text aus dem Prüfprotokoll ein...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          ElevatedButton(
+            onPressed: () async {
+              await CustomerDataImporter.importFromOcr(controller.text);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Daten erfolgreich importiert')),
+              );
+              _loadErrors();
+            },
+            child: const Text('Importieren'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadErrors() async {
@@ -468,6 +501,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             backgroundColor: Colors.orange,
             tooltip: 'Massen-Import',
             child: Icon(Icons.upload_file),
+          ),
+          SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: "ocr_import",
+            onPressed: _showOcrImportDialog,
+            backgroundColor: Colors.blue,
+            tooltip: 'PDF OCR Import',
+            child: Icon(Icons.picture_as_pdf),
           ),
           SizedBox(height: 16),
           FloatingActionButton(

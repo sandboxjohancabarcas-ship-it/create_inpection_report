@@ -728,6 +728,7 @@ class DatabaseService {
 
     final dbPath = await getDatabasesPath();
     final csvFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.csv'));
+    print('[Catalog] Database initialized. Looking for external CSV at: ${csvFile.path}');
 
     if (await csvFile.exists()) {
       print('[Catalog] Found CSV at ${csvFile.path}. Importing...');

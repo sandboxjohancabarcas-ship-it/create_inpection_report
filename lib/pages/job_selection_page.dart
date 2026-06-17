@@ -10,6 +10,7 @@ import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
 import '../models/door.dart';
 import '../services/kinchi_api_service.dart';
+import 'package:http/http.dart' as http;
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -45,29 +46,47 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
   /// Handles the cloud upload of a generated GAEB file
   Future<void> _uploadToCloud(File file, String jobNumber, int directoryId) async {
+    if (!mounted) return;
+
     try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')),
+      );
       // Using hardcoded test credentials as requested
       final loggedIn = await _apiService.login(
         "s.bluemel@konzschaefer.de", 
         "Konz2006"
       );
 
-      if (!loggedIn) throw Exception("Login fehlgeschlagen");
+      if (!loggedIn) {
+        throw Exception("Login fehlgeschlagen. Bitte überprüfen Sie die Anmeldedaten.");
+      }
 
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Datei wird hochgeladen...')),
+        );
+      }
       final docId = await _apiService.uploadGaebFile(file.path, directoryId);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Cloud-Upload erfolgreich (ID: $docId)'),
+            content: Text('Cloud-Upload erfolgreich (Dokument ID: $docId)'),
             backgroundColor: Colors.blue,
           ),
         );
       }
     } catch (e) {
+      String errorMessage = 'Unbekannter Fehler';
+      if (e is Exception) {
+        errorMessage = e.toString().replaceFirst('Exception: ', ''); // Remove "Exception: " prefix
+      } else if (e is http.ClientException) {
+        errorMessage = 'Netzwerkfehler: ${e.message}';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cloud-Upload fehlgeschlagen: $e'), backgroundColor: Colors.orange),
+          SnackBar(content: Text('Cloud-Upload fehlgeschlagen: $errorMessage'), backgroundColor: Colors.orange),
         );
       }
     }
@@ -79,7 +98,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     int? selectedOption = 520; // Default to standard directory ID 520
     final TextEditingController customIdController = TextEditingController();
     String? validationError;
-    bool _isLoadingDirectories = false; // New state for loading indicator
 
     return await showDialog<int?>(
       context: context,
@@ -96,7 +114,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                   RadioListTile<int>(
                     title: const Text('Standard (ID 520)'),
                     value: 520,
-                    groupValue: _isLoadingDirectories ? null : selectedOption, // Disable while loading
+                    groupValue: selectedOption,
                     onChanged: (value) {
                       setDialogState(() {
                         selectedOption = value;
@@ -107,7 +125,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                   RadioListTile<int>(
                     title: const Text('Benutzerdefinierte ID'),
                     value: -1,
-                    groupValue: _isLoadingDirectories ? null : selectedOption, // Disable while loading
+                    groupValue: selectedOption,
                     onChanged: (value) {
                       setDialogState(() {
                         selectedOption = value;
@@ -126,72 +144,25 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           errorText: validationError,
                         ),
                         onChanged: (_) => setDialogState(() => validationError = null),
-                        enabled: !_isLoadingDirectories, // Disable while loading
                       ),
                     ),
                 ],
               ),
               actions: [
                 TextButton(
-                  onPressed: _isLoadingDirectories ? null : () => Navigator.pop(context, null), // Disable while loading
+                  onPressed: () => Navigator.pop(context, null),
                   child: const Text('Abbrechen'),
                 ),
                 ElevatedButton(
-                  onPressed: _isLoadingDirectories ? null : () async { // Disable button while loading
-                    setDialogState(() => _isLoadingDirectories = true); // Start loading
+                  onPressed: () {
                     int targetId = selectedOption == 520 ? 520 : int.tryParse(customIdController.text) ?? 0;
-
-                    // Clear previous validation error
-                    setDialogState(() {
-                      validationError = null;
-                    });
-
                     if (targetId <= 0) {
-                      setDialogState(() => validationError = 'Ungültige ID');
-                      return;
-                    }
-
-                    // Simulated Test Case: Hardcoded check for ID 562
-                    if (targetId == 562) {
-                      setDialogState(() {
-                        validationError = 'Authentifizierungsfehler (Test-ID 562)';
-                        _isLoadingDirectories = false;
-                      });
-                      return;
-                    }
-
-                    try {
-                      // Quick validation check against API
-                      final List<dynamic> directories = await _apiService.getDirectories();
-                      final exists = directories.any((d) {
-                        final dynamic dirId = d['id'];
-                        // Robustly check ID, handling potential type inconsistencies from API
-                        if (dirId is int) return dirId == targetId;
-                        if (dirId is String) return int.tryParse(dirId) == targetId;
-                        return false;
-                      });
-
-
-                      if (!exists) {
-                        setDialogState(() => validationError = 'ID $targetId nicht gefunden.');
-                        return;
-                      }
+                      setDialogState(() => validationError = 'Geben Sie eine gültige ID ein');
+                    } else {
                       Navigator.pop(context, targetId);
-                    } catch (e) {
-                      // Display API error
-                      setDialogState(() => validationError = 'API Fehler: $e');
-                    } finally {
-                      // Ensure loading state is reset
-                      setDialogState(() => _isLoadingDirectories = false);
                     }
                   },
-                  child: _isLoadingDirectories
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                        )
-                      : const Text('Hochladen'),
+                  child: const Text('Hochladen'),
                 ),
               ],
             );
@@ -268,7 +239,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     });
   }
 
-  /// Selects all items currently visible in the search results (Block 3)
+  /// Selects all items currently visible in the search results
   void _selectAllResults() {
     setState(() {
       for (var job in _currentVisibleResults) {
@@ -292,7 +263,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
       final allErrors = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
       for (var door in doors) {
-        // Find the junction that links this door to this inspection
         final junction = junctionList.firstWhere(
           (j) => j['doorId'] == door.id, 
           orElse: () => <String, dynamic>{}
@@ -302,8 +272,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         final doorErrors = allErrors
             .where((e) => e['inspectionDoorId'] == junction['id'])
             .map((e) => {
-              'code': e['code']?.toString() ?? 'MISSING_CODE', // Fallback for RNoPart
-              'description': e['description']?.toString() ?? 'Fehlerbeschreibung fehlt', // Fallback for description
+              'code': e['code']?.toString() ?? 'MISSING_CODE',
+              'description': e['description']?.toString() ?? 'Fehlerbeschreibung fehlt',
             })
             .toList();
 
@@ -317,19 +287,14 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   }
 
   /// Orchestrates the data handoff from Main DB to Working DB.
-  /// Can handle a single job or a 'Wide Spectrum' package of multiple inspections.
   Future<void> _handleJobDownload(List<int> ids) async {
-    // Show the modal loading overlay
     setState(() => _isDownloading = true);
 
     try {
-      // Logic: Orchestrates the handoff from Main DB to Working DB.
-      // It wipes the old 'working.db' and injects the new package (Isolation Protocol).
       await LocalDatabaseService.downloadJobPackage(
         inspectionIds: ids,
       );
 
-      // Export the file to the Documents folder for manual handoff
       final String downloadPath = Platform.isAndroid 
           ? '/storage/emulated/0/Download' 
           : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
@@ -346,8 +311,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             duration: const Duration(seconds: 5),
           ),
         );
-
-        // Clear selection after successful export so manager can continue working
         _refreshInspections();
       }
     } catch (e) {
@@ -357,15 +320,13 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         );
       }
     } finally {
-      // Hide the modal loading overlay regardless of success or failure
       if (mounted) setState(() => _isDownloading = false);
     }
   }
 
-  /// Handles the import of an inspector's result package into the Main DB (Block 4)
+  /// Handles the import of an inspector's result package into the Main DB
   Future<void> _handleImportResultPackage() async {
     try {
-      // Select the .db file from the inspector
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
 
       if (result != null && result.files.single.path != null) {
@@ -373,7 +334,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
         if (!mounted) return;
 
-        // User Confirmation Dialog (German UX)
         final confirm = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -395,8 +355,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         if (confirm != true) return;
 
         setState(() => _isImporting = true);
-        
-        // Execute the merge logic defined in Block 2
         await DatabaseService.importAndMergePackage(path);
 
         if (mounted) {
@@ -406,7 +364,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               backgroundColor: Colors.green,
             ),
           );
-          // Refresh to show updated data
           _refreshInspections();
         }
       }
@@ -421,7 +378,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     }
   }
 
-  /// Interactive Data Generation Dialog for manual testing efficiency
   void _showSeedDataDialog() {
     int customers = 2;
     int objects = 2;
@@ -438,19 +394,19 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               const Text('Wählen Sie die Parameter für die Massenerstellung:'),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
-                initialValue: customers,
+                value: customers,
                 decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
                 items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => customers = v!),
               ),
               DropdownButtonFormField<int>(
-                initialValue: objects,
+                value: objects,
                 decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
                 items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => objects = v!),
               ),
               DropdownButtonFormField<int>(
-                initialValue: doors,
+                value: doors,
                 decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
                 items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => doors = v!),
@@ -464,7 +420,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                 Navigator.pop(context);
                 setState(() => _isDownloading = true);
                 try {
-                  await DatabaseService.clearDatabase(); // Start with a clean slate
+                  await DatabaseService.clearDatabase();
                   await TestDataGenerator.generate(
                     numCustomers: customers,
                     numObjectsPerCustomer: objects,
@@ -508,7 +464,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
       ),
       body: Column(
         children: [
-          // Persistent Search Bar Widget
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -533,7 +488,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               onChanged: (value) => _refreshInspections(),
             ),
           ),
-          // Selection Controls Row (Block 3)
           if (_searchController.text.isNotEmpty || _selectedInspectionIds.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
@@ -557,7 +511,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             ),
           Expanded(
             child: Stack(
-              // Stack allows the 'Downloading' indicator to appear on top of the list
               children: [
                 FutureBuilder<InspectionList>(
                   future: _inspectionsFuture,
@@ -573,8 +526,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     }
 
                     final inspections = snapshot.data!;
-                    
-                    // Cache currently visible results for selection logic
                     _currentVisibleResults = inspections;
 
                     return ListView.builder(
@@ -622,7 +573,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     );
                   },
                 ),
-                // UI: Conditional overlay during the sync process
                 if (_isDownloading)
                   Container(
                     color: Colors.black45,
@@ -640,7 +590,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                       ),
                     ),
                   ),
-                // UI: Overlay for the import process
                 if (_isImporting)
                   Container(
                     color: Colors.black45,
@@ -678,7 +627,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                 final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
                 final service = GaebExportService(
                   customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['projectName'] ?? 'Unbekannt',
+                  projectName: inspection['objectAddress'] ?? 'Unbekannt',
                   jobNumber: inspection['jobNumber'] ?? 'MultiJob',
                 );
                 
@@ -689,20 +638,14 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     SnackBar(content: Text('GAEB 90 exportiert nach: ${file.path}')),
                   );
                   
-                  // Trigger Cloud Upload
-                  final result = await _confirmCloudUpload(file, service.jobNumber);
+                  final result = await _confirmCloudUpload();
                   if (result != null && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Cloud-Upload erfolgreich (Dokument ID: $result)'),
-                        backgroundColor: Colors.blue,
-                      ),
-                    );
+                    await _uploadToCloud(file, service.jobNumber, result);
                   }
                 }
               },
               icon: const Icon(Icons.description),
-              label: const Text('GAEB 90 exportieren'),
+              label: const Text('GAEB 90'),
             ),
             const VerticalDivider(),
             TextButton.icon(
@@ -710,7 +653,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                 final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
                 final service = GaebExportService(
                   customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['projectName'] ?? 'Unbekannt',
+                  projectName: inspection['objectAddress'] ?? 'Unbekannt',
                   jobNumber: inspection['jobNumber'] ?? 'MultiJob',
                 );
 
@@ -721,29 +664,20 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     SnackBar(content: Text('GAEB XML exportiert nach: ${file.path}')),
                   );
 
-                  // Trigger Cloud Upload
-                  final result = await _confirmCloudUpload(file, service.jobNumber);
+                  final result = await _confirmCloudUpload();
                   if (result != null && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Cloud-Upload erfolgreich (Dokument ID: $result)'),
-                        backgroundColor: Colors.blue,
-                      ),
-                    );
+                    await _uploadToCloud(file, service.jobNumber, result);
                   }
                 }
               },
               icon: const Icon(Icons.code),
-              label: const Text('GAEB XML exportieren'),
+              label: const Text('GAEB XML'),
             ),
             const VerticalDivider(),
             TextButton.icon(
               onPressed: () => _handleJobDownload(_selectedInspectionIds.toList()),
               icon: const Icon(Icons.download_for_offline, color: Colors.green),
-              label: const Text(
-                'Paket laden',
-                style: TextStyle(color: Colors.green),
-              ),
+              label: const Text('Paket laden', style: TextStyle(color: Colors.green)),
             ),
           ],
         ),
