@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'dart:io';
-import 'package:path/path.dart' as p;
 
 void main() {
   // Setup for Windows/Linux testing environment

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:wartungstool/pages/DoorListPage.dart';
-import 'package:wartungstool/pages/manager_dashboard.dart';
+import 'package:wartungstool/pages/job_selection_page.dart'; // Use JobSelectionPage as Manager view
 
 class MainNavigationPage extends StatefulWidget {
   const MainNavigationPage({super.key});
@@ -13,8 +13,8 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = [
-    DoorListPage(),
-    ManagerDashboard(),
+    const JobSelectionPage(), // Manager's view
+    const DoorListPage(),     // Inspector's view
   ];
 
   @override
@@ -30,12 +30,12 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         },
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.door_front_door),
-            label: 'Türen',
+            icon: Icon(Icons.admin_panel_settings),
+            label: 'Projektleiter',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.admin_panel_settings),
-            label: 'Manager',
+            icon: Icon(Icons.build),
+            label: 'Techniker',
           ),
         ],
       ),

@@ -10,6 +10,9 @@ import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
 import '../models/door.dart';
 import '../services/kinchi_api_service.dart';
+import '../widgets/inspection_summary_card.dart';
+import 'inspection_doors_page.dart';
+import 'DoorListPage.dart'; // Import DoorListPage for navigation
 import 'package:http/http.dart' as http;
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
@@ -446,19 +449,19 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               const Text('Wählen Sie die Parameter für die Massenerstellung:'),
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(
-                value: customers,
+                initialValue: customers,
                 decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
                 items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => customers = v!),
               ),
               DropdownButtonFormField<int>(
-                value: objects,
+                initialValue: objects,
                 decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
                 items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => objects = v!),
               ),
               DropdownButtonFormField<int>(
-                value: doors,
+                initialValue: doors,
                 decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
                 items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
                 onChanged: (v) => setDialogState(() => doors = v!),
@@ -495,8 +498,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Auftrag auswählen'),
+        title: const Text('Auftrag auswählen (Projektleiter)'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.build), // Icon for Service Techniker
+            tooltip: 'Service Techniker Ansicht',
+            onPressed: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const DoorListPage()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: 'Alle Aufträge löschen',
@@ -597,29 +608,34 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           });
                         }
 
-                        return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          child: ListTile(
-                            leading: const Icon(Icons.business, color: Colors.blue),
-                            title: Text(job['clientName'] ?? 'Unbekannter Kunde'),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Projekt: ${job['jobNumber']}'),
-                                Text('Datum: ${job['date']}'),
-                              ],
-                            ),
-                            trailing: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => toggleSelection(),
-                            ),
-                            onTap: _isDownloading 
-                                ? null 
-                                : (_selectedInspectionIds.isEmpty 
-                                    ? () => _handleJobDownload([job['inspectionId']])
-                                    : toggleSelection),
-                            onLongPress: toggleSelection,
-                          ),
+                        return InspectionSummaryCard(
+                          inspectionId: id,
+                          clientName: job['clientName'] ?? 'Unbekannter Kunde',
+                          jobNumber: job['jobNumber'] ?? 'N/A',
+                          date: job['date'] ?? '',
+                          isSelected: isSelected,
+                          onSelectionChanged: (_) => toggleSelection(),
+                          onLongPress: toggleSelection,
+                          onTap: _isDownloading
+                              ? null
+                              : () async {
+                                  if (_selectedInspectionIds.isNotEmpty) {
+                                    toggleSelection();
+                                  } else {
+                                    // Navigate to the door list sub-page for this inspection
+                                    await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => InspectionDoorsPage(
+                                          inspectionId: id,
+                                          title: job['clientName'] ?? 'Türenliste',
+                                          isManagerMode: true,
+                                        ),
+                                      ),
+                                    );
+                                    _refreshInspections();
+                                  }
+                                },
                         );
                       },
                     );

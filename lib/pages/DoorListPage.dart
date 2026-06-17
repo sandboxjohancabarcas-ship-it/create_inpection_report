@@ -5,9 +5,11 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import '../services/local_database_service.dart';
-import '../models/models.dart' hide JobSelectionPage;
+import '../models/models.dart' hide JobSelectionPage; // Hide JobSelectionPage to prevent conflict
+import '../widgets/inspection_summary_card.dart';
 import 'new_door_page.dart';
 import 'job_selection_page.dart';
+import 'inspection_doors_page.dart';
 
 class DoorListPage extends StatefulWidget {
   const DoorListPage({super.key});
@@ -17,21 +19,21 @@ class DoorListPage extends StatefulWidget {
 }
 
 class _DoorListPageState extends State<DoorListPage> {
-  List<Door> doors = [];
+  List<Map<String, dynamic>> inspections = [];
   bool _isSyncing = false;
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
-  final Set<int> _selectedDoorIds = {};
+  final Set<int> _selectedIds = {};
 
   @override
   void initState() {
     super.initState();
-    loadDoors();
+    loadInspections();
   }
 
-  Future<void> loadDoors() async {
-    final results = await LocalDatabaseService.searchDoors(_searchController.text);
-    setState(() => doors = results);
+  Future<void> loadInspections() async {
+    final results = await LocalDatabaseService.getAllInspections();
+    setState(() => inspections = results);
   }
 
   /// Confirms deletion with the user, consistent with JobSelectionPage logic.
@@ -61,16 +63,17 @@ class _DoorListPageState extends State<DoorListPage> {
 
     try {
       setState(() => _isSyncing = true);
-      await LocalDatabaseService.deleteDoors(ids);
+      // Since ids are inspectionIds at this level, use purgeExportedData
+      await LocalDatabaseService.purgeExportedData(ids);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ausgewählte Türen gelöscht.')),
         );
         setState(() {
-          _selectedDoorIds.clear();
+          _selectedIds.clear();
         });
-        await loadDoors();
+        await loadInspections();
       }
     } catch (e) {
       if (mounted) {
@@ -126,7 +129,7 @@ class _DoorListPageState extends State<DoorListPage> {
             _searchController.clear();
             _isSearching = false;
           });
-          await loadDoors();
+          await loadInspections();
         }
       }
     } catch (e) {
@@ -142,10 +145,19 @@ class _DoorListPageState extends State<DoorListPage> {
 
   /// Triggers the selective export for the inspector results
   Future<void> _handleSelectiveExport() async {
-    if (_selectedDoorIds.isEmpty) return;
+    if (_selectedIds.isEmpty) return;
 
     setState(() => _isSyncing = true);
     try {
+      // Resolve all Door IDs belonging to the selected inspections
+      List<int> doorIdsToExport = [];
+      for (int inspId in _selectedIds) {
+        final doors = await LocalDatabaseService.getDoorsByInspectionId(inspId);
+        doorIdsToExport.addAll(doors.map((d) => d.id!));
+      }
+
+      if (doorIdsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
+
       final String downloadPath = Platform.isAndroid 
           ? '/storage/emulated/0/Download' 
           : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
@@ -153,7 +165,7 @@ class _DoorListPageState extends State<DoorListPage> {
       final exportPath = p.join(downloadPath, 'inspektion_ergebnis_$timestamp.db');
 
       await LocalDatabaseService.exportSelectiveJobPackage(
-        _selectedDoorIds.toList(),
+        doorIdsToExport,
         exportPath,
       );
 
@@ -164,7 +176,7 @@ class _DoorListPageState extends State<DoorListPage> {
             backgroundColor: Colors.green,
           ),
         );
-        setState(() => _selectedDoorIds.clear());
+        setState(() => _selectedIds.clear());
       }
     } catch (e) {
       if (mounted) {
@@ -179,32 +191,32 @@ class _DoorListPageState extends State<DoorListPage> {
 
   void _toggleSelection(int id) {
     setState(() {
-      if (_selectedDoorIds.contains(id)) {
-        _selectedDoorIds.remove(id);
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
       } else {
-        _selectedDoorIds.add(id);
+        _selectedIds.add(id);
       }
     });
   }
 
   void _selectAll() {
     setState(() {
-      if (_selectedDoorIds.length == doors.length) {
-        _selectedDoorIds.clear();
+      if (_selectedIds.length == inspections.length) {
+        _selectedIds.clear();
       } else {
-        _selectedDoorIds.addAll(doors.map((d) => d.id!));
+        _selectedIds.addAll(inspections.map((i) => i['inspectionId'] as int));
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isSelectionMode = _selectedDoorIds.isNotEmpty;
+    final bool isSelectionMode = _selectedIds.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
         title: isSelectionMode
-            ? Text('${_selectedDoorIds.length} ausgewählt')
+            ? Text('${_selectedIds.length} ausgewählt')
             : _isSearching
                 ? TextField(
                     controller: _searchController,
@@ -215,19 +227,19 @@ class _DoorListPageState extends State<DoorListPage> {
                       hintStyle: TextStyle(color: Colors.white70),
                     ),
                     style: const TextStyle(color: Colors.white),
-                    onChanged: (value) => loadDoors(),
+                    onChanged: (value) => loadInspections(),
                   )
-                : const Text("Türenübersicht"),
+                : const Text("Prüfpakete (Techniker)"),
         leading: isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close),
-                onPressed: () => setState(() => _selectedDoorIds.clear()),
+                onPressed: () => setState(() => _selectedIds.clear()),
               )
             : null,
         actions: isSelectionMode
             ? [
                 IconButton(
-                  icon: Icon(_selectedDoorIds.length == doors.length
+                  icon: Icon(_selectedIds.length == inspections.length
                       ? Icons.check_box
                       : Icons.check_box_outline_blank),
                   tooltip: 'Alle auswählen',
@@ -236,13 +248,21 @@ class _DoorListPageState extends State<DoorListPage> {
               ]
             : [
                 IconButton(
+                  icon: const Icon(Icons.admin_panel_settings),
+                  tooltip: 'Projektleiter',
+                  onPressed: () => Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const JobSelectionPage()),
+                  ),
+                ),
+                IconButton(
                   icon: Icon(_isSearching ? Icons.close : Icons.search),
                   onPressed: () {
                     setState(() {
                       _isSearching = !_isSearching;
                       if (!_isSearching) {
                         _searchController.clear();
-                        loadDoors();
+                        loadInspections();
                       }
                     });
                   },
@@ -263,7 +283,7 @@ class _DoorListPageState extends State<DoorListPage> {
                             MaterialPageRoute(builder: (context) => const JobSelectionPage()),
                           );
                           if (result == true) {
-                            loadDoors();
+                            loadInspections();
                           }
                         },
                 ),
@@ -271,52 +291,40 @@ class _DoorListPageState extends State<DoorListPage> {
       ),
       body: Stack(
         children: [
-          doors.isEmpty
-              ? const Center(child: Text("Keine Türen vorhanden"))
+          inspections.isEmpty
+              ? const Center(child: Text("Keine Aufträge geladen"))
               : ListView.builder(
-              itemCount: doors.length,
+              itemCount: inspections.length,
               itemBuilder: (context, index) {
-                final d = doors[index];
-                final isSelected = _selectedDoorIds.contains(d.id);
+                final insp = inspections[index];
+                final id = insp['inspectionId'] as int;
+                final isSelected = _selectedIds.contains(id);
 
-                return Dismissible(
-                  key: Key(d.id.toString()),
-                  background: Container(
-                    color: Colors.red.shade400,
-                    alignment: Alignment.centerLeft,
-                    padding: const EdgeInsets.only(left: 20),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  direction: DismissDirection.startToEnd,
-                  confirmDismiss: (_) => _confirmDeletion(1),
-                  onDismissed: (_) => LocalDatabaseService.deleteDoor(d.id!).then((_) => loadDoors()),
-                  child: Card(
-                    color: isSelected ? Colors.blue.shade50 : null,
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: ListTile(
-                      leading: isSelectionMode
-                          ? Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => _toggleSelection(d.id!),
-                            )
-                          : const Icon(Icons.door_front_door, color: Colors.blue),
-                      title: Text("Tür ${d.doorNumber}"),
-                      subtitle: Text(d.roomDesignation),
-                      trailing: isSelectionMode ? null : const Icon(Icons.chevron_right),
-                      onTap: isSelectionMode
-                          ? () => _toggleSelection(d.id!)
-                          : () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => DoorInspectionForm(door: d),
-                                ),
-                              );
-                              loadDoors();
-                            },
-                      onLongPress: () => _toggleSelection(d.id!),
-                    ),
-                  ),
+                return InspectionSummaryCard(
+                  inspectionId: id,
+                  clientName: insp['clientName'] ?? 'Unbekannt',
+                  jobNumber: insp['jobNumber'] ?? 'N/A',
+                  date: insp['date'] ?? '',
+                  isSelected: isSelected,
+                  onSelectionChanged: (value) => _toggleSelection(id),
+                  onLongPress: () => _toggleSelection(id),
+                  onTap: () async {
+                    if (isSelectionMode) {
+                      _toggleSelection(id);
+                    } else {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => InspectionDoorsPage(
+                            inspectionId: id,
+                            title: insp['clientName'] ?? 'Türenliste',
+                            isManagerMode: false,
+                          ),
+                        ),
+                      );
+                      loadInspections();
+                    }
+                  },
                 );
               },
             ),
@@ -350,7 +358,7 @@ class _DoorListPageState extends State<DoorListPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    onPressed: () => _handleDeleteDoors(_selectedDoorIds.toList()),
+                    onPressed: () => _handleDeleteDoors(_selectedIds.toList()),
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
                     tooltip: 'Auswahl löschen',
                   ),
@@ -372,7 +380,7 @@ class _DoorListPageState extends State<DoorListPage> {
               builder: (_) => const DoorInspectionForm(),
             ),
           );
-          loadDoors();
+          loadInspections();
         },
       ),
     );

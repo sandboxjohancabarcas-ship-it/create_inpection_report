@@ -3,7 +3,6 @@
 
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'dart:io';
@@ -455,6 +454,24 @@ class LocalDatabaseService {
   static Future<int> insertInspection(Map<String, dynamic> inspection) async {
     final db = await getDb();
     return await db.insert('inspections', inspection, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Fetches all inspections currently stored in the working database.
+  static Future<List<Map<String, dynamic>>> getAllInspections() async {
+    final db = await getDb();
+    return await db.query('inspections', orderBy: 'date DESC');
+  }
+
+  /// Returns all doors associated with a specific inspection ID in the local DB.
+  static Future<List<Door>> getDoorsByInspectionId(int inspectionId) async {
+    final db = await getDb();
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT d.* 
+      FROM doors d
+      INNER JOIN inspection_doors id ON d.id = id.doorId
+      WHERE id.inspectionId = ?
+    ''', [inspectionId]);
+    return maps.map((map) => Door.fromMap(map)).toList();
   }
 
   // ─────────────────────────────────────────────────────────────

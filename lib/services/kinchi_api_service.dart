@@ -41,10 +41,10 @@ class KinchiApiService {
     if (json is! Map) return json;
 
     // Handle Strapi v4 'data' envelope
-    if (json is Map && json.containsKey('data')) return _flatten(json['data']);
+    if (json.containsKey('data')) return _flatten(json['data']);
 
     // Handle Strapi v4 item structure: { id: X, attributes: { ... } }
-    if (json is Map && json.containsKey('attributes')) {
+    if (json.containsKey('attributes')) {
       final Map<String, dynamic> flattened = Map<String, dynamic>.from(json['attributes']);
       if (json.containsKey('id')) {
         var rawId = json['id'];

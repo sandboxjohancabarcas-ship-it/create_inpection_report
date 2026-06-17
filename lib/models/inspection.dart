@@ -8,7 +8,6 @@ import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
-import '../models/door.dart';
 import '../services/kinchi_api_service.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
