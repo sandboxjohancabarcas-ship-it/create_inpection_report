@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:wartungstool/models/error_catalog.dart';
 import '../services/database_service.dart';
@@ -5,6 +6,7 @@ import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
 import 'package:wartungstool/pages/read_customer_data.dart';
+import 'package:file_picker/file_picker.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -29,6 +31,32 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _showOcrImportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Datenquelle wählen'),
+        content: const Text('Möchten Sie eine PDF-Datei auswählen oder OCR-Text manuell einfügen?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _pickAndImportPdf();
+            },
+            child: const Text('PDF Datei wählen'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showManualTextImportDialog();
+            },
+            child: const Text('Text manuell einfügen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showManualTextImportDialog() {
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -58,6 +86,34 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         ],
       ),
     );
+  }
+
+  Future<void> _pickAndImportPdf() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() => isLoading = true);
+      try {
+        await CustomerDataImporter.importFromPdfFile(File(result.files.single.path!));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PDF-Daten erfolgreich importiert')),
+          );
+          _loadErrors();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Fehler beim PDF-Import: $e')),
+          );
+        }
+      } finally {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   Future<void> _loadErrors() async {

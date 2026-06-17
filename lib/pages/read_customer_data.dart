@@ -1,5 +1,7 @@
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'dart:io';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 /// Service to parse PDF OCR data and populate the database for test/real data generation.
 /// Aligns real-world PDF reports with the "Door-as-Patient" model and CSV Error Catalog.
@@ -18,6 +20,15 @@ class CustomerDataImporter {
   static const List<String> _knownManufacturers = ['Dorma', 'Geze', 'Schüco', 'Jeld Wen', 'Schröders', 'Würth', 'Küffner', 'Eco Schulte'];
   static const List<String> _knownMaterials = ['Holz', 'Alu', 'Stahl', 'Rohrrahmen', 'Glas'];
   static const List<String> _knownCloserTypes = ['TS 93', 'TS 5000', 'TS 31', 'TS 2000', 'TS 98', 'RMZ', 'GSR'];
+
+  /// Reads a physical PDF file and extracts text before starting the mapping process.
+  static Future<void> importFromPdfFile(File pdfFile) async {
+    final List<int> bytes = await pdfFile.readAsBytes();
+    final PdfDocument document = PdfDocument(inputBytes: bytes);
+    final String text = PdfTextExtractor(document).extractText();
+    document.dispose();
+    await importFromOcr(text);
+  }
 
   /// Main entry point to process OCR text from an inspection protocol.
   static Future<void> importFromOcr(String ocrText) async {

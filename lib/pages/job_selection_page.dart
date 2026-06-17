@@ -45,23 +45,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   }
 
   /// Handles the cloud upload of a generated GAEB file
+  /// Authentication and directory selection already happened in _confirmCloudUpload
   Future<void> _uploadToCloud(File file, String jobNumber, int directoryId) async {
     if (!mounted) return;
 
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')),
-      );
-      // Using hardcoded test credentials as requested
-      final loggedIn = await _apiService.login(
-        "s.bluemel@konzschaefer.de", 
-        "Konz2006"
-      );
-
-      if (!loggedIn) {
-        throw Exception("Login fehlgeschlagen. Bitte überprüfen Sie die Anmeldedaten.");
-      }
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Datei wird hochgeladen...')),
@@ -80,7 +68,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     } catch (e) {
       String errorMessage = 'Unbekannter Fehler';
       if (e is Exception) {
-        errorMessage = e.toString().replaceFirst('Exception: ', ''); // Remove "Exception: " prefix
+        errorMessage = e.toString().replaceFirst('Exception: ', '');
       } else if (e is http.ClientException) {
         errorMessage = 'Netzwerkfehler: ${e.message}';
       }
@@ -95,57 +83,78 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   /// Asks the user if they want to upload the file to Kinchi and which directory to use.
   /// Returns the selected directory ID or null if cancelled.
   Future<int?> _confirmCloudUpload() async {
-    int? selectedOption = 520; // Default to standard directory ID 520
-    final TextEditingController customIdController = TextEditingController();
-    String? validationError;
+    // 1. Ask user to select credentials
+    final userCredentials = await _showUserSelectionDialog();
+    if (userCredentials == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upload abgebrochen.')));
+      return null;
+    }
 
-    return await showDialog<int?>(
+    // 2. Authenticate
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')));
+    try {
+      final loggedIn = await _apiService.login(userCredentials['username']!, userCredentials['password']!);
+      if (!loggedIn) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login fehlgeschlagen.'), backgroundColor: Colors.orange));
+        return null;
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login-Fehler: $e'), backgroundColor: Colors.orange));
+      return null;
+    }
+
+    // 3. Fetch directories
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Verzeichnisse werden geladen...')));
+    List<dynamic> fetchedDirectories = [];
+    try {
+      fetchedDirectories = await _apiService.getDirectories();
+      if (fetchedDirectories.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Keine Verzeichnisse gefunden.'), backgroundColor: Colors.orange));
+        return null;
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler beim Laden: $e'), backgroundColor: Colors.orange));
+      return null;
+    }
+
+    // 4. Ask user to select a directory
+    return await _showDirectorySelectionDialog(fetchedDirectories);
+  }
+
+  /// Dialog to select between predefined users.
+  Future<Map<String, String>?> _showUserSelectionDialog() async {
+    String? selectedUserOption;
+    return await showDialog<Map<String, String>?>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setDialogState) {
             return AlertDialog(
-              title: const Text('Cloud-Upload Konfiguration'),
+              title: const Text('Benutzer für Cloud-Upload auswählen'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Wählen Sie das Zielverzeichnis:'),
-                  RadioListTile<int>(
-                    title: const Text('Standard (ID 520)'),
-                    value: 520,
-                    groupValue: selectedOption,
+                  RadioListTile<String>(
+                    title: const Text('cabarcas@gottsberg.de'),
+                    value: 'cabarcas',
+                    groupValue: selectedUserOption,
                     onChanged: (value) {
                       setDialogState(() {
-                        selectedOption = value;
-                        validationError = null;
+                        selectedUserOption = value;
                       });
                     },
                   ),
-                  RadioListTile<int>(
-                    title: const Text('Benutzerdefinierte ID'),
-                    value: -1,
-                    groupValue: selectedOption,
+                  RadioListTile<String>(
+                    title: const Text('s.bluemel@konzschaefer.de'),
+                    value: 'bluemel',
+                    groupValue: selectedUserOption,
                     onChanged: (value) {
                       setDialogState(() {
-                        selectedOption = value;
-                        validationError = null;
+                        selectedUserOption = value;
                       });
                     },
                   ),
-                  if (selectedOption == -1)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: TextField(
-                        controller: customIdController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: 'Verzeichnis-ID',
-                          errorText: validationError,
-                        ),
-                        onChanged: (_) => setDialogState(() => validationError = null),
-                      ),
-                    ),
                 ],
               ),
               actions: [
@@ -154,15 +163,58 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                   child: const Text('Abbrechen'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    int targetId = selectedOption == 520 ? 520 : int.tryParse(customIdController.text) ?? 0;
-                    if (targetId <= 0) {
-                      setDialogState(() => validationError = 'Geben Sie eine gültige ID ein');
+                  onPressed: selectedUserOption == null ? null : () {
+                    if (selectedUserOption == 'cabarcas') {
+                      Navigator.pop(context, {'username': "cabarcas@gottsberg.de", 'password': "KINCHI_HiLdE21042017!"});
                     } else {
-                      Navigator.pop(context, targetId);
+                      Navigator.pop(context, {'username': "s.bluemel@konzschaefer.de", 'password': "Konz2006"});
                     }
                   },
-                  child: const Text('Hochladen'),
+                  child: const Text('Weiter'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Dialog to display fetched directories and allow selection by name.
+  Future<int?> _showDirectorySelectionDialog(List<dynamic> directories) async {
+    int? selectedDirectoryId;
+    return await showDialog<int?>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            return AlertDialog(
+              title: const Text('Verzeichnis auswählen'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: directories.length,
+                  itemBuilder: (context, index) {
+                    final dir = directories[index];
+                    return RadioListTile<int>(
+                      title: Text(dir['name'] ?? 'Unbenannt'),
+                      subtitle: Text('ID: ${dir['id']}'),
+                      value: dir['id'] as int,
+                      groupValue: selectedDirectoryId,
+                      onChanged: (value) => setDialogState(() => selectedDirectoryId = value),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Abbrechen'),
+                ),
+                ElevatedButton(
+                  onPressed: selectedDirectoryId == null ? null : () => Navigator.pop(context, selectedDirectoryId),
+                  child: const Text('Auswählen'),
                 ),
               ],
             );
