@@ -30,7 +30,7 @@ void main() {
           'inspectionId': i,
           'clientName': 'Kunde Alpha $clientSuffix',
           'objectAddress': 'Teststraße $i, 12345 Berlin',
-          'auftragsnummer': 'AUFTRAG-2024-$clientSuffix',
+          'jobNumber': 'AUFTRAG-2024-$clientSuffix',
           'date': '2024-06-$clientSuffix',
           'inspectorName': 'Techniker ${i % 2 == 0 ? "A" : "B"}',
         });

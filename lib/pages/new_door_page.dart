@@ -29,6 +29,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController roomNumberController;
   late TextEditingController manufacturerController;
   late TextEditingController lockDimensionsController;
+  late TextEditingController doorAliasController;
+  bool isAliasManuallyEdited = false;
 
   // Boolean states
   bool escapeSignage = false;
@@ -82,6 +84,37 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     roomNumberController = TextEditingController(text: d?.roomNumber ?? '');
     manufacturerController = TextEditingController(text: d?.manufacturer ?? '');
     lockDimensionsController = TextEditingController(text: d?.lockDimensions ?? '');
+    doorAliasController = TextEditingController(text: d?.doorAlias ?? '');
+
+    if (d?.doorAlias != null && d!.doorAlias!.isNotEmpty) {
+      isAliasManuallyEdited = true;
+    }
+
+    if (d == null) {
+      void updateAlias() {
+        if (!isAliasManuallyEdited) {
+          doorAliasController.text = Door.generateAlias(
+            customerNameController.text,
+            customerAddressController.text,
+            doorNumberController.text,
+          );
+        }
+      }
+      customerNameController.addListener(updateAlias);
+      customerAddressController.addListener(updateAlias);
+      doorNumberController.addListener(updateAlias);
+    }
+
+    doorAliasController.addListener(() {
+      final expected = Door.generateAlias(
+        customerNameController.text,
+        customerAddressController.text,
+        doorNumberController.text,
+      );
+      if (doorAliasController.text != expected && doorAliasController.text.isNotEmpty) {
+        isAliasManuallyEdited = true;
+      }
+    });
 
     // Initialize booleans
     escapeSignage = d?.escapeRouteSignage ?? false;
@@ -115,6 +148,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
   }
 
+  @override
+  void dispose() {
+    doorAliasController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadInspectionData() async {
     // Select correct database based on role
     final db = widget.isManagerMode 
@@ -146,12 +185,18 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   // Build a Door object from form fields
   Door buildDoor() {
-    // If this is a new door, we concatenate the alias. 
-    // For existing doors, we preserve the original alias.
+    String alias = doorAliasController.text.trim();
+    if (alias.isEmpty) {
+      alias = Door.generateAlias(
+        customerNameController.text,
+        customerAddressController.text,
+        doorNumberController.text,
+      );
+    }
     return Door(
       id: widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
       pos: pos,
-      doorAlias: widget.door?.doorAlias ?? "${customerNameController.text}-${customerAddressController.text}-${doorNumberController.text}",
+      doorAlias: alias,
       doorNumber: doorNumberController.text,
       floor: floorController.text,
       roomNumber: roomNumberController.text,
@@ -244,13 +289,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (widget.door?.doorAlias != null) ...[
-              const Text("Tür-Identität (Alias)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              SelectableText(widget.door!.doorAlias!, style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w500)),
-              const Divider(height: 32),
-            ],
-
             // Inspection Metadata Section
             const Text("Inspektionsdaten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
@@ -315,6 +353,17 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             TextField(
               controller: doorNumberController,
               decoration: const InputDecoration(labelText: "Türnummer"),
+            ),
+
+            // Door Alias
+            TextField(
+              controller: doorAliasController,
+              enabled: widget.isManagerMode, // Editable only by manager
+              maxLength: 12,
+              decoration: const InputDecoration(
+                labelText: "Tür-Identität (Alias)",
+                helperText: "Dauerhafte, eindeutige ID (max. 12 Zeichen, Bearbeitungsrechte: Manager)",
+              ),
             ),
             
             // Floor

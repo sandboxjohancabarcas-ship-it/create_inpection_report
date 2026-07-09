@@ -102,7 +102,7 @@ class CustomerDataImporter {
       final door = Door(
         id: null,
         pos: pos,
-        doorAlias: "${header['Kunde']}-${header['Objekt']}-$doorNum",
+        doorAlias: Door.generateAlias(header['Kunde'] ?? '', header['Objekt'] ?? '', doorNum),
         doorNumber: doorNum,
         floor: tokens.length > 2 ? tokens[2] : 'EG',
         roomNumber: '',

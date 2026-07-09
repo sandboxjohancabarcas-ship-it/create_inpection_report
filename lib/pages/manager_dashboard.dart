@@ -6,6 +6,7 @@ import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
 import 'package:wartungstool/pages/read_customer_data.dart';
+import 'package:wartungstool/services/excel_data_importer.dart';
 import 'package:file_picker/file_picker.dart';
 
 class ManagerDashboard extends StatefulWidget {
@@ -115,6 +116,71 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       }
     }
   }
+
+  Future<void> _pickAndImportExcel() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() => isLoading = true);
+      try {
+        final excelFile = File(result.files.single.path!);
+        final importResult = await ExcelDataImporter.importFromFile(excelFile);
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Excel-Import erfolgreich'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Verarbeitete Türlisten: ${importResult.sheetsProcessed}'),
+                  Text('Importierte/Aktualisierte Türen: ${importResult.doorsImported}'),
+                  Text('Zugeordnete Fehler: ${importResult.errorsLinked}'),
+                  if (importResult.warnings.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    const Text('Warnungen:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(
+                      height: 100,
+                      width: 300,
+                      child: ListView.builder(
+                        itemCount: importResult.warnings.length,
+                        itemBuilder: (context, idx) => Text(
+                          '- ${importResult.warnings[idx]}',
+                          style: const TextStyle(fontSize: 12, color: Colors.orange),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          _loadErrors();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Fehler beim Excel-Import: $e')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => isLoading = false);
+        }
+      }
+    }
+  }
+
 
   Future<void> _loadErrors() async {
     setState(() => isLoading = true);
@@ -566,6 +632,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             backgroundColor: Colors.blue,
             tooltip: 'PDF OCR Import',
             child: Icon(Icons.picture_as_pdf),
+          ),
+          SizedBox(height: 16),
+          FloatingActionButton(
+            heroTag: "excel_import",
+            onPressed: _pickAndImportExcel,
+            backgroundColor: Colors.green,
+            tooltip: 'Excel Import (Türlisten)',
+            child: Icon(Icons.table_chart),
           ),
           SizedBox(height: 16),
           FloatingActionButton(

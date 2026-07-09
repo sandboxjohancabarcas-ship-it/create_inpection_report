@@ -193,6 +193,8 @@ class LocalDatabaseService {
       },
     );
 
+    await DatabaseService.populateMissingAliases(_db!, isLocal: true);
+
     return _db!;
   }
 

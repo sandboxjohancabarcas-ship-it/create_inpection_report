@@ -33,7 +33,7 @@ class TestDataGenerator {
         final door = Door(
           id: null,
           pos: d,
-          doorAlias: "$clientName-$address-$doorNum",
+          doorAlias: Door.generateAlias(clientName, address, doorNum),
           doorNumber: doorNum,
           floor: "EG",
           roomNumber: "R-${100 + d}",

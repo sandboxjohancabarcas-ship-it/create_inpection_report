@@ -39,15 +39,15 @@ Kunde: Stadt Geesthacht, Markt 15, 21502 Geesthacht Objekt: Fam. Zentrum Regenbo
       final inspections = await DatabaseService.searchInspections('Geesthacht');
       expect(inspections.length, 1, reason: 'Should create one inspection record');
       expect(inspections.first['jobNumber'], '25-12115-AB');
-      expect(inspections.first['clientName'], 'Stadt Geesthacht');
+      expect(inspections.first['clientName'], 'Stadt Geesthacht, Markt 15, 21502 Geesthacht');
 
       // 2. Verify Door "Patient" Identity (Alias Logic)
       final doors = await DatabaseService.getAllDoors();
       expect(doors.length, 2, reason: 'Should parse two door rows (Pos 1 and 10)');
       
       final door1 = doors.firstWhere((d) => d.doorNumber == '1-');
-      // Alias: {Kunde}-{Objekt}-{DoorNumber}
-      expect(door1.doorAlias, contains('Stadt Geesthacht-Fam. Zentrum Regenbogen-1-'));
+      // Alias: shortened to max 12 chars: STA-FAM-1
+      expect(door1.doorAlias, 'STA-FAM-1');
       expect(door1.roomDesignation, 'Lagerraum', reason: 'Should deduplicate "Lagerraum Lagerraum"');
 
       // 3. Verify Pivot Logic (okay column 'N' -> function not ok)

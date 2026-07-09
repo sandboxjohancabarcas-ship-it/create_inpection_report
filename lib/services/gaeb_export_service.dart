@@ -88,7 +88,6 @@ class GaebExportService {
     buf.writeln('      </BoQInfo>');
     buf.writeln('      <BoQBody>');
 
-    int doorIdx = 1;
     for (var entry in exportData) {
       final dynamic doorRaw = entry['door'];
       if (doorRaw == null || doorRaw is! Door) continue;
@@ -99,12 +98,12 @@ class GaebExportService {
       // Requirement: Omit doors with no errors
       if (errorsRaw.isEmpty) continue;
 
-      // Level 2: Door as Category
-      final sanitizedId = _sanitizeXmlId(door.doorAlias ?? '');
-      final sanitizedRNo = _sanitizeRNoPart(door.doorNumber ?? '');
+      // Level 2: Door as Category — ID and RNoPart both derived from doorNumber
+      final sanitizedId = _sanitizeXmlId(door.doorNumber);
+      final sanitizedRNo = _sanitizeRNoPart(door.doorNumber);
       buf.writeln('        <BoQCtgy ID="$sanitizedId" RNoPart="$sanitizedRNo">');
       buf.writeln('          <LblTx>');
-      buf.writeln('            <p><span style="font-weight:bold;">Tür: ${door.doorNumber ?? ''}</span></p>');
+      buf.writeln('            <p><span style="font-weight:bold;">Tür: ${door.doorNumber}</span></p>');
       buf.writeln('          </LblTx>');
       buf.writeln('          <BoQBody>');
       buf.writeln('            <Itemlist>');
@@ -138,7 +137,6 @@ class GaebExportService {
       buf.writeln('            </Itemlist>');
       buf.writeln('          </BoQBody>');
       buf.writeln('        </BoQCtgy>');
-      doorIdx++;
     }
 
     buf.writeln('      </BoQBody>');

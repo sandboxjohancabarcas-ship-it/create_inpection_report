@@ -207,4 +207,50 @@ class Door {
             map['fullPanicStandWing'] == 1,
         doorFunctionOK: map['doorFunctionOK'] == 1,
       );
+
+  static String generateAlias(String customer, String address, String doorNumber) {
+    if (customer.isEmpty && address.isEmpty && doorNumber.isEmpty) {
+      return '';
+    }
+
+    String clean(String val) {
+      return val.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    }
+
+    final cCust = clean(customer);
+    final cAddr = clean(address);
+    final cDoor = clean(doorNumber);
+
+    // Format: CUST-ADDR-DOOR (max 12 chars).
+    int targetCustLen = 3;
+    int targetAddrLen = 3;
+
+    int custLen = cCust.length < targetCustLen ? cCust.length : targetCustLen;
+    int addrLen = cAddr.length < targetAddrLen ? cAddr.length : targetAddrLen;
+
+    int spaceForDoor = 12 - custLen - addrLen;
+    int hyphens = 0;
+    if (custLen > 0) hyphens++;
+    if (addrLen > 0) hyphens++;
+    spaceForDoor -= hyphens;
+
+    if (spaceForDoor < 0) spaceForDoor = 0;
+
+    int doorLen = cDoor.length < spaceForDoor ? cDoor.length : spaceForDoor;
+
+    String custPart = cCust.substring(0, custLen);
+    String addrPart = cAddr.substring(0, addrLen);
+    String doorPart = cDoor.substring(cDoor.length - doorLen);
+
+    List<String> parts = [];
+    if (custPart.isNotEmpty) parts.add(custPart);
+    if (addrPart.isNotEmpty) parts.add(addrPart);
+    if (doorPart.isNotEmpty) parts.add(doorPart);
+
+    String alias = parts.join('-');
+    if (alias.length > 12) {
+      alias = alias.substring(0, 12);
+    }
+    return alias;
+  }
 }

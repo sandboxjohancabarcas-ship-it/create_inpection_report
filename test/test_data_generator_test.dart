@@ -30,7 +30,7 @@ void main() {
       // Verify Door creation and alias logic
       final doors = await DatabaseService.getAllDoors();
       expect(doors.length, 2);
-      expect(doors.first.doorAlias, contains('Industrie GmbH Unit 1'));
+      expect(doors.first.doorAlias, 'IND-GEW-0101');
 
       // Verify Inspection metadata persistence with English keys (jobNumber)
       final inspections = await DatabaseService.searchInspections('');

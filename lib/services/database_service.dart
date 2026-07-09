@@ -182,7 +182,64 @@ class DatabaseService {
       },
     );
 
+    await populateMissingAliases(_db!);
+
     return _db!;
+  }
+
+  static Future<void> populateMissingAliases(Database db, {bool isLocal = false}) async {
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT d.id, d.doorNumber, i.clientName, i.objectAddress
+      FROM doors d
+      LEFT JOIN inspection_doors id ON d.id = id.doorId
+      LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE d.doorAlias IS NULL
+    ''');
+    
+    if (rows.isEmpty) return;
+    
+    print('[DatabaseService] Populating missing aliases for ${rows.length} doors (isLocal: $isLocal)...');
+    
+    for (final row in rows) {
+      final id = row['id'] as int;
+      final doorNumber = row['doorNumber'] as String? ?? '0';
+      final clientName = row['clientName'] as String? ?? '';
+      final objectAddress = row['objectAddress'] as String? ?? '';
+      
+      String generated = Door.generateAlias(clientName, objectAddress, doorNumber);
+      if (generated.isEmpty) {
+        generated = 'DOOR-$id';
+      }
+      
+      // Ensure uniqueness
+      String uniqueAlias = generated;
+      int suffix = 1;
+      while (true) {
+        final existing = await db.query(
+          'doors',
+          columns: ['id'],
+          where: 'doorAlias = ?',
+          whereArgs: [uniqueAlias],
+        );
+        if (existing.isEmpty) {
+          break;
+        }
+        // If it exists, append suffix, ensuring max 12 chars
+        final suffixStr = '-$suffix';
+        final maxBaseLen = 12 - suffixStr.length;
+        final base = generated.length > maxBaseLen ? generated.substring(0, maxBaseLen) : generated;
+        uniqueAlias = '$base$suffixStr';
+        suffix++;
+      }
+      
+      await db.update(
+        'doors',
+        {'doorAlias': uniqueAlias},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    print('[DatabaseService] Finished populating missing aliases.');
   }
 
   /// Safely deletes the database file from the system.
