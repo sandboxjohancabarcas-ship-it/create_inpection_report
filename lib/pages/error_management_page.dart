@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 
@@ -77,38 +80,18 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   
+  // Removed external search handler – now handled directly in the dialog.
+  // Keeping the method for potential reuse elsewhere, but it no longer updates UI.
   Future<void> _searchErrors(String query) async {
-    print('Searching for: "$query"');
+    // This method is retained for backward compatibility but does not affect the dialog UI.
     if (query.trim().isEmpty) {
-      setState(() {
-        searchResults = [];
-      });
+      // No UI update here; the dialog handles its own state.
       return;
     }
-
     try {
-      final results = await LocalDatabaseService.searchErrorCatalog(query);
-      print('Search results: ${results.length} items found');
-      if (mounted) {
-        setState(() {
-          searchResults = List.from(results); // Create a new list to prevent reference issues
-          selectedError = null; // Clear any selected error when new search results come in
-        });
-        // Force an additional update to ensure UI refreshes
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {});
-          }
-        });
-      }
-      print('Updated state - searchResults.length: ${searchResults.length}');
+      await LocalDatabaseService.searchErrorCatalog(query);
     } catch (e) {
-      print('Search error: $e');
-      if (mounted) {
-        setState(() {
-          searchResults = [];
-        });
-      }
+      print('Search error (unused): $e');
     }
   }
 
@@ -217,8 +200,29 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                             hintText: 'z.B. 1.1.1 oder Türbeschlag',
                             suffixIcon: Icon(Icons.search),
                           ),
-                          onChanged: (value) {
-                            _searchErrors(value);
+                          onChanged: (value) async {
+                            // Perform catalog search locally within the dialog's state
+                            if (value.trim().isEmpty) {
+                              setState(() {
+                                searchResults = [];
+                                selectedError = null;
+                              });
+                              return;
+                            }
+                            try {
+                              final results = await LocalDatabaseService.searchErrorCatalog(value);
+                              setState(() {
+                                searchResults = List.from(results);
+                                selectedError = null;
+                              });
+                            } catch (e) {
+                              // Log error and clear results
+                              print('Search error: $e');
+                              setState(() {
+                                searchResults = [];
+                                selectedError = null;
+                              });
+                            }
                           },
                         ),
                         SizedBox(height: 12),
@@ -835,12 +839,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                         ),
                                       ],
                                     ),
-                                    if (error.notes.isNotEmpty) ...[
-                                      SizedBox(height: 4),
-                                  Text('Notizen: ${error.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                      if (error.notes.isNotEmpty) ...[
+                                        SizedBox(height: 4),
+                                    Text('Notizen: ${error.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                      ],
+                                      _buildPhotoGallery(error),
                                     ],
-                                  ],
-                                ),
+                                  ),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (value) {
                                     if (value == 'edit') {
@@ -988,6 +993,249 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _addPhotoToError(InspectionDoorError error, ImageSource source) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: source);
+      if (image == null) return;
+
+      final File file = File(image.path);
+      final int sizeInBytes = await file.length();
+      const int maxSizeInBytes = 60 * 1024 * 1024; // 60 MB
+
+      if (sizeInBytes > maxSizeInBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Das Bild ist zu groß. Maximale Größe ist 60 MB (Aktuell: \${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB).'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Str = base64Encode(bytes);
+
+      // Append base64 string to attachments (comma-separated)
+      List<String> currentPhotos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+      currentPhotos.add(base64Str);
+      final newAttachments = currentPhotos.join(',');
+
+      final updatedError = error.copyWith(attachments: newAttachments);
+      await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      
+      _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Foto erfolgreich hinzugefügt.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error adding photo: \$e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Hinzufügen des Fotos: \$e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deletePhotoFromError(InspectionDoorError error, int photoIndex) async {
+    try {
+      List<String> currentPhotos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+      if (photoIndex >= 0 && photoIndex < currentPhotos.length) {
+        currentPhotos.removeAt(photoIndex);
+      }
+      final newAttachments = currentPhotos.join(',');
+
+      final updatedError = error.copyWith(attachments: newAttachments);
+      await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      
+      _loadData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Foto gelöscht.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error deleting photo: \$e');
+    }
+  }
+
+  void _viewPhotoFullScreen(String base64Str) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                color: Colors.black,
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  boundaryMargin: EdgeInsets.all(20),
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.memory(
+                    base64Decode(base64Str),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddPhotoSourceSheet(InspectionDoorError error) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Kamera'),
+              onTap: () {
+                Navigator.pop(context);
+                _addPhotoToError(error, ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Galerie'),
+              onTap: () {
+                Navigator.pop(context);
+                _addPhotoToError(error, ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoGallery(InspectionDoorError error) {
+    final photos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+    
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Fotonachweis:',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 70,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: photos.length + 1,
+              itemBuilder: (context, index) {
+                if (index == photos.length) {
+                  // Add photo button
+                  return GestureDetector(
+                    onTap: () => _showAddPhotoSourceSheet(error),
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.grey.shade50,
+                      ),
+                      child: Icon(Icons.add_a_photo, color: Colors.grey.shade600, size: 24),
+                    ),
+                  );
+                }
+
+                final photoBase64 = photos[index];
+                return Stack(
+                  children: [
+                    GestureDetector(
+                      onTap: () => _viewPhotoFullScreen(photoBase64),
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            )
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            base64Decode(photoBase64),
+                            fit: BoxFit.cover,
+                            cacheWidth: 120, // performance optimization
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 4,
+                      child: GestureDetector(
+                        onTap: () => _deletePhotoFromError(error, index),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),

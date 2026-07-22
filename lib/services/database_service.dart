@@ -18,7 +18,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 16, // Rollback to 16: Removed local API tracking table
+      version: 17, // Rollback to 16: Removed local API tracking table; 17: Added attachments to inspection_door_errors
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -115,6 +115,7 @@ class DatabaseService {
             severity TEXT,
             notes TEXT,
             resolutionStatus TEXT,
+            attachments TEXT DEFAULT '',
             FOREIGN KEY (inspectionDoorId) REFERENCES inspection_doors (id),
             FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
           );
@@ -178,6 +179,14 @@ class DatabaseService {
           await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType IN ('TS 5000', 'TS93 G') OR closerType IS NULL");
           await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
           await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
+        }
+
+        if (oldVersion < 17) {
+          try {
+            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN attachments TEXT DEFAULT ''");
+          } catch (e) {
+            print('Main DB migration warning (attachments): \$e');
+          }
         }
       },
     );

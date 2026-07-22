@@ -6,6 +6,7 @@ class InspectionDoorError {
   final String severity;        // 'Minor' | 'Major' | 'Critical'
   final String notes;
   final String resolutionStatus; // 'Open' | 'In Progress' | 'Resolved'
+  final String attachments;     // comma-separated list of image paths
 
   InspectionDoorError({
     this.id,
@@ -15,6 +16,7 @@ class InspectionDoorError {
     required this.severity,
     required this.notes,
     this.resolutionStatus = 'Open',
+    this.attachments = '',
   });
 
   InspectionDoorError copyWith({
@@ -25,6 +27,7 @@ class InspectionDoorError {
     String? severity,
     String? notes,
     String? resolutionStatus,
+    String? attachments,
   }) {
     return InspectionDoorError(
       id: id ?? this.id,
@@ -34,6 +37,7 @@ class InspectionDoorError {
       severity: severity ?? this.severity,
       notes: notes ?? this.notes,
       resolutionStatus: resolutionStatus ?? this.resolutionStatus,
+      attachments: attachments ?? this.attachments,
     );
   }
 
@@ -45,6 +49,7 @@ class InspectionDoorError {
         'severity': severity,
         'notes': notes,
         'resolutionStatus': resolutionStatus,
+        'attachments': attachments,
       };
 
   factory InspectionDoorError.fromMap(Map<String, dynamic> map) =>
@@ -56,5 +61,6 @@ class InspectionDoorError {
         severity: map['severity'] ?? 'Minor',
         notes: map['notes'] ?? '',
         resolutionStatus: map['resolutionStatus'] ?? 'Open',
+        attachments: map['attachments'] ?? '',
       );
 }

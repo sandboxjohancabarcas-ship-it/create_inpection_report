@@ -33,7 +33,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 6,  // Increment for Robust Data Normalization
+      version: 7,  // Increment for Robust Data Normalization & photo attachments
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -107,6 +107,7 @@ class LocalDatabaseService {
             severity TEXT,
             notes TEXT,
             resolutionStatus TEXT,
+            attachments TEXT DEFAULT '',
             FOREIGN KEY (inspectionDoorId) REFERENCES inspection_doors (id)
           );
         ''');
@@ -189,6 +190,14 @@ class LocalDatabaseService {
           await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L' OR dinConfiguration IS NULL");
           await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
           print('Local Database upgraded to version 6: Comprehensive values normalized.');
+        }
+        if (oldVersion < 7) {
+          try {
+            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN attachments TEXT DEFAULT ''");
+            print('Local Database upgraded to version 7: attachments column added to inspection_door_errors.');
+          } catch (e) {
+            print('Local DB migration warning (attachments): \$e');
+          }
         }
       },
     );
@@ -704,7 +713,7 @@ class LocalDatabaseService {
     try {
       tempDb = await openDatabase(sourcePath, readOnly: true);
       final int version = await tempDb.getVersion();
-      const int expectedVersion = 6; // Must match the version in getDb()
+      const int expectedVersion = 7; // Must match the version in getDb()
       
       if (version != expectedVersion) {
         throw Exception('Inkompatible Paketversion: Erwartet v$expectedVersion, Datei ist v$version.');

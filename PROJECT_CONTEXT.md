@@ -125,15 +125,15 @@ The application successfully generates validator-compliant GAEB reports and can 
 - **Dynamic Test Generation:** Updated `TestDataGenerator` to dynamically fetch available `error_catalog` entries from the database instead of using hardcoded IDs, preventing SQL constraint violations.
 - **Migration Planning:** Initiated Phase 1 of the migration module, preparing the structure for Excel-based door and historical error importing.
 
-## Session Log: 2024-06-16 (Validator Compliance, Bulk Actions & Production Cloud Setup)
-- **GAEB Schema Refinement:** Overhauled `GaebExportService` to meet strict `DA83/3.2` validation. Implemented numeric-only `RNoPart` logic and NCName-compliant XML IDs. Simplified HTML formatting to ensure compatibility with German GAEB readers.
-- **Production API Configuration:** Updated `kinchi_client.py` with specific credentials for `s.bluemel@konzschaefer.de` and implemented strict targeting of Directory ID `542` for all document uploads.
-- **UI Selection & Deletion:** Refined `DoorListPage` to support bulk selection and deletion. Developed a "Selective Purge" routine in `LocalDatabaseService` to allow precise data management after job exports.
-- **Robust Model Integrity:** Synchronized the 29-parameter `Door` model across all services, resolving type-safety mismatches between SQLite `int` values and Dart `bool` properties.
-- **Stable Build Tooling:** Optimized `rebuild_windows.ps1` with automated process termination (`MSBuild`, `WartungsTool`) to prevent file-locking build failures on Windows.
+## Session Log: 2026-07-22 (Photo Documentation, 60MB Attachment Support & Build Tooling Hardening)
+- **Photo Documentation & Gallery UI:** Implemented complete photo attachment capabilities for door inspection errors (`InspectionDoorError.attachments`). Added camera/gallery selector via `image_picker`, thumbnail preview strip with cache optimization, photo deletion, and an interactive full-screen image viewer with pinch-to-zoom (`InteractiveViewer`).
+- **60 MB Photo Capacity:** Expanded photo upload size limit to 60 MB per image to support high-resolution field photos taken on modern mobile cameras.
+- **Database Schema Migration (v17 / v7):** Upgraded `DatabaseService` (Main DB v17) and `LocalDatabaseService` (Local DB v7) with automated `ALTER TABLE` migrations to add the `attachments` column (comma-separated base64 image strings). Updated package version validation to enforce v7 compatibility during job package downloads.
+- **Android Permissions:** Updated `android/app/src/main/AndroidManifest.xml` with `CAMERA`, `READ_EXTERNAL_STORAGE`, and `WRITE_EXTERNAL_STORAGE` permissions.
+- **Gradle Build & Windows AV Workarounds:** Resolved Windows Antivirus / Defender file-locking errors (`Could not move temporary workspace to immutable location` during `:app:mergeReleaseNativeLibs`). Disabled Gradle daemon, caching, parallel execution, and file watching in `android/gradle.properties`. Hardened `rebuild.ps1` with automated process termination (`java`, `javaw`, `javac`, `gradle`) and pre-build transform cache purges.
 
 ### Current System State:
-The application is stable and bug-free for current features. It generates validator-compliant GAEB reports and successfully synchronizes them with the KINCHI cloud infrastructure. Mobile data management is robust, supporting both bulk actions and selective job handling.
+The application now supports full visual photo documentation for door defects with up to 60 MB high-resolution images, seamless SQLite schema migrations on both Main and Local databases, and hardened Windows/Android build automation scripts resistant to antivirus file locks.
 
 ---
 ```
