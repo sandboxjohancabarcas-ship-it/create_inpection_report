@@ -4,17 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/services/database_service.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
   final String doorNumber;
   final int inspectionId;
+  /// When true, reads/writes use DatabaseService (Master DB) instead of LocalDatabaseService (working.db).
+  final bool isManagerMode;
 
   const ErrorManagementPage({
     super.key,
     required this.doorId,
     required this.doorNumber,
     required this.inspectionId,
+    this.isManagerMode = false,
   });
 
   @override
@@ -35,39 +39,58 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     _loadData();
   }
 
-  /// Loads data from the local database. 
-  /// If [syncWithMain] is true, it attempts to refresh the catalog from the main DB first.
+  /// Loads data from the correct database based on [widget.isManagerMode].
+  /// If [syncWithMain] is true, it attempts to refresh the local catalog from the main DB first.
   Future<void> _loadData({bool syncWithMain = false}) async {
     setState(() => isLoading = true);
     
     try {
-      // Resolve the junction ID for this specific door in this specific inspection session
-      final junction = await LocalDatabaseService.getInspectionDoor(widget.inspectionId, widget.doorId);
-      _inspectionDoorId = junction?['id'];
+      if (widget.isManagerMode) {
+        // Manager mode: read from Master DB (DatabaseService)
+        final junctions = await DatabaseService.getInspectionDoorsByInspectionId(widget.inspectionId);
+        final junction = junctions.where((j) => j['doorId'] == widget.doorId).firstOrNull;
+        _inspectionDoorId = junction?['id'] as int?;
 
-      // Only hit the Main DB if explicitly requested (e.g., initial load or manual refresh)
-      if (syncWithMain) {
-        try {
-          await LocalDatabaseService.refreshLocalCatalogFromMain();
-        } catch (e) {
-          print('Haupt-Datenbank nicht erreichbar. Fahre mit lokalem Katalog fort: $e');
+        final catalogSuggestions = await DatabaseService.getAllErrorCatalog(status: 'Approved');
+        final inspectionErrors = _inspectionDoorId != null
+            ? await DatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
+            : <InspectionDoorError>[];
+
+        print('[Manager] Loaded ${catalogSuggestions.length} catalog errors');
+        print('[Manager] Loaded ${inspectionErrors.length} inspection errors for door ${widget.doorId}');
+
+        setState(() {
+          availableErrors = catalogSuggestions;
+          doorErrors = inspectionErrors;
+          isLoading = false;
+        });
+      } else {
+        // Inspector mode: read from local working.db (LocalDatabaseService)
+        final junction = await LocalDatabaseService.getInspectionDoor(widget.inspectionId, widget.doorId);
+        _inspectionDoorId = junction?['id'];
+
+        if (syncWithMain) {
+          try {
+            await LocalDatabaseService.refreshLocalCatalogFromMain();
+          } catch (e) {
+            print('Haupt-Datenbank nicht erreichbar. Fahre mit lokalem Katalog fort: $e');
+          }
         }
-      }
 
-      final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
-      
-      final inspectionErrors = _inspectionDoorId != null 
-          ? await LocalDatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
-          : <InspectionDoorError>[];
-      
-      print('Loaded ${catalogSuggestions.length} catalog errors');
-      print('Loaded ${inspectionErrors.length} inspection errors');
-      
-      setState(() {
-        availableErrors = catalogSuggestions;
-        doorErrors = inspectionErrors;
-        isLoading = false;
-      });
+        final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
+        final inspectionErrors = _inspectionDoorId != null
+            ? await LocalDatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
+            : <InspectionDoorError>[];
+
+        print('Loaded ${catalogSuggestions.length} catalog errors');
+        print('Loaded ${inspectionErrors.length} inspection errors');
+
+        setState(() {
+          availableErrors = catalogSuggestions;
+          doorErrors = inspectionErrors;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       print('Error loading data: $e');
       setState(() => isLoading = false);
@@ -108,13 +131,18 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     final inspectionError = InspectionDoorError(
       inspectionDoorId: _inspectionDoorId!,
       errorId: error.errorId ?? 0,
+      errorCode: error.code,
       notes: notes,
       quantity: 1,
       severity: error.severity,
     );
 
     try {
-      await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+      if (widget.isManagerMode) {
+        await DatabaseService.insertInspectionDoorError(inspectionError);
+      } else {
+        await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+      }
       _loadData();
     } catch (e) {
       if (mounted) {
@@ -210,7 +238,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               return;
                             }
                             try {
-                              final results = await LocalDatabaseService.searchErrorCatalog(value);
+                              final results = widget.isManagerMode
+                                  ? await DatabaseService.searchErrorCatalog(value)
+                                  : await LocalDatabaseService.searchErrorCatalog(value);
                               setState(() {
                                 searchResults = List.from(results);
                                 selectedError = null;
@@ -550,18 +580,25 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   );
                   print('UI: Creating provisional error proposal: ${provisionalError.code} - Status: ${provisionalError.status}');
                   
-                  // Insert provisional error into catalog
                   try {
-                    // Note: In local-first, we store provisional errors locally 
-                    // until they are synced and approved by the main DB.
-                    await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
-                    
-                    // Get the inserted error ID
-                    final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
-                    final insertedError = errors.firstWhere(
-                      (e) => e.code == provisionalError.code,
-                      orElse: () => provisionalError,
-                    );
+                    ErrorCatalog insertedError;
+                    if (widget.isManagerMode) {
+                      await DatabaseService.insertErrorCatalog(provisionalError);
+                      final errors = await DatabaseService.searchErrorCatalog(provisionalError.code);
+                      insertedError = errors.firstWhere(
+                        (e) => e.code == provisionalError.code,
+                        orElse: () => provisionalError,
+                      );
+                    } else {
+                      // Note: In local-first, we store provisional errors locally
+                      // until they are synced and approved by the main DB.
+                      await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
+                      final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
+                      insertedError = errors.firstWhere(
+                        (e) => e.code == provisionalError.code,
+                        orElse: () => provisionalError,
+                      );
+                    }
                     
                     // Add to inspection using the resolved junction ID
                     if (_inspectionDoorId == null) {
@@ -571,12 +608,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     final inspectionError = InspectionDoorError(
                       inspectionDoorId: _inspectionDoorId!,
                       errorId: insertedError.errorId ?? 0,
+                      errorCode: insertedError.code,
                       notes: notesController.text,
                       quantity: 1,
                       severity: insertedError.severity,
                     );
                     
-                    await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+                    if (widget.isManagerMode) {
+                      await DatabaseService.insertInspectionDoorError(inspectionError);
+                    } else {
+                      await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+                    }
                     
                     if (mounted) {
                       Navigator.pop(context);

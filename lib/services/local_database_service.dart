@@ -13,12 +13,15 @@ class LocalDatabaseService {
 
   static Future<String> _getWorkingDbPath() async {
     if (Platform.isWindows || Platform.isLinux) {
-      final directory = await getApplicationSupportDirectory();
-      return join(directory.path, 'working.db');
-    } else {
-      final dbPath = await getDatabasesPath();
-      return join(dbPath, 'working.db');
+      try {
+        final directory = await getApplicationSupportDirectory();
+        return join(directory.path, 'working.db');
+      } catch (e) {
+        print('[LocalDatabaseService] Fallback to default databases path: $e');
+      }
     }
+    final dbPath = await getDatabasesPath();
+    return join(dbPath, 'working.db');
   }
 
   static Future<Database> getDb() async {
@@ -33,7 +36,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 7,  // Increment for Robust Data Normalization & photo attachments
+      version: 8,  // v8: Added errorCode natural key to inspection_door_errors
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -103,6 +106,7 @@ class LocalDatabaseService {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             inspectionDoorId INTEGER,
             errorId INTEGER,
+            errorCode TEXT NOT NULL DEFAULT '',
             quantity INTEGER,
             severity TEXT,
             notes TEXT,
@@ -199,6 +203,23 @@ class LocalDatabaseService {
             print('Local DB migration warning (attachments): \$e');
           }
         }
+        if (oldVersion < 8) {
+          try {
+            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN errorCode TEXT NOT NULL DEFAULT ''");
+            // Backfill errorCode from local error_catalog
+            await db.execute('''
+              UPDATE inspection_door_errors
+              SET errorCode = COALESCE(
+                (SELECT code FROM error_catalog WHERE error_catalog.errorId = inspection_door_errors.errorId),
+                ''
+              )
+              WHERE errorCode IS NULL OR errorCode = ''
+            ''');
+            print('Local Database upgraded to version 8: errorCode column added and backfilled.');
+          } catch (e) {
+            print('Local DB migration warning (errorCode): \$e');
+          }
+        }
       },
     );
 
@@ -238,6 +259,12 @@ class LocalDatabaseService {
 
       final db = await getDb();
       await db.transaction((txn) async {
+        // Purge old local job data to enforce Isolation Protocol
+        await txn.delete('inspection_door_errors');
+        await txn.delete('inspection_doors');
+        await txn.delete('inspections');
+        await txn.delete('doors');
+
         // 3. Populate local Inspections from the downloaded package
         for (var insp in selectedInspections) {
           final Map<String, dynamic> data = Map<String, dynamic>.from(insp);
@@ -251,20 +278,41 @@ class LocalDatabaseService {
         for (var junction in allJunctions) {
           await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
         }
-        for (var error in errorList) {
-          // Filter out columns that don't exist in the local inspection_door_errors table
-          final data = Map<String, dynamic>.from(error)
-            ..remove('code')
-            ..remove('description');
-          await txn.insert('inspection_door_errors', data, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
 
         for (var door in doorList) {
           await txn.insert('doors', door.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
-        // Populate the local catalog for offline availability
+        // FIX 1: Insert catalog BEFORE errors so we can remap errorId FKs.
+        // The Master DB and Local DB have independent AUTOINCREMENT sequences,
+        // so we must ensure the local catalog IDs are established first.
         await _batchInsertCatalog(txn, masterCatalog, ConflictAlgorithm.replace);
+
+        // Build a code → local errorId mapping for FK remapping
+        final localCatalogRows = await txn.query('error_catalog');
+        final Map<String, int> codeToLocalErrorId = {};
+        for (final row in localCatalogRows) {
+          final code = row['code'] as String? ?? '';
+          final localId = row['errorId'] as int;
+          if (code.isNotEmpty) {
+            codeToLocalErrorId[code] = localId;
+          }
+        }
+
+        for (var error in errorList) {
+          // Filter out JOIN-injected columns that don't exist in the local table
+          final data = Map<String, dynamic>.from(error)
+            ..remove('code')
+            ..remove('description');
+
+          // Remap errorId to the local catalog's ID using the errorCode natural key
+          final String errorCode = data['errorCode'] as String? ?? '';
+          if (errorCode.isNotEmpty && codeToLocalErrorId.containsKey(errorCode)) {
+            data['errorId'] = codeToLocalErrorId[errorCode];
+          }
+
+          await txn.insert('inspection_door_errors', data, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
       });
     } catch (e) {
       print('Critical error during package download: $e');
@@ -523,10 +571,15 @@ class LocalDatabaseService {
 
   static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
     final db = await getDb();
+    // FIX 2: Use LEFT JOIN with COALESCE fallbacks (matching Manager DB pattern)
+    // so that errors are always visible even if the catalog FK is broken.
     return await db.rawQuery('''
-      SELECT ide.*, ec.code, ec.description, ec.category
+      SELECT ide.*,
+             COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
+             COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description,
+             COALESCE(ec.category, '') AS category
       FROM inspection_door_errors ide
-      INNER JOIN error_catalog ec ON ide.errorId = ec.errorId
+      LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE ide.inspectionDoorId = ?
     ''', [inspectionDoorId]);
   }
@@ -562,8 +615,9 @@ class LocalDatabaseService {
     
     await db.transaction((txn) async {
       // 1. Create a provisional catalog entry
+      final String provisionalCode = 'REQ-${DateTime.now().millisecondsSinceEpoch}';
       final provisionalId = await txn.insert('error_catalog', {
-        'code': 'REQ-${DateTime.now().millisecondsSinceEpoch}',
+        'code': provisionalCode,
         'description': description,
         'category': category,
         'status': 'Pending',
@@ -577,6 +631,7 @@ class LocalDatabaseService {
       await txn.insert('inspection_door_errors', {
         'inspectionDoorId': inspectionDoorId,
         'errorId': provisionalId,
+        'errorCode': provisionalCode,
         'quantity': 1,
         'severity': severity,
         'notes': 'Vorgeschlagener Fehler durch Inspektor',
@@ -713,7 +768,7 @@ class LocalDatabaseService {
     try {
       tempDb = await openDatabase(sourcePath, readOnly: true);
       final int version = await tempDb.getVersion();
-      const int expectedVersion = 7; // Must match the version in getDb()
+      const int expectedVersion = 8; // Must match the version in getDb()
       
       if (version != expectedVersion) {
         throw Exception('Inkompatible Paketversion: Erwartet v$expectedVersion, Datei ist v$version.');

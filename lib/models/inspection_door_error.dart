@@ -2,6 +2,7 @@ class InspectionDoorError {
   final int? id;
   final int inspectionDoorId;
   final int? errorId;           // nullable: null while an ErrorRequest is pending
+  final String errorCode;       // stable natural key (e.g. 'ERR_CLOSER_01') — survives DB transfers
   final int quantity;
   final String severity;        // 'Minor' | 'Major' | 'Critical'
   final String notes;
@@ -12,6 +13,7 @@ class InspectionDoorError {
     this.id,
     required this.inspectionDoorId,
     this.errorId,
+    this.errorCode = '',
     required this.quantity,
     required this.severity,
     required this.notes,
@@ -23,6 +25,7 @@ class InspectionDoorError {
     int? id,
     int? inspectionDoorId,
     int? errorId,
+    String? errorCode,
     int? quantity,
     String? severity,
     String? notes,
@@ -33,6 +36,7 @@ class InspectionDoorError {
       id: id ?? this.id,
       inspectionDoorId: inspectionDoorId ?? this.inspectionDoorId,
       errorId: errorId ?? this.errorId,
+      errorCode: errorCode ?? this.errorCode,
       quantity: quantity ?? this.quantity,
       severity: severity ?? this.severity,
       notes: notes ?? this.notes,
@@ -45,6 +49,7 @@ class InspectionDoorError {
         if (id != null) 'id': id,
         'inspectionDoorId': inspectionDoorId,
         'errorId': errorId,
+        'errorCode': errorCode,
         'quantity': quantity,
         'severity': severity,
         'notes': notes,
@@ -57,6 +62,7 @@ class InspectionDoorError {
         id: map['id'],
         inspectionDoorId: map['inspectionDoorId'],
         errorId: map['errorId'],
+        errorCode: map['errorCode'] as String? ?? '',
         quantity: map['quantity'] ?? 1,
         severity: map['severity'] ?? 'Minor',
         notes: map['notes'] ?? '',

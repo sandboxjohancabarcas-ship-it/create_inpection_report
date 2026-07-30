@@ -9,6 +9,7 @@ import 'package:wartungstool/models/models.dart';
 void main() {
   // Initialize sqflite for local environment testing
   setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   });

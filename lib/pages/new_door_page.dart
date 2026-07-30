@@ -619,6 +619,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                               doorId: widget.door!.id!,
                               doorNumber: widget.door!.doorNumber,
                               inspectionId: currentInspectionId!,
+                              isManagerMode: widget.isManagerMode,
                             ),
                           ),
                         );

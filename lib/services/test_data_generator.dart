@@ -107,7 +107,8 @@ class TestDataGenerator {
                 await DatabaseService.insertInspectionDoorError(InspectionDoorError(
                   id: null,
                   inspectionDoorId: junctionId,
-                  errorId: randomError.errorId!, 
+                  errorId: randomError.errorId!,
+                  errorCode: randomError.code,
                   quantity: 1,
                   severity: 'medium',
                   notes: "Standard-Verschleißprüfung",

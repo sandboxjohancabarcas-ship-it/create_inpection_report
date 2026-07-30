@@ -18,7 +18,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 17, // Rollback to 16: Removed local API tracking table; 17: Added attachments to inspection_door_errors
+      version: 18, // v18: Added errorCode natural key to inspection_door_errors
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -111,6 +111,7 @@ class DatabaseService {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             inspectionDoorId INTEGER,
             errorId INTEGER,
+            errorCode TEXT NOT NULL DEFAULT '',
             quantity INTEGER,
             severity TEXT,
             notes TEXT,
@@ -184,8 +185,27 @@ class DatabaseService {
         if (oldVersion < 17) {
           try {
             await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN attachments TEXT DEFAULT ''");
+            print('[DatabaseService] Main DB upgraded to v17: attachments column added.');
           } catch (e) {
             print('Main DB migration warning (attachments): \$e');
+          }
+        }
+
+        if (oldVersion < 18) {
+          try {
+            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN errorCode TEXT NOT NULL DEFAULT ''");
+            // Backfill errorCode from error_catalog for existing rows
+            await db.execute('''
+              UPDATE inspection_door_errors
+              SET errorCode = COALESCE(
+                (SELECT code FROM error_catalog WHERE error_catalog.errorId = inspection_door_errors.errorId),
+                ''
+              )
+              WHERE errorCode IS NULL OR errorCode = ''
+            ''');
+            print('[DatabaseService] Main DB upgraded to v18: errorCode column added and backfilled.');
+          } catch (e) {
+            print('Main DB migration warning (errorCode): \$e');
           }
         }
       },
@@ -400,9 +420,11 @@ class DatabaseService {
     final db = await getDb();
     final String idString = ids.join(',');
     return await db.rawQuery('''
-      SELECT ide.*, ec.code, ec.description 
+      SELECT ide.*,
+             COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
+             COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description
       FROM inspection_door_errors ide
-      INNER JOIN error_catalog ec ON ide.errorId = ec.errorId
+      LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE ide.inspectionDoorId IN ($idString)
     ''');
   }
@@ -519,13 +541,36 @@ class DatabaseService {
         final pInspections = await packageDb.query('inspections');
         final pJunctions = await packageDb.query('inspection_doors');
         final pErrors = await packageDb.query('inspection_door_errors');
-        final pCatalog = await packageDb.query('error_catalog', where: "status = 'Pending'");
+        // Import ALL catalog entries (not just Pending) to enable errorId remapping
+        final pCatalog = await packageDb.query('error_catalog');
 
-        // 2. Merge Pending Error Catalog Proposals first (Foreign Key dependency)
+        // 2. Merge ALL Catalog Entries and build catalogIdMap (packageId → masterId)
+        //    Keyed by `code` so IDs are remapped correctly across different DBs.
+        final Map<int, int> catalogIdMap = {};
         for (var row in pCatalog) {
-          await txn.insert('error_catalog', Map<String, dynamic>.from(row)..remove('errorId'),
-              conflictAlgorithm: ConflictAlgorithm.ignore);
+          final packageCatalogId = row['errorId'] as int;
+          final code = row['code'] as String? ?? '';
+          final status = row['status'] as String? ?? 'Approved';
+          final data = Map<String, dynamic>.from(row)..remove('errorId');
+          int masterCatalogId;
+          final existing = await txn.query('error_catalog',
+              columns: ['errorId'], where: 'code = ?', whereArgs: [code], limit: 1);
+          if (existing.isNotEmpty) {
+            masterCatalogId = existing.first['errorId'] as int;
+            // Only overwrite if the incoming entry is Pending (a new proposal)
+            if (status == 'Pending') {
+              await txn.update('error_catalog', data,
+                  where: "errorId = ? AND status = 'Pending'",
+                  whereArgs: [masterCatalogId]);
+            }
+          } else {
+            masterCatalogId = await txn.insert(
+                'error_catalog', data,
+                conflictAlgorithm: ConflictAlgorithm.ignore);
+          }
+          catalogIdMap[packageCatalogId] = masterCatalogId;
         }
+
 
         // 3. Merge Doors and create ID Mapping (Package ID -> Master ID)
         Map<int, int> doorIdMap = {};
@@ -596,13 +641,50 @@ class DatabaseService {
           junctionIdMap[packageId] = masterId;
         }
 
-        // 6. Merge Errors
+        // Build reverse lookup: masterCatalogId → code for errorCode population
+        final Map<int, String> masterIdToCode = {};
+        for (final entry in catalogIdMap.entries) {
+          final masterCatId = entry.value;
+          // Look up code for this master catalog entry
+          final catRow = await txn.query('error_catalog',
+              columns: ['code'], where: 'errorId = ?', whereArgs: [masterCatId], limit: 1);
+          if (catRow.isNotEmpty) {
+            masterIdToCode[masterCatId] = catRow.first['code'] as String? ?? '';
+          }
+        }
+
+        // 6. Merge Errors — remap errorId via catalogIdMap to prevent FK mismatch
         for (var row in pErrors) {
           final mJunctionId = junctionIdMap[row['inspectionDoorId']];
           if (mJunctionId == null) continue;
 
-          final data = Map<String, dynamic>.from(row)..['inspectionDoorId'] = mJunctionId..remove('id');
-          await txn.insert('inspection_door_errors', data, conflictAlgorithm: ConflictAlgorithm.replace);
+          final packageErrorId = row['errorId'] as int?;
+          int? mappedErrorId = packageErrorId != null
+              ? catalogIdMap[packageErrorId]
+              : null;
+
+          // FIX 4: Fallback — if catalogIdMap lookup failed (e.g. due to ID mismatch
+          // from the inspector's local DB), try to resolve via errorCode natural key.
+          final String rawErrorCode = row['errorCode'] as String? ?? '';
+          if (mappedErrorId == null && rawErrorCode.isNotEmpty) {
+            final fallback = await txn.query('error_catalog',
+                columns: ['errorId'], where: 'code = ?', whereArgs: [rawErrorCode], limit: 1);
+            if (fallback.isNotEmpty) {
+              mappedErrorId = fallback.first['errorId'] as int;
+            }
+          }
+
+          final errorCode = (mappedErrorId != null ? masterIdToCode[mappedErrorId] : null)
+              ?? rawErrorCode;
+
+          final data = Map<String, dynamic>.from(row)
+            ..['inspectionDoorId'] = mJunctionId
+            ..['errorId'] = mappedErrorId
+            ..['errorCode'] = errorCode
+            ..remove('id');
+
+          await txn.insert('inspection_door_errors', data,
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } finally {

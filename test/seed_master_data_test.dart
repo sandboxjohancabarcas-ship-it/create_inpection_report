@@ -82,7 +82,8 @@ void main() {
         // 5. Link a Standard "Approved" Error (Error ID 1 usually exists from seed)
         await DatabaseService.insertInspectionDoorError(InspectionDoorError(
           inspectionDoorId: junctionId,
-          errorId: 1, 
+          errorId: 1,
+          errorCode: 'STD-001',
           quantity: 1,
           severity: 'medium',
           notes: 'Standardwartung durchgeführt.',
@@ -105,6 +106,7 @@ void main() {
         await DatabaseService.insertInspectionDoorError(InspectionDoorError(
           inspectionDoorId: junctionId,
           errorId: pendingErrorId,
+          errorCode: 'REQ-2024-$clientSuffix',
           quantity: 1,
           severity: 'high',
           notes: 'Dringende Ersatzteilbestellung erforderlich.',
