@@ -692,7 +692,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             TextButton(
               onPressed: () async {
                 final updatedError = error.copyWith(resolutionStatus: 'resolved');
-                await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                if (widget.isManagerMode) {
+                  await DatabaseService.insertInspectionDoorError(updatedError);
+                } else {
+                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                }
                 if (mounted) {
                   Navigator.pop(context);
                   _loadData();
@@ -824,9 +828,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           itemBuilder: (context, index) {
                             final error = doorErrors[index];
                             final errorCatalog = availableErrors.firstWhere(
-                              (e) => e.errorId == error.errorId,
+                              (e) => e.errorId == error.errorId || (error.errorCode.isNotEmpty && e.code == error.errorCode),
                               orElse: () => ErrorCatalog(
-                                code: 'Unbekannt',
+                                code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
                                 description: 'Fehler nicht im Katalog gefunden',
                                 category: 'Unbekannt',
                               ),
@@ -938,9 +942,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   void _showEditDialog(InspectionDoorError error) {
     // Find the error catalog entry
     final errorCatalog = availableErrors.firstWhere(
-      (e) => e.errorId == error.errorId,
+      (e) => e.errorId == error.errorId || (error.errorCode.isNotEmpty && e.code == error.errorCode),
       orElse: () => ErrorCatalog(
-        code: 'Unbekannt',
+        code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
         description: 'Fehler nicht im Katalog gefunden',
         category: 'Unbekannt',
       ),
@@ -999,7 +1003,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ElevatedButton(
             onPressed: () async {
               final updatedError = error.copyWith(resolutionStatus: status, notes: notesController.text);
-              await LocalDatabaseService.insertInspectionDoorError(updatedError);
+              if (widget.isManagerMode) {
+                await DatabaseService.insertInspectionDoorError(updatedError);
+              } else {
+                await LocalDatabaseService.insertInspectionDoorError(updatedError);
+              }
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
@@ -1027,7 +1035,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await LocalDatabaseService.deleteInspectionDoorError(error.id!);
+              if (widget.isManagerMode) {
+                await DatabaseService.deleteInspectionDoorError(error.id!);
+              } else {
+                await LocalDatabaseService.deleteInspectionDoorError(error.id!);
+              }
               if (mounted) {
                 Navigator.pop(context);
                 _loadData();
@@ -1072,7 +1084,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
       final newAttachments = currentPhotos.join(',');
 
       final updatedError = error.copyWith(attachments: newAttachments);
-      await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      if (widget.isManagerMode) {
+        await DatabaseService.insertInspectionDoorError(updatedError);
+      } else {
+        await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      }
       
       _loadData();
       
@@ -1103,7 +1119,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
       final newAttachments = currentPhotos.join(',');
 
       final updatedError = error.copyWith(attachments: newAttachments);
-      await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      if (widget.isManagerMode) {
+        await DatabaseService.insertInspectionDoorError(updatedError);
+      } else {
+        await LocalDatabaseService.insertInspectionDoorError(updatedError);
+      }
       
       _loadData();
 

@@ -208,8 +208,8 @@ class Door {
         doorFunctionOK: map['doorFunctionOK'] == 1,
       );
 
-  static String generateAlias(String customer, String address, String doorNumber) {
-    if (customer.isEmpty && address.isEmpty && doorNumber.isEmpty) {
+  static String generateAlias(String customer, String address, String doorNumber, {String floor = ''}) {
+    if (customer.isEmpty && address.isEmpty && doorNumber.isEmpty && floor.isEmpty) {
       return '';
     }
 
@@ -219,37 +219,43 @@ class Door {
 
     final cCust = clean(customer);
     final cAddr = clean(address);
+    final cFloor = clean(floor);
     final cDoor = clean(doorNumber);
 
-    // Format: CUST-ADDR-DOOR (max 12 chars).
     int targetCustLen = 3;
     int targetAddrLen = 3;
+    int targetFloorLen = cFloor.isNotEmpty ? (cFloor.length > 3 ? 3 : cFloor.length) : 0;
 
     int custLen = cCust.length < targetCustLen ? cCust.length : targetCustLen;
     int addrLen = cAddr.length < targetAddrLen ? cAddr.length : targetAddrLen;
+    int floorLen = cFloor.length < targetFloorLen ? cFloor.length : targetFloorLen;
 
-    int spaceForDoor = 12 - custLen - addrLen;
+    const int maxLen = 14;
+    int spaceForDoor = maxLen - custLen - addrLen - floorLen;
     int hyphens = 0;
     if (custLen > 0) hyphens++;
     if (addrLen > 0) hyphens++;
+    if (floorLen > 0) hyphens++;
     spaceForDoor -= hyphens;
 
-    if (spaceForDoor < 0) spaceForDoor = 0;
+    if (spaceForDoor < 1) spaceForDoor = 1;
 
     int doorLen = cDoor.length < spaceForDoor ? cDoor.length : spaceForDoor;
 
     String custPart = cCust.substring(0, custLen);
     String addrPart = cAddr.substring(0, addrLen);
-    String doorPart = cDoor.substring(cDoor.length - doorLen);
+    String floorPart = cFloor.substring(0, floorLen);
+    String doorPart = cDoor.isNotEmpty ? cDoor.substring(cDoor.length - doorLen) : '';
 
     List<String> parts = [];
     if (custPart.isNotEmpty) parts.add(custPart);
     if (addrPart.isNotEmpty) parts.add(addrPart);
+    if (floorPart.isNotEmpty) parts.add(floorPart);
     if (doorPart.isNotEmpty) parts.add(doorPart);
 
     String alias = parts.join('-');
-    if (alias.length > 12) {
-      alias = alias.substring(0, 12);
+    if (alias.length > maxLen) {
+      alias = alias.substring(0, maxLen);
     }
     return alias;
   }

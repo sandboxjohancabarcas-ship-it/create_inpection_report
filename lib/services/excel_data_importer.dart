@@ -146,8 +146,8 @@ class ExcelDataImporter {
         final fullPanicStandWing = _toBool(row[25]);
         final doorFunctionOK = _toBool(row[26]);
 
-        // Handle door alias creation
-        final alias = Door.generateAlias(meta['clientName']!, meta['objectAddress']!, doorNumber);
+        // Handle door alias creation (include floor to distinguish doors with identical numbers across floors)
+        final alias = Door.generateAlias(meta['clientName']!, meta['objectAddress']!, doorNumber, floor: floor);
 
         final door = Door(
           id: null,
@@ -221,6 +221,7 @@ class ExcelDataImporter {
               await DatabaseService.insertInspectionDoorError(InspectionDoorError(
                 inspectionDoorId: junctionId,
                 errorId: errorId,
+                errorCode: catalogItem.code,
                 quantity: qty,
                 severity: catalogItem.severity,
                 notes: 'Excel-Spalte $code',

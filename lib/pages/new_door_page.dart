@@ -97,12 +97,14 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             customerNameController.text,
             customerAddressController.text,
             doorNumberController.text,
+            floor: floorController.text,
           );
         }
       }
       customerNameController.addListener(updateAlias);
       customerAddressController.addListener(updateAlias);
       doorNumberController.addListener(updateAlias);
+      floorController.addListener(updateAlias);
     }
 
     doorAliasController.addListener(() {
@@ -110,6 +112,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         customerNameController.text,
         customerAddressController.text,
         doorNumberController.text,
+        floor: floorController.text,
       );
       if (doorAliasController.text != expected && doorAliasController.text.isNotEmpty) {
         isAliasManuallyEdited = true;
@@ -191,6 +194,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         customerNameController.text,
         customerAddressController.text,
         doorNumberController.text,
+        floor: floorController.text,
       );
     }
     return Door(

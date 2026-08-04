@@ -218,7 +218,7 @@ class DatabaseService {
 
   static Future<void> populateMissingAliases(Database db, {bool isLocal = false}) async {
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
-      SELECT d.id, d.doorNumber, i.clientName, i.objectAddress
+      SELECT d.id, d.doorNumber, d.floor, i.clientName, i.objectAddress
       FROM doors d
       LEFT JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
@@ -232,10 +232,11 @@ class DatabaseService {
     for (final row in rows) {
       final id = row['id'] as int;
       final doorNumber = row['doorNumber'] as String? ?? '0';
+      final floor = row['floor'] as String? ?? '';
       final clientName = row['clientName'] as String? ?? '';
       final objectAddress = row['objectAddress'] as String? ?? '';
       
-      String generated = Door.generateAlias(clientName, objectAddress, doorNumber);
+      String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
       if (generated.isEmpty) {
         generated = 'DOOR-$id';
       }
@@ -489,6 +490,11 @@ class DatabaseService {
     );
   }
 
+  static Future<void> deleteInspectionDoorError(int id) async {
+    final db = await getDb();
+    await db.delete('inspection_door_errors', where: 'id = ?', whereArgs: [id]);
+  }
+
   /// Load all errors recorded for a specific inspection-door record.
   static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(
       int inspectionDoorId) async {
@@ -499,6 +505,20 @@ class DatabaseService {
       whereArgs: [inspectionDoorId],
     );
     return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
+  }
+
+  /// Fetches detailed errors joined with error_catalog info for a single inspection door from Main DB.
+  static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
+    final db = await getDb();
+    return await db.rawQuery('''
+      SELECT ide.*,
+             COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
+             COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description,
+             COALESCE(ec.category, '') AS category
+      FROM inspection_door_errors ide
+      LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
+      WHERE ide.inspectionDoorId = ?
+    ''', [inspectionDoorId]);
   }
 
   static Future<void> insertErrorCatalog(ErrorCatalog error) async {
@@ -683,8 +703,40 @@ class DatabaseService {
             ..['errorCode'] = errorCode
             ..remove('id');
 
-          await txn.insert('inspection_door_errors', data,
-              conflictAlgorithm: ConflictAlgorithm.replace);
+          // Check if an error entry for this door junction and error code/ID already exists in Master DB.
+          List<Map<String, dynamic>> existingErrors = [];
+          if (errorCode.isNotEmpty) {
+            existingErrors = await txn.query(
+              'inspection_door_errors',
+              where: 'inspectionDoorId = ? AND errorCode = ?',
+              whereArgs: [mJunctionId, errorCode],
+              limit: 1,
+            );
+          }
+          if (existingErrors.isEmpty && mappedErrorId != null) {
+            existingErrors = await txn.query(
+              'inspection_door_errors',
+              where: 'inspectionDoorId = ? AND errorId = ?',
+              whereArgs: [mJunctionId, mappedErrorId],
+              limit: 1,
+            );
+          }
+
+          if (existingErrors.isNotEmpty) {
+            final existingMasterErrorId = existingErrors.first['id'] as int;
+            await txn.update(
+              'inspection_door_errors',
+              data,
+              where: 'id = ?',
+              whereArgs: [existingMasterErrorId],
+            );
+          } else {
+            await txn.insert(
+              'inspection_door_errors',
+              data,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
         }
       });
     } finally {

@@ -1,5 +1,5 @@
 # WartungsTool — Full Project Analysis
-> **Last updated:** 2026-06-29 — All pages read, owner decisions recorded.
+> **Last updated:** 2026-08-03 — Master DB v18, Local DB v8, Floor-aware aliases & Cross-DB error sync verified.
 
 ## 1. What is the App?
 
@@ -14,13 +14,13 @@ The app follows a **"Door-as-Patient" philosophy**: every physical door has a pe
 | Layer | Technology |
 |---|---|
 | Framework | Flutter (Dart) — cross-platform (Android + Windows) |
-| Local DB (Android/Inspector) | `sqflite` → `working.db` |
-| Local DB (Windows/Manager) | `sqflite_common_ffi` → `door_inspection.db` |
+| Local DB (Android/Inspector) | `sqflite` → `working.db` (v8) |
+| Local DB (Windows/Manager) | `sqflite_common_ffi` → `door_inspection.db` (v18) |
 | State Management | Stateful Widgets (no Bloc/Riverpod) |
 | Data Exchange | File-based sync (shared folder `.db` files) + KINCHI API (Strapi/Keycloak) |
 | Cloud Integration | KINCHI Process API: OIDC/Keycloak auth, Strapi v4 file uploads |
 | Export Formats | GAEB 90 (`.d83`) and GAEB DA XML 3.2 (`.x83`) |
-| Dependencies | `sqflite`, `sqflite_common_ffi`, `path`, `path_provider`, `intl`, `cupertino_icons` |
+| Dependencies | `sqflite`, `sqflite_common_ffi`, `path`, `path_provider`, `intl`, `cupertino_icons`, `spreadsheet_decoder` |
 
 ---
 
@@ -30,7 +30,7 @@ The app follows a **"Door-as-Patient" philosophy**: every physical door has a pe
 
 ```
 doors
-  id INTEGER PK, pos, doorNumber, floor, roomNumber, roomDesignation,
+  id INTEGER PK, pos, doorAlias UNIQUE, doorNumber, floor, roomNumber, roomDesignation,
   doorType, wingCount, material, manufacturer, dinConfiguration,
   closerType, closingSequenceSystem, lockDimensions,
   closerOnHingeSide BOOL, closerOnOppositeSide BOOL, lintelHeightUnder1m BOOL,
@@ -43,7 +43,7 @@ doors
 inspections
   inspectionId INTEGER PK AUTOINCREMENT,
   clientName, objectAddress, date TEXT (ISO), contactPerson,
-  inspectorName, auftragsnummer (Job Number / unique ID of the assignment)
+  inspectorName, jobNumber (Job Number / unique ID of the assignment)
   [syncStatus TEXT]
 
 inspection_doors  ← JUNCTION TABLE (door × inspection state)
@@ -64,9 +64,11 @@ error_catalog  ← master list of standardized defects
 inspection_door_errors  ← specific defect instances per door per inspection
   id PK AUTOINCREMENT,
   inspectionDoorId FK → inspection_doors.id,
-  errorId FK → error_catalog.errorId (nullable: null = provisional pending error)
+  errorId FK → error_catalog.errorId (nullable: null = provisional pending error),
+  errorCode TEXT NOT NULL DEFAULT '' (stable natural key surviving DB transfers),
   quantity INTEGER, severity TEXT, notes TEXT,
-  resolutionStatus TEXT ('Open'|'In Progress'|'Resolved')
+  resolutionStatus TEXT ('Open'|'In Progress'|'Resolved'),
+  attachments TEXT DEFAULT '' (60MB photo base64/path list)
   [syncStatus TEXT]
 ```
 
@@ -339,3 +341,25 @@ final bool isInspectorMode = Platform.isAndroid;
 
 +++++++RESPONSE++++++++
 Step 3 — Generation rule for new doors: No, the string for alias is Customer-AddressObject-DoorNumber. it should be shortened so that still meaningful. Here the philosohpy of Door//Patient can be used. The idea also is that it with the alias can be located the door easily. Step 5 — Update search indices investigate because there can be already an approach for it. Open sub-questions before implementation: 1. editable by manager.2. globally along entire system.3. already provided in step 3 in this text. Max 12 char,.
+
+---
+
+## 12. Recent Session Updates & Implemented Changes (2026-08-03)
+
+### A. Floor-Aware Door Alias & Multi-Floor Collision Resolution
+- **Floor Context Inclusion**: Updated `Door.generateAlias(customer, address, doorNumber, {String floor = ''})` to sanitize and embed floor designations (e.g. `EG`, `1OG`, `2OG`, `UG`) into door aliases up to 14 characters (e.g. `CLI-ADD-1OG-1`).
+- **Excel & PDF Importers**: Updated `excel_data_importer.dart` and `read_customer_data.dart` to pass `floor` when generating aliases during row processing.
+- **Database & UI Synchronization**: Updated `DatabaseService.populateMissingAliases()`, `test_data_generator.dart`, and `new_door_page.dart` to incorporate floor information, preventing SQLite `doorAlias` `UNIQUE` constraint collisions and data overwrites when doors on different floors share identical door numbers (e.g., Door 1 EG vs Door 1 1.OG).
+
+### B. Excel Error `errorCode` Natural Key Fix
+- **Master DB Importer Fix**: Updated `ExcelDataImporter.importFromFile()` to explicitly set `errorCode: catalogItem.code` on all created `InspectionDoorError` records saved to `DatabaseService` (Manager DB v18).
+- **Cross-Database Job Package Sync**: Fixed job package download (`LocalDatabaseService.downloadJobPackage()`) from Manager DB (`door_inspection.db`) into Inspector DB (`working.db` v8), ensuring that error catalog FK remapping via `errorCode` natural keys preserves 100% of defect codes and catalog descriptions across independent `AUTOINCREMENT` sequences.
+
+### C. Database Query Standardization & UI Resilience
+- **Detailed Query Method**: Added `DatabaseService.getDetailedErrorsForInspectionDoor(int inspectionDoorId)` featuring a `LEFT JOIN error_catalog` with `COALESCE` fallbacks, bringing Manager DB query capabilities into parity with `LocalDatabaseService`.
+- **UI Fallback Resilience**: Updated `ErrorManagementPage` catalog item resolution (`availableErrors.firstWhere`) to fall back to `errorCode` matching (`e.code == error.errorCode`) if autoincrement sequence primary keys differ across databases.
+
+### D. Automated Test Suite Verification
+- Added test coverage in `test/excel_import_test.dart` verifying multi-floor door imports, non-empty `errorCode` storage, and cross-database job package transfer to `LocalDatabaseService`.
+- All automated unit and integration tests passed with 100% success (`flutter test test/excel_import_test.dart`, `pdf_import_test.dart`, `test_data_generator_test.dart`).
+

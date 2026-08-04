@@ -99,12 +99,13 @@ class CustomerDataImporter {
 
       // Map properties based on token positions before the pivot
       // Persistent Identity: {Kunde}-{Objekt}-{DoorNumber}
+      final floorVal = tokens.length > 2 ? tokens[2] : 'EG';
       final door = Door(
         id: null,
         pos: pos,
-        doorAlias: Door.generateAlias(header['Kunde'] ?? '', header['Objekt'] ?? '', doorNum),
+        doorAlias: Door.generateAlias(header['Kunde'] ?? '', header['Objekt'] ?? '', doorNum, floor: floorVal),
         doorNumber: doorNum,
-        floor: tokens.length > 2 ? tokens[2] : 'EG',
+        floor: floorVal,
         roomNumber: '',
         roomDesignation: pivotIndex > 4 ? _sanitizeValue(tokens[4]) : 'Raum',
         doorType: trimmed.contains('T30') ? 'T30' : 'MZT',
