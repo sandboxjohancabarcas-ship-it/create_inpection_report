@@ -9,6 +9,7 @@ import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
 import '../services/kinchi_api_service.dart';
+import '../widgets/edit_inspection_dialog.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -571,9 +572,29 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                                 Text('Datum: ${job['date']}'),
                               ],
                             ),
-                            trailing: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) => toggleSelection(),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_note, color: Colors.blue),
+                                  tooltip: 'Metadaten bearbeiten',
+                                  onPressed: () async {
+                                    final updated = await EditInspectionDialog.show(
+                                      context,
+                                      inspectionId: id,
+                                      initialData: job,
+                                      isManagerMode: true,
+                                    );
+                                    if (updated == true && mounted) {
+                                      _refreshInspections();
+                                    }
+                                  },
+                                ),
+                                Checkbox(
+                                  value: isSelected,
+                                  onChanged: (_) => toggleSelection(),
+                                ),
+                              ],
                             ),
                             onTap: _isDownloading 
                                 ? null 

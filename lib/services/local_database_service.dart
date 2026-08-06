@@ -515,6 +515,30 @@ class LocalDatabaseService {
     return await db.insert('inspections', inspection, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  static Future<Map<String, dynamic>?> getInspectionById(int inspectionId) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'inspections',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return maps.first;
+  }
+
+  static Future<void> updateInspection(Map<String, dynamic> inspectionData) async {
+    final db = await getDb();
+    final id = inspectionData['inspectionId'];
+    if (id == null) return;
+    await db.update(
+      'inspections',
+      inspectionData,
+      where: 'inspectionId = ?',
+      whereArgs: [id],
+    );
+  }
+
   /// Fetches all inspections currently stored in the working database.
   static Future<List<Map<String, dynamic>>> getAllInspections() async {
     final db = await getDb();
@@ -532,6 +556,39 @@ class LocalDatabaseService {
     ''', [inspectionId]);
     return maps.map((map) => Door.fromMap(map)).toList();
   }
+
+  /// Returns a map of doorId -> DoorErrorSummary for a given inspection ID.
+  static Future<Map<int, DoorErrorSummary>> getDoorErrorSummariesForInspection(int inspectionId) async {
+    final db = await getDb();
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT 
+        id.doorId,
+        COUNT(ide.id) AS total_errors,
+        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) != 'resolved' THEN 1 ELSE 0 END) AS open_errors,
+        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) = 'resolved' THEN 1 ELSE 0 END) AS resolved_errors
+      FROM inspection_doors id
+      LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
+      WHERE id.inspectionId = ?
+      GROUP BY id.doorId
+    ''', [inspectionId]);
+
+    final Map<int, DoorErrorSummary> map = {};
+    for (final row in rows) {
+      final doorId = row['doorId'] as int?;
+      if (doorId != null) {
+        final total = (row['total_errors'] as num?)?.toInt() ?? 0;
+        final open = (row['open_errors'] as num?)?.toInt() ?? 0;
+        final resolved = (row['resolved_errors'] as num?)?.toInt() ?? 0;
+        map[doorId] = DoorErrorSummary(
+          totalErrors: total,
+          openErrors: open,
+          resolvedErrors: resolved,
+        );
+      }
+    }
+    return map;
+  }
+
 
   // ─────────────────────────────────────────────────────────────
   // INSPECTION DOORS

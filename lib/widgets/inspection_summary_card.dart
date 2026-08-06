@@ -8,6 +8,7 @@ class InspectionSummaryCard extends StatelessWidget {
   final String clientName;
   final String jobNumber;
   final String date;
+  final VoidCallback? onEdit;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool isSelected;
@@ -19,6 +20,7 @@ class InspectionSummaryCard extends StatelessWidget {
     required this.clientName,
     required this.jobNumber,
     required this.date,
+    this.onEdit,
     this.onTap,
     this.onLongPress,
     this.isSelected = false,
@@ -50,12 +52,22 @@ class InspectionSummaryCard extends StatelessWidget {
             Text('Datum: $formattedDate'),
           ],
         ),
-        trailing: onSelectionChanged != null
-            ? Checkbox(
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onEdit != null)
+              IconButton(
+                icon: const Icon(Icons.edit_note, color: Colors.blue),
+                tooltip: 'Metadaten bearbeiten',
+                onPressed: onEdit,
+              ),
+            if (onSelectionChanged != null)
+              Checkbox(
                 value: isSelected,
                 onChanged: onSelectionChanged,
-              )
-            : null,
+              ),
+          ],
+        ),
         onTap: onTap,
         onLongPress: onLongPress,
       ),

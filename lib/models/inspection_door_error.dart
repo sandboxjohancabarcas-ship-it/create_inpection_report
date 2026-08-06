@@ -70,3 +70,32 @@ class InspectionDoorError {
         attachments: map['attachments'] ?? '',
       );
 }
+
+enum DoorErrorState {
+  noErrors,
+  hasOpenErrors,
+  allErrorsResolved,
+}
+
+class DoorErrorSummary {
+  final int totalErrors;
+  final int openErrors;
+  final int resolvedErrors;
+
+  const DoorErrorSummary({
+    required this.totalErrors,
+    required this.openErrors,
+    required this.resolvedErrors,
+  });
+
+  DoorErrorState get state {
+    if (totalErrors == 0) {
+      return DoorErrorState.noErrors;
+    } else if (openErrors > 0) {
+      return DoorErrorState.hasOpenErrors;
+    } else {
+      return DoorErrorState.allErrorsResolved;
+    }
+  }
+}
+

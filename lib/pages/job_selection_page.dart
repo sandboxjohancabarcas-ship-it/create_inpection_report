@@ -11,6 +11,7 @@ import '../services/test_data_generator.dart';
 import '../models/door.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
+import '../widgets/edit_inspection_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'DoorListPage.dart'; // Import DoorListPage for navigation
 import 'manager_dashboard.dart';
@@ -617,6 +618,17 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           date: job['date'] ?? '',
                           isSelected: isSelected,
                           onSelectionChanged: (_) => toggleSelection(),
+                          onEdit: () async {
+                            final updated = await EditInspectionDialog.show(
+                              context,
+                              inspectionId: id,
+                              initialData: job,
+                              isManagerMode: true,
+                            );
+                            if (updated == true && mounted) {
+                              _refreshInspections();
+                            }
+                          },
                           onLongPress: toggleSelection,
                           onTap: _isDownloading
                               ? null

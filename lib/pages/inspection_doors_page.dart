@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
+import '../widgets/edit_inspection_dialog.dart';
 import 'new_door_page.dart';
 
 class InspectionDoorsPage extends StatefulWidget {
@@ -26,6 +27,7 @@ class InspectionDoorsPage extends StatefulWidget {
 
 class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   List<Door> _doors = [];
+  Map<int, DoorErrorSummary> _errorSummaries = {};
   bool _isLoading = true;
   final Set<int> _selectedDoorIds = {};
   bool _isSyncing = false;
@@ -39,14 +41,20 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   Future<void> _loadDoors() async {
     setState(() => _isLoading = true);
     List<Door> doors;
+    Map<int, DoorErrorSummary> errorSummaries;
     _selectedDoorIds.clear();
+
     if (widget.isManagerMode) {
       doors = await DatabaseService.getDoorsByInspectionIds([widget.inspectionId]);
+      errorSummaries = await DatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
     } else {
       doors = await LocalDatabaseService.getDoorsByInspectionId(widget.inspectionId);
+      errorSummaries = await LocalDatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
     }
+
     setState(() {
       _doors = doors;
+      _errorSummaries = errorSummaries;
       _isLoading = false;
     });
   }
@@ -103,6 +111,96 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     }
   }
 
+  Widget _buildErrorStatusBadge(DoorErrorSummary summary) {
+    Color bg;
+    Color fg;
+    IconData icon;
+    String text;
+
+    switch (summary.state) {
+      case DoorErrorState.hasOpenErrors:
+        bg = Colors.red.shade100;
+        fg = Colors.red.shade900;
+        icon = Icons.error;
+        text = summary.openErrors > 1
+            ? '${summary.openErrors} Fehler'
+            : 'Fehlerhaft';
+        break;
+      case DoorErrorState.allErrorsResolved:
+        bg = Colors.amber.shade100;
+        fg = Colors.amber.shade900;
+        icon = Icons.check_circle;
+        text = 'Fehler gelöst';
+        break;
+      case DoorErrorState.noErrors:
+        bg = Colors.green.shade100;
+        fg = Colors.green.shade900;
+        icon = Icons.check_circle_outline;
+        text = 'Keine Fehler';
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: fg.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              color: fg,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeadingIcon(DoorErrorSummary summary, bool isSelected, bool isSelectionMode, int doorId) {
+    if (isSelectionMode) {
+      return Checkbox(
+        value: isSelected,
+        onChanged: (_) => _toggleSelection(doorId),
+      );
+    }
+
+    Color iconColor;
+    Color avatarBg;
+    IconData icon;
+
+    switch (summary.state) {
+      case DoorErrorState.hasOpenErrors:
+        iconColor = Colors.red.shade700;
+        avatarBg = Colors.red.shade50;
+        icon = Icons.error;
+        break;
+      case DoorErrorState.allErrorsResolved:
+        iconColor = Colors.amber.shade800;
+        avatarBg = Colors.amber.shade50;
+        icon = Icons.check_circle;
+        break;
+      case DoorErrorState.noErrors:
+        iconColor = Colors.green.shade700;
+        avatarBg = Colors.green.shade50;
+        icon = Icons.door_front_door;
+        break;
+    }
+
+    return CircleAvatar(
+      backgroundColor: avatarBg,
+      child: Icon(icon, color: iconColor),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isSelectionMode = _selectedDoorIds.isNotEmpty;
@@ -134,7 +232,22 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               });
             },
           )
-        ] : null,
+        ] : [
+          IconButton(
+            icon: const Icon(Icons.edit_note),
+            tooltip: 'Auftrags-Metadaten bearbeiten',
+            onPressed: () async {
+              final updated = await EditInspectionDialog.show(
+                context,
+                inspectionId: widget.inspectionId,
+                isManagerMode: widget.isManagerMode,
+              );
+              if (updated == true && mounted) {
+                _loadDoors();
+              }
+            },
+          ),
+        ],
         leading: isSelectionMode ? IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => setState(() => _selectedDoorIds.clear()),
@@ -149,15 +262,24 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                   itemBuilder: (context, index) {
                     final door = _doors[index];
                     final isSelected = _selectedDoorIds.contains(door.id);
+                    final summary = _errorSummaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
 
                     return Card(
                       color: isSelected ? Colors.blue.shade50 : null,
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: ListTile(
-                        leading: isSelectionMode 
-                          ? Checkbox(value: isSelected, onChanged: (_) => _toggleSelection(door.id!))
-                          : const Icon(Icons.door_front_door, color: Colors.blue),
-                        title: Text('Tür ${door.doorNumber}'),
+                        leading: _buildLeadingIcon(summary, isSelected, isSelectionMode, door.id!),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Tür ${door.doorNumber}',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (!isSelectionMode) _buildErrorStatusBadge(summary),
+                          ],
+                        ),
                         subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
                         trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
                         onTap: () async {
@@ -220,4 +342,4 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
             ),
     );
   }
-}
+}
