@@ -149,5 +149,37 @@ void main() {
         expect(code.isNotEmpty, isTrue, reason: 'Local DB errors must retain valid errorCode natural keys');
       }
     });
+
+    test('importFromFile multi-tab Excel migrates all 4 tabs preserving 100% door relationships', () async {
+      final file = File(r'GAEB\26-14078-AB P-000331 Hammerbrookstraße 63-65, Türliste KINCHI TEST.xlsx');
+      expect(file.existsSync(), isTrue, reason: 'Multi-tab Excel test file must exist');
+
+      final result = await ExcelDataImporter.importFromFile(file);
+
+      expect(result.sheetsProcessed, equals(4), reason: 'All 4 Türlisten tabs must be processed');
+      expect(result.doorsImported, equals(284), reason: 'Total 284 door entries across 4 sheets');
+      expect(result.logs.isNotEmpty, isTrue, reason: 'Detailed migration logs should be generated');
+
+      final db = await DatabaseService.getDb();
+
+      final inspections = await db.query('inspections');
+      expect(inspections.length, equals(4), reason: 'Must produce 4 inspection records in DB');
+
+      // Verify that EVERY inspection retains valid door JOINs (no orphaned doorIds)
+      for (final insp in inspections) {
+        final inspId = insp['inspectionId'] as int;
+        
+        final linkedJunctions = await db.query('inspection_doors', where: 'inspectionId = ?', whereArgs: [inspId]);
+        expect(linkedJunctions.length, equals(71), reason: 'Each inspection must have 71 linked door junction entries');
+
+        final validDoorsCount = Sqflite.firstIntValue(await db.rawQuery('''
+          SELECT COUNT(*) FROM inspection_doors id
+          JOIN doors d ON id.doorId = d.id
+          WHERE id.inspectionId = ?
+        ''', [inspId])) ?? 0;
+
+        expect(validDoorsCount, equals(71), reason: 'Inspection ID $inspId must retain all 71 valid doors with SQL JOIN');
+      }
+    });
   });
 }

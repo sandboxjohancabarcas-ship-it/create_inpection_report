@@ -132,30 +132,52 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Excel-Import erfolgreich'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Verarbeitete Türlisten: ${importResult.sheetsProcessed}'),
-                  Text('Importierte/Aktualisierte Türen: ${importResult.doorsImported}'),
-                  Text('Zugeordnete Fehler: ${importResult.errorsLinked}'),
-                  if (importResult.warnings.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    const Text('Warnungen:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    SizedBox(
-                      height: 100,
-                      width: 300,
-                      child: ListView.builder(
-                        itemCount: importResult.warnings.length,
-                        itemBuilder: (context, idx) => Text(
-                          '- ${importResult.warnings[idx]}',
-                          style: const TextStyle(fontSize: 12, color: Colors.orange),
+              title: const Text('Excel-Import Ergebnis'),
+              content: SizedBox(
+                width: 500,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Verarbeitete Türlisten: ${importResult.sheetsProcessed}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Importierte/Aktualisierte Türen: ${importResult.doorsImported}'),
+                    Text('Zugeordnete Fehler: ${importResult.errorsLinked}'),
+                    if (importResult.warnings.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Warnungen (${importResult.warnings.length}):', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                      SizedBox(
+                        height: 80,
+                        child: ListView.builder(
+                          itemCount: importResult.warnings.length,
+                          itemBuilder: (context, idx) => Text(
+                            '- ${importResult.warnings[idx]}',
+                            style: const TextStyle(fontSize: 11, color: Colors.orange),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
+                    if (importResult.logs.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Migrations-Protokoll (${importResult.logs.length} Zeilen):', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 150,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade900,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: ListView.builder(
+                          itemCount: importResult.logs.length,
+                          itemBuilder: (context, idx) => Text(
+                            importResult.logs[idx],
+                            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.greenAccent),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
               actions: [
                 TextButton(

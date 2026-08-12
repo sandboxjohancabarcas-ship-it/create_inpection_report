@@ -31,11 +31,18 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   bool _isLoading = true;
   final Set<int> _selectedDoorIds = {};
   bool _isSyncing = false;
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadDoors();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDoors() async {
@@ -45,10 +52,16 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     _selectedDoorIds.clear();
 
     if (widget.isManagerMode) {
-      doors = await DatabaseService.getDoorsByInspectionIds([widget.inspectionId]);
+      doors = await DatabaseService.getDoorsByInspectionIds(
+        [widget.inspectionId],
+        query: _searchController.text,
+      );
       errorSummaries = await DatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
     } else {
-      doors = await LocalDatabaseService.getDoorsByInspectionId(widget.inspectionId);
+      doors = await LocalDatabaseService.getDoorsByInspectionId(
+        widget.inspectionId,
+        query: _searchController.text,
+      );
       errorSummaries = await LocalDatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
     }
 
@@ -253,56 +266,95 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           onPressed: () => setState(() => _selectedDoorIds.clear()),
         ) : null,
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _doors.isEmpty
-              ? const Center(child: Text("Keine Türen in diesem Auftrag gefunden"))
-              : ListView.builder(
-                  itemCount: _doors.length,
-                  itemBuilder: (context, index) {
-                    final door = _doors[index];
-                    final isSelected = _selectedDoorIds.contains(door.id);
-                    final summary = _errorSummaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
-
-                    return Card(
-                      color: isSelected ? Colors.blue.shade50 : null,
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: ListTile(
-                        leading: _buildLeadingIcon(summary, isSelected, isSelectionMode, door.id!),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Tür ${door.doorNumber}',
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            if (!isSelectionMode) _buildErrorStatusBadge(summary),
-                          ],
-                        ),
-                        subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
-                        trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
-                        onTap: () async {
-                          if (isSelectionMode) {
-                            _toggleSelection(door.id!);
-                          } else {
-                            await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => DoorInspectionForm(
-                                  door: door,
-                                  isManagerMode: widget.isManagerMode,
-                                ),
-                              ),
-                            );
+      body: Column(
+        children: [
+          if (!isSelectionMode)
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                decoration: InputDecoration(
+                  labelText: 'Türen durchsuchen',
+                  hintText: 'Türnummer, Raum, Bezeichnung oder Fehler...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
                             _loadDoors();
-                          }
-                        },
-                        onLongPress: () => _toggleSelection(door.id!),
-                      ),
-                    );
-                  },
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
+                onChanged: (value) => _loadDoors(),
+              ),
+            ),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _doors.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchController.text.isNotEmpty
+                              ? 'Keine Türen für "${_searchController.text}" gefunden'
+                              : 'Keine Türen in diesem Auftrag gefunden',
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _doors.length,
+                        itemBuilder: (context, index) {
+                          final door = _doors[index];
+                          final isSelected = _selectedDoorIds.contains(door.id);
+                          final summary = _errorSummaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
+
+                          return Card(
+                            color: isSelected ? Colors.blue.shade50 : null,
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: ListTile(
+                              leading: _buildLeadingIcon(summary, isSelected, isSelectionMode, door.id!),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Tür ${door.doorNumber}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  if (!isSelectionMode) _buildErrorStatusBadge(summary),
+                                ],
+                              ),
+                              subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
+                              trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
+                              onTap: () async {
+                                if (isSelectionMode) {
+                                  _toggleSelection(door.id!);
+                                } else {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => DoorInspectionForm(
+                                        door: door,
+                                        isManagerMode: widget.isManagerMode,
+                                      ),
+                                    ),
+                                  );
+                                  _loadDoors();
+                                }
+                              },
+                              onLongPress: () => _toggleSelection(door.id!),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
       bottomNavigationBar: (!isSelectionMode || widget.isManagerMode)
           ? null
           : BottomAppBar(

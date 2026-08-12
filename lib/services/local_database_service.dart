@@ -401,6 +401,26 @@ class LocalDatabaseService {
 
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
+    if (door.id == null && door.doorAlias != null && door.doorAlias!.trim().isNotEmpty) {
+      final existing = await db.query(
+        'doors',
+        columns: ['id'],
+        where: 'doorAlias = ?',
+        whereArgs: [door.doorAlias!.trim()],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        final doorToUpdate = door.copyWith(id: existingId);
+        await db.update(
+          'doors',
+          doorToUpdate.toMap(),
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
     return await db.insert(
       'doors', 
       door.toMap(), 
@@ -546,14 +566,49 @@ class LocalDatabaseService {
   }
 
   /// Returns all doors associated with a specific inspection ID in the local DB.
-  static Future<List<Door>> getDoorsByInspectionId(int inspectionId) async {
+  /// Supports optional query to search by door number, room description, room designation, error description/code/notes.
+  static Future<List<Door>> getDoorsByInspectionId(int inspectionId, {String query = ''}) async {
     final db = await getDb();
+    final cleanQuery = query.trim();
+    if (cleanQuery.isEmpty) {
+      final List<Map<String, dynamic>> maps = await db.rawQuery('''
+        SELECT d.* 
+        FROM doors d
+        INNER JOIN inspection_doors id ON d.id = id.doorId
+        WHERE id.inspectionId = ?
+        ORDER BY d.pos ASC, d.doorNumber ASC
+      ''', [inspectionId]);
+      return maps.map((map) => Door.fromMap(map)).toList();
+    }
+
+    final searchTerm = '%$cleanQuery%';
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT d.* 
+      SELECT DISTINCT d.* 
       FROM doors d
       INNER JOIN inspection_doors id ON d.id = id.doorId
+      LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
+      LEFT JOIN error_catalog ec ON (ide.errorId = ec.errorId OR (ide.errorCode IS NOT NULL AND ide.errorCode != '' AND ide.errorCode = ec.code))
       WHERE id.inspectionId = ?
-    ''', [inspectionId]);
+        AND (
+          d.doorNumber LIKE ? 
+          OR d.roomNumber LIKE ? 
+          OR d.roomDesignation LIKE ?
+          OR d.doorAlias LIKE ?
+          OR d.floor LIKE ?
+          OR id.notes LIKE ?
+          OR ide.errorCode LIKE ?
+          OR ide.notes LIKE ?
+          OR ec.code LIKE ? 
+          OR ec.description LIKE ?
+          OR ec.category LIKE ?
+        )
+      ORDER BY d.pos ASC, d.doorNumber ASC
+    ''', [
+      inspectionId,
+      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm
+    ]);
+
     return maps.map((map) => Door.fromMap(map)).toList();
   }
 
