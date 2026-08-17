@@ -272,6 +272,7 @@ class LocalDatabaseService {
           if (data.containsKey('auftragsnummer') && !data.containsKey('jobNumber')) {
             data['jobNumber'] = data['auftragsnummer'];
           }
+          data.remove('doorCount');
           await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
@@ -559,10 +560,16 @@ class LocalDatabaseService {
     );
   }
 
-  /// Fetches all inspections currently stored in the working database.
+  /// Fetches all inspections currently stored in the working database with their total door count.
   static Future<List<Map<String, dynamic>>> getAllInspections() async {
     final db = await getDb();
-    return await db.query('inspections', orderBy: 'date DESC');
+    return await db.rawQuery('''
+      SELECT i.*, COUNT(id.doorId) as doorCount
+      FROM inspections i
+      LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+      GROUP BY i.inspectionId
+      ORDER BY i.date DESC
+    ''');
   }
 
   /// Returns all doors associated with a specific inspection ID in the local DB.

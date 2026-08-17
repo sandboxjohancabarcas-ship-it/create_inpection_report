@@ -227,7 +227,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           children: [
             Text(widget.title),
             Text(
-              'ID: ${widget.inspectionId}',
+              'ID: ${widget.inspectionId} • ${_doors.length} Tür(en)',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
@@ -293,6 +293,25 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
                 onChanged: (value) => _loadDoors(),
+              ),
+            ),
+          if (!_isLoading)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _searchController.text.isNotEmpty
+                        ? 'Gefundene Türen: ${_doors.length}'
+                        : 'Türen gesamt: ${_doors.length}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                ],
               ),
             ),
           Expanded(

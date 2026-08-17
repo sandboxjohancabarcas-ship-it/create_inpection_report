@@ -21,9 +21,31 @@ void main() {
     final localPath = p.join(dbPath, 'working.db');
     final exportPath = p.join(dbPath, 'exported_working_test.db');
 
-    if (await File(masterPath).exists()) await File(masterPath).delete();
-    if (await File(localPath).exists()) await File(localPath).delete();
-    if (await File(exportPath).exists()) await File(exportPath).delete();
+    try {
+      if (await File(masterPath).exists()) await File(masterPath).delete();
+    } catch (e) {
+      final db = await DatabaseService.getDb();
+      await db.delete('inspections');
+      await db.delete('doors');
+      await db.delete('inspection_doors');
+      await db.delete('inspection_door_errors');
+      await db.delete('error_catalog');
+    }
+
+    try {
+      if (await File(localPath).exists()) await File(localPath).delete();
+    } catch (_) {
+      final db = await LocalDatabaseService.getDb();
+      await db.delete('inspections');
+      await db.delete('doors');
+      await db.delete('inspection_doors');
+      await db.delete('inspection_door_errors');
+      await db.delete('error_catalog');
+    }
+
+    try {
+      if (await File(exportPath).exists()) await File(exportPath).delete();
+    } catch (_) {}
   });
 
   tearDown(() async {

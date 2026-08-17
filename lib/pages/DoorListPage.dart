@@ -297,6 +297,7 @@ class _DoorListPageState extends State<DoorListPage> {
                   clientName: insp['clientName'] ?? 'Unbekannt',
                   jobNumber: insp['jobNumber'] ?? 'N/A',
                   date: insp['date'] ?? '',
+                  doorCount: insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null,
                   isSelected: isSelected,
                   onSelectionChanged: (value) => _toggleSelection(id),
                   onLongPress: () => _toggleSelection(id),

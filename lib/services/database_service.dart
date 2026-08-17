@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/models/door_conflict.dart';
+import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -333,9 +335,11 @@ class DatabaseService {
 
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
     final db = await getDb();
+    final data = Map<String, dynamic>.from(inspectionData);
+    data.remove('doorCount');
     return await db.insert(
       'inspections',
-      inspectionData,
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -365,16 +369,23 @@ class DatabaseService {
   }
 
   /// Searches inspections by client name, job number, date, or door number.
-  /// Limits results to 50 jobs for performance.
+  /// Includes doorCount and limits results to 50 jobs for performance.
   static Future<List<Map<String, dynamic>>> searchInspections(String query) async {
     final db = await getDb();
     if (query.trim().isEmpty) {
-      return await db.query('inspections', orderBy: 'date DESC', limit: 50);
+      return await db.rawQuery('''
+        SELECT i.*, COUNT(id.doorId) as doorCount
+        FROM inspections i
+        LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+        GROUP BY i.inspectionId
+        ORDER BY i.date DESC
+        LIMIT 50
+      ''');
     }
 
     final searchTerm = '%$query%';
     return await db.rawQuery('''
-      SELECT DISTINCT i.* FROM inspections i
+      SELECT i.*, COUNT(DISTINCT id.doorId) as doorCount FROM inspections i
       LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
       LEFT JOIN doors d ON id.doorId = d.id
       WHERE i.clientName LIKE ? 
@@ -382,6 +393,7 @@ class DatabaseService {
          OR i.date LIKE ? 
          OR i.objectAddress LIKE ? 
          OR d.doorNumber LIKE ?
+      GROUP BY i.inspectionId
       ORDER BY i.date DESC
       LIMIT 50
     ''', [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
@@ -1081,4 +1093,174 @@ class DatabaseService {
     }
     return results;
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // DOOR MERGE & CONFLICT RESOLUTION
+  // Mirrors mergeErrorCatalog / applyConflictResolutions pattern.
+  // ─────────────────────────────────────────────────────────────
+
+  /// Analyses [incomingDoors] against the Master DB.
+  /// Doors that are genuinely new or identical to existing records are
+  /// written directly and included in [DoorMergeResult.cleanDoors].
+  /// Doors that differ from existing records produce [DoorConflict] entries
+  /// and are NOT written — the Manager resolves them via [DoorConflictReviewPage].
+  static Future<DoorMergeResult> mergeDoors(
+    List<Door> incomingDoors, {
+    String jobNumber = '',
+    bool validateLogic = true,
+  }) async {
+    final db = await getDb();
+    final cleanDoors = <Door>[];
+    final conflicts = <DoorConflict>[];
+
+    for (final incoming in incomingDoors) {
+      // Step 1 — Internal logical validation (V01–V13), zero DB calls
+      if (validateLogic) {
+        final issues = DoorValidator.validateDoor(incoming);
+        final criticalOrError = issues
+            .where((i) =>
+                i.severity == ValidationSeverity.critical ||
+                i.severity == ValidationSeverity.error)
+            .toList();
+        if (criticalOrError.isNotEmpty) {
+          conflicts.addAll(
+              DoorValidator.issuesAsConflicts(incoming, criticalOrError));
+          // Don't abort — continue checking other doors, but this door goes
+          // to conflict review instead of clean insert.
+          continue;
+        }
+      }
+
+      // Step 2 — Check for existing record by doorAlias (the "Patient ID")
+      final alias = incoming.doorAlias?.trim();
+      if (alias == null || alias.isEmpty) {
+        // No alias → treat as new door, write directly
+        final id = await db.insert(
+          'doors',
+          incoming.toMap()..remove('id'),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        cleanDoors.add(incoming.copyWith(id: id));
+        continue;
+      }
+
+      final existingRows = await db.query(
+        'doors',
+        where: 'doorAlias = ?',
+        whereArgs: [alias],
+        limit: 1,
+      );
+
+      if (existingRows.isEmpty) {
+        // Genuinely new door — check alias collision by doorNumber on same floor
+        // to catch identity collisions before inserting.
+        final numberCollision = await db.query(
+          'doors',
+          where: 'doorNumber = ? AND floor = ? AND doorAlias != ?',
+          whereArgs: [incoming.doorNumber, incoming.floor, alias],
+          limit: 1,
+        );
+        if (numberCollision.isNotEmpty) {
+          final collidingExisting = Door.fromMap(numberCollision.first);
+          conflicts.add(DoorConflict(
+            existingDoor: collidingExisting,
+            incomingDoor: incoming,
+            type: DoorConflictType.identityCollision,
+            fieldName: 'doorAlias',
+            fieldLabel: 'Tür-Alias / Türnummer',
+            existingValue: collidingExisting.doorAlias ?? collidingExisting.doorNumber,
+            incomingValue: alias,
+            ruleCode: 'IDENTITY',
+            message:
+                'Türnummer "${incoming.doorNumber}" auf Geschoss "${incoming.floor}" existiert bereits '
+                'mit einem anderen Alias (${collidingExisting.doorAlias}). '
+                'Bitte prüfen, ob dies dieselbe physische Tür ist.',
+            resolution: DoorResolutionAction.keepExisting,
+          ));
+          cleanDoors.add(incoming.copyWith(id: collidingExisting.id));
+          continue;
+        }
+
+        // Safe to insert
+        final id = await db.insert(
+          'doors',
+          incoming.toMap()..remove('id'),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        cleanDoors.add(incoming.copyWith(id: id));
+        continue;
+      }
+
+      // Step 3 — Record exists: compare field by field
+      final existingDoor = Door.fromMap(existingRows.first);
+      final fieldConflicts = DoorValidator.detectConflicts(incoming, existingDoor);
+
+      if (fieldConflicts.isEmpty) {
+        // Identical or trivially different — update without review
+        await db.update(
+          'doors',
+          incoming.toMap()..remove('id'),
+          where: 'doorAlias = ?',
+          whereArgs: [alias],
+        );
+        cleanDoors.add(existingDoor);
+      } else {
+        // Has conflicts → queue for Manager review, do NOT write yet
+        conflicts.addAll(fieldConflicts);
+        // Since the door already exists in the database under this alias,
+        // we can still link the current inspection/junction to it.
+        // Therefore, we include it in cleanDoors so that junctions and errors can be linked.
+        cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+      }
+    }
+
+    return DoorMergeResult(cleanDoors: cleanDoors, conflicts: conflicts);
+  }
+
+  /// Applies the Manager's conflict resolutions from [DoorConflictReviewPage]
+  /// in a single atomic DB transaction.
+  static Future<void> applyDoorConflictResolutions(
+      List<DoorConflict> conflicts) async {
+    final db = await getDb();
+    await db.transaction((txn) async {
+      for (final conflict in conflicts) {
+        switch (conflict.resolution) {
+          case DoorResolutionAction.keepExisting:
+          case DoorResolutionAction.skip:
+            // Nothing to write
+            break;
+
+          case DoorResolutionAction.acceptIncoming:
+            if (conflict.type == DoorConflictType.logicalViolation) break;
+            // Overwrite the existing record with incoming data
+            final alias = conflict.incomingDoor.doorAlias?.trim();
+            if (alias != null && alias.isNotEmpty) {
+              await txn.update(
+                'doors',
+                conflict.incomingDoor.toMap()..remove('id'),
+                where: 'doorAlias = ?',
+                whereArgs: [alias],
+              );
+            }
+            break;
+
+          case DoorResolutionAction.keepBoth:
+            // Identity collision: save incoming under a new alias chosen by Manager
+            final newAlias = conflict.newAlias?.trim();
+            if (newAlias != null && newAlias.isNotEmpty) {
+              final newDoorMap = conflict.incomingDoor.toMap()
+                ..remove('id')
+                ..['doorAlias'] = newAlias;
+              await txn.insert(
+                'doors',
+                newDoorMap,
+                conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+            }
+            break;
+        }
+      }
+    });
+  }
 }
+

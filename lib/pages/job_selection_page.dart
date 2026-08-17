@@ -616,6 +616,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           clientName: job['clientName'] ?? 'Unbekannter Kunde',
                           jobNumber: job['jobNumber'] ?? 'N/A',
                           date: job['date'] ?? '',
+                          doorCount: job['doorCount'] != null ? (job['doorCount'] as num).toInt() : null,
                           isSelected: isSelected,
                           onSelectionChanged: (_) => toggleSelection(),
                           onEdit: () async {

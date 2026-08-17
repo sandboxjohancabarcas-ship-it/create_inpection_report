@@ -5,6 +5,7 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
+import 'door_conflict_review_page.dart';
 import 'package:wartungstool/pages/read_customer_data.dart';
 import 'package:wartungstool/services/excel_data_importer.dart';
 import 'package:file_picker/file_picker.dart';
@@ -129,6 +130,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         final excelFile = File(result.files.single.path!);
         final importResult = await ExcelDataImporter.importFromFile(excelFile);
         if (mounted) {
+          if (importResult.doorConflicts.isNotEmpty) {
+            // Push to the new conflict resolution screen
+            await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => DoorConflictReviewPage(conflicts: importResult.doorConflicts),
+              ),
+            );
+          }
+
           showDialog(
             context: context,
             builder: (context) => AlertDialog(

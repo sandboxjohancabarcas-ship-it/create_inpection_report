@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class ExcelImportResult {
@@ -9,6 +10,9 @@ class ExcelImportResult {
   final int errorsLinked;
   final List<String> warnings;
   final List<String> logs;
+  /// Doors that had conflicts and were NOT written to DB yet.
+  /// Route the Manager to DoorConflictReviewPage when this is non-empty.
+  final List<DoorConflict> doorConflicts;
 
   ExcelImportResult({
     required this.sheetsProcessed,
@@ -16,6 +20,7 @@ class ExcelImportResult {
     required this.errorsLinked,
     required this.warnings,
     this.logs = const [],
+    this.doorConflicts = const [],
   });
 }
 
@@ -24,6 +29,7 @@ class ExcelDataImporter {
   static Future<ExcelImportResult> importFromFile(File excelFile) async {
     final logs = <String>[];
     final warnings = <String>[];
+    final allDoorConflicts = <DoorConflict>[];
 
     logs.add('Starte Excel-Import für Datei: ${excelFile.path}');
 
@@ -146,6 +152,10 @@ class ExcelDataImporter {
       int sheetDoorsCount = 0;
       int sheetErrorsCount = 0;
 
+      // ── Collect all doors from this sheet first, then batch-merge ────────
+      final sheetDoors = <Door>[];
+      final sheetDoorRows = <int, List<dynamic>>{}; // doorIndex -> raw row for error linking
+
       // Process Door data rows (Row 3 onwards)
       for (int r = 3; r < sheet.maxRows; r++) {
         final row = sheet.rows[r];
@@ -217,7 +227,45 @@ class ExcelDataImporter {
           doorFunctionOK: doorFunctionOK,
         );
 
-        final doorId = await DatabaseService.insertDoor(door);
+        sheetDoors.add(door);
+        sheetDoorRows[sheetDoors.length - 1] = row;
+      }
+
+      // ── Run conflict-aware merge for all doors in this sheet ─────────────
+      final mergeResult = await DatabaseService.mergeDoors(
+        sheetDoors,
+        jobNumber: meta['jobNumber'] ?? '',
+      );
+
+      if (mergeResult.hasConflicts) {
+        allDoorConflicts.addAll(mergeResult.conflicts);
+        logs.add('KONFLIKTE: ${mergeResult.conflicts.length} Türkonflikte in "$sheetName" '
+            '(${mergeResult.identityCount} Identität, ${mergeResult.safetyCount} Sicherheit, '
+            '${mergeResult.technicalCount} Technisch, ${mergeResult.logicalCount} Logisch) '
+            '— diese Türen wurden NICHT importiert und warten auf Freigabe.');
+      }
+
+      // Build a set of aliases that were written cleanly (for error linking)
+      final cleanAliasSet = mergeResult.cleanDoors
+          .map((d) => d.doorAlias?.trim() ?? '')
+          .where((a) => a.isNotEmpty)
+          .toSet();
+
+      // ── Link errors only for cleanly imported doors ──────────────────────
+      for (int di = 0; di < sheetDoors.length; di++) {
+        final door = sheetDoors[di];
+        final alias = door.doorAlias?.trim() ?? '';
+        if (!cleanAliasSet.contains(alias)) continue; // skip conflicted doors
+
+        // Resolve the actual DB id for this door
+        final inserted = mergeResult.cleanDoors
+            .firstWhere((d) => (d.doorAlias?.trim() ?? '') == alias,
+                orElse: () => door);
+        final doorId = inserted.id;
+        if (doorId == null) continue;
+
+        final doorFunctionOK = door.doorFunctionOK;
+        final row = sheetDoorRows[di] ?? [];
 
         // Notes column is Col 37 (AL)
         String notes = 'Importiert aus Excel';
@@ -270,10 +318,10 @@ class ExcelDataImporter {
         }
       }
 
-      logs.add('Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen verarbeitet, $sheetErrorsCount Mängel verknüpft.');
+      logs.add('Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen importiert, $sheetErrorsCount Mängel verknüpft.');
     }
 
-    logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen.');
+    logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte zur Überprüfung.');
 
     return ExcelImportResult(
       sheetsProcessed: sheetsProcessed,
@@ -281,6 +329,7 @@ class ExcelDataImporter {
       errorsLinked: totalErrorsLinked,
       warnings: warnings,
       logs: logs,
+      doorConflicts: allDoorConflicts,
     );
   }
 
