@@ -174,6 +174,14 @@ class ExcelDataImporter {
       return dateB.compareTo(dateA);
     });
 
+    String? canonicalClient;
+    String? canonicalAddress;
+    if (doorSheetsToProcess.isNotEmpty) {
+      final firstMeta = doorSheetsToProcess.first['meta'] as Map<String, String>;
+      canonicalClient = firstMeta['clientName'];
+      canonicalAddress = firstMeta['objectAddress'];
+    }
+
     logs.add('Reihenfolge der verarbeiteten Blätter (neueste zuerst): ' + 
       doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', '));
 
@@ -182,6 +190,12 @@ class ExcelDataImporter {
       final sheet = dsInfo['sheet'];
       final Map<String, String> meta = Map<String, String>.from(dsInfo['meta'] as Map);
       meta['projectNumber'] = projectNumber;
+      if (canonicalClient != null && canonicalClient.isNotEmpty) {
+        meta['clientName'] = canonicalClient;
+      }
+      if (canonicalAddress != null && canonicalAddress.isNotEmpty) {
+        meta['objectAddress'] = canonicalAddress;
+      }
 
       logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
       logs.add('Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}", Projektnummer="${meta['projectNumber']}"');
