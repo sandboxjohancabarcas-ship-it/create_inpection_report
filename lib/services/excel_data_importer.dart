@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/models/door_conflict.dart';
@@ -13,6 +14,8 @@ class ExcelImportResult {
   /// Doors that had conflicts and were NOT written to DB yet.
   /// Route the Manager to DoorConflictReviewPage when this is non-empty.
   final List<DoorConflict> doorConflicts;
+  /// Catalog conflicts found during Fehlerübersicht processing.
+  final List<ImportConflict> catalogConflicts;
 
   ExcelImportResult({
     required this.sheetsProcessed,
@@ -21,17 +24,26 @@ class ExcelImportResult {
     required this.warnings,
     this.logs = const [],
     this.doorConflicts = const [],
+    this.catalogConflicts = const [],
   });
 }
 
 class ExcelDataImporter {
   /// Main entry point: parses the Excel file and imports its door inspection history
-  static Future<ExcelImportResult> importFromFile(File excelFile) async {
+  static Future<ExcelImportResult> importFromFile(
+    File excelFile, {
+    List<ConflictResolution>? resolutions,
+  }) async {
     final logs = <String>[];
     final warnings = <String>[];
     final allDoorConflicts = <DoorConflict>[];
 
     logs.add('Starte Excel-Import für Datei: ${excelFile.path}');
+
+    final String fileName = p.basename(excelFile.path);
+    final RegExp projRegExp = RegExp(r'(P-\d+)', caseSensitive: false);
+    final RegExpMatch? projMatch = projRegExp.firstMatch(fileName);
+    final String projectNumber = projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
 
     final List<int> bytes = await excelFile.readAsBytes();
     final decoder = SpreadsheetDecoder.decodeBytes(bytes);
@@ -41,48 +53,79 @@ class ExcelDataImporter {
 
     // 1. Process Fehlerübersicht and populate error_catalog
     final fehlerSheet = decoder.tables['Fehlerübersicht'];
-    if (fehlerSheet == null) {
-      final msg = 'Das Arbeitsblatt "Fehlerübersicht" fehlt in der Excel-Datei.';
-      logs.add('FEHLER: $msg');
-      throw Exception(msg);
-    }
+    final Map<String, String> resolvedCodes = {};
+    final Set<String> skippedCodes = {};
 
-    int catalogInserted = 0;
-    for (int r = 1; r < fehlerSheet.maxRows; r++) {
-      final row = fehlerSheet.rows[r];
-      if (row.length > 2) {
-        final codeVal = row[1];
-        final descVal = row[2];
-        if (codeVal != null && descVal != null) {
-          final code = codeVal.toString().trim();
-          final desc = descVal.toString().trim();
-          if (code.isNotEmpty && desc.isNotEmpty) {
-            final isNotice = code.startsWith('0.');
-            final cat = isNotice ? 'Hinweis' : 'Mangel';
-            final sev = isNotice ? 'low' : 'medium';
-            
-            await DatabaseService.insertErrorCatalog(ErrorCatalog(
-              code: code,
-              description: desc,
-              category: cat,
-              severity: sev,
-              status: 'Approved',
-            ));
-            catalogInserted++;
+    if (fehlerSheet == null) {
+      final msg = 'Das Arbeitsblatt "Fehlerübersicht" fehlt in der Excel-Datei. Verwende bestehenden Fehlerkatalog.';
+      warnings.add(msg);
+      logs.add('WARNUNG: $msg');
+    } else {
+      final List<ErrorCatalog> parsedCatalogErrors = [];
+      for (int r = 1; r < fehlerSheet.maxRows; r++) {
+        final row = fehlerSheet.rows[r];
+        if (row.length > 2) {
+          final codeVal = row[1];
+          final descVal = row[2];
+          if (codeVal != null && descVal != null) {
+            final code = codeVal.toString().trim();
+            final desc = descVal.toString().trim();
+            if (code.isNotEmpty && desc.isNotEmpty) {
+              final isNotice = code.startsWith('0.');
+              final cat = isNotice ? 'Hinweis' : 'Mangel';
+              final sev = isNotice ? 'low' : 'medium';
+              
+              parsedCatalogErrors.add(ErrorCatalog(
+                code: code,
+                description: desc,
+                category: cat,
+                severity: sev,
+                status: 'Approved',
+              ));
+            }
           }
         }
       }
+
+      // Build the resolved codes and skipped codes map/set
+      if (resolutions != null) {
+        for (final res in resolutions) {
+          if (res.action == ResolutionAction.skip) {
+            skippedCodes.add(res.conflict.code);
+          } else if (res.action == ResolutionAction.addAsNew && res.newCode != null) {
+            resolvedCodes[res.conflict.code] = res.newCode!;
+          }
+        }
+      }
+
+      // Merge error catalog
+      if (resolutions == null) {
+        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors);
+        if (mergeResult.conflicts.isNotEmpty) {
+          logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} Konflikte.');
+          return ExcelImportResult(
+            sheetsProcessed: 0,
+            doorsImported: 0,
+            errorsLinked: 0,
+            warnings: [],
+            logs: logs,
+            catalogConflicts: mergeResult.conflicts,
+          );
+        }
+        logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge importiert, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
+      } else {
+        logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
+      }
     }
-    logs.add('Fehlerkatalog verarbeitet: $catalogInserted Einträge importiert/aktualisiert.');
 
     // Refresh memory catalog list
     final catalog = await DatabaseService.getAllErrorCatalog();
-
     int sheetsProcessed = 0;
     int totalDoorsImported = 0;
     int totalErrorsLinked = 0;
 
-    // 2. Locate and process Türlisten sheets
+    // 2. Locate and pre-parse dates of Türlisten sheets, then sort them newest-first
+    final List<Map<String, dynamic>> doorSheetsToProcess = [];
     for (var sheetName in decoder.tables.keys) {
       final lowerName = sheetName.trim().toLowerCase();
       final isDoorSheet = lowerName.startsWith('türlisten') || 
@@ -94,10 +137,8 @@ class ExcelDataImporter {
         logs.add('Arbeitsblatt "$sheetName" übersprungen (kein Türlisten-Format).');
         continue;
       }
-      
-      final sheet = decoder.tables[sheetName]!;
-      logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
 
+      final sheet = decoder.tables[sheetName]!;
       if (sheet.maxRows < 4) {
         final warn = 'Arbeitsblatt "$sheetName" hat nicht genügend Zeilen (${sheet.maxRows} < 4).';
         warnings.add(warn);
@@ -115,7 +156,35 @@ class ExcelDataImporter {
 
       final metadataText = row0[0].toString();
       final meta = _parseMetadata(metadataText);
-      logs.add('Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}"');
+      final String dateStr = meta['date'] ?? '';
+      final DateTime sheetDate = DateTime.tryParse(dateStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+      doorSheetsToProcess.add({
+        'sheetName': sheetName,
+        'sheet': sheet,
+        'meta': meta,
+        'date': sheetDate,
+      });
+    }
+
+    // Sort sheets chronologically: newest-first (descending order of date)
+    doorSheetsToProcess.sort((a, b) {
+      final DateTime dateA = a['date'] as DateTime;
+      final DateTime dateB = b['date'] as DateTime;
+      return dateB.compareTo(dateA);
+    });
+
+    logs.add('Reihenfolge der verarbeiteten Blätter (neueste zuerst): ' + 
+      doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', '));
+
+    for (final dsInfo in doorSheetsToProcess) {
+      final String sheetName = dsInfo['sheetName'] as String;
+      final sheet = dsInfo['sheet'];
+      final Map<String, String> meta = Map<String, String>.from(dsInfo['meta'] as Map);
+      meta['projectNumber'] = projectNumber;
+
+      logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
+      logs.add('Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}", Projektnummer="${meta['projectNumber']}"');
 
       // Create the Inspection record
       final inspectionId = await DatabaseService.insertInspection(meta);
@@ -235,6 +304,8 @@ class ExcelDataImporter {
       final mergeResult = await DatabaseService.mergeDoors(
         sheetDoors,
         jobNumber: meta['jobNumber'] ?? '',
+        sourceContext: 'Blatt: "$sheetName" (Datei: ${excelFile.path})',
+        currentInspectionDate: meta['date'] ?? '',
       );
 
       if (mergeResult.hasConflicts) {
@@ -287,17 +358,26 @@ class ExcelDataImporter {
           final cIndex = entry.key;
           final code = entry.value;
 
+          // If code was skipped in catalog resolution, ignore it
+          if (skippedCodes.contains(code)) continue;
+
+          // Map code based on catalog resolution
+          final targetCode = resolvedCodes[code] ?? code;
+
           if (cIndex < row.length && row[cIndex] != null) {
             final qty = _toInt(row[cIndex]);
             if (qty > 0) {
-              // Find in catalog
-              final catalogItem = catalog.firstWhere((e) => e.code == code, orElse: () => ErrorCatalog(code: code, description: 'Excel-Fehler $code', category: 'Allgemein'));
+              // Find in catalog using the mapped targetCode
+              final catalogItem = catalog.firstWhere(
+                (e) => e.code == targetCode,
+                orElse: () => ErrorCatalog(code: targetCode, description: 'Excel-Fehler $targetCode', category: 'Allgemein'),
+              );
               
               // If it's a fallback item not in catalog, insert it
               int errorId;
               if (catalogItem.errorId == null) {
                 await DatabaseService.insertErrorCatalog(catalogItem);
-                final newlyInserted = await DatabaseService.searchErrorCatalog(code);
+                final newlyInserted = await DatabaseService.searchErrorCatalog(targetCode);
                 errorId = newlyInserted.first.errorId!;
               } else {
                 errorId = catalogItem.errorId!;
@@ -323,6 +403,32 @@ class ExcelDataImporter {
 
     logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte zur Überprüfung.');
 
+    // Write full logs to migration_protocol.log in project root
+    try {
+      final logFile = File('migration_protocol.log');
+      final StringBuffer sb = StringBuffer();
+      sb.writeln('======================================================================');
+      sb.writeln('MIGRATION PROTOCOL - IMPORT FROM: ${excelFile.path}');
+      sb.writeln('Date of Migration: ${DateTime.now()}');
+      sb.writeln('======================================================================');
+      sb.writeln('SUMMARY:');
+      sb.writeln('  - Sheets Processed: $sheetsProcessed');
+      sb.writeln('  - Doors Imported: $totalDoorsImported');
+      sb.writeln('  - Errors Linked: $totalErrorsLinked');
+      sb.writeln('  - Warnings: ${warnings.length}');
+      sb.writeln('----------------------------------------------------------------------');
+      sb.writeln('MIGRATION LOGS:');
+      for (final logLine in logs) {
+        sb.writeln('  $logLine');
+      }
+      sb.writeln('======================================================================\n');
+      
+      await logFile.writeAsString(sb.toString(), mode: FileMode.append, flush: true);
+      print('Migration protocol written to: ${logFile.absolute.path}');
+    } catch (e) {
+      print('Failed to write migration protocol log file: $e');
+    }
+
     return ExcelImportResult(
       sheetsProcessed: sheetsProcessed,
       doorsImported: totalDoorsImported,
@@ -330,6 +436,7 @@ class ExcelDataImporter {
       warnings: warnings,
       logs: logs,
       doorConflicts: allDoorConflicts,
+      catalogConflicts: const [],
     );
   }
 
@@ -384,7 +491,14 @@ class ExcelDataImporter {
 
   static bool _toBool(dynamic val) {
     if (val == null) return false;
+    if (val is bool) return val;
     final str = val.toString().trim().toLowerCase();
-    return str == 'x' || str == 'j' || str == 'ja' || str == '1' || str == 'true';
+    if (str.isEmpty) return false;
+    if (str == 'x' || str == 'j' || str == 'ja' || str == 'true') return true;
+    final numVal = double.tryParse(str);
+    if (numVal != null) {
+      return numVal > 0;
+    }
+    return false;
   }
 }

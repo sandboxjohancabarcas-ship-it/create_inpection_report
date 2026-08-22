@@ -7,6 +7,7 @@ class InspectionSummaryCard extends StatelessWidget {
   final int inspectionId;
   final String clientName;
   final String jobNumber;
+  final String? projectNumber;
   final String date;
   final int? doorCount;
   final VoidCallback? onEdit;
@@ -20,6 +21,7 @@ class InspectionSummaryCard extends StatelessWidget {
     required this.inspectionId,
     required this.clientName,
     required this.jobNumber,
+    this.projectNumber,
     required this.date,
     this.doorCount,
     this.onEdit,
@@ -50,7 +52,9 @@ class InspectionSummaryCard extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Projekt: $jobNumber'),
+            Text('Auftrag: $jobNumber'),
+            if (projectNumber != null && projectNumber!.isNotEmpty)
+              Text('Projekt: $projectNumber'),
             Text('Datum: $formattedDate'),
             if (doorCount != null) Text('Türen gesamt: $doorCount'),
           ],

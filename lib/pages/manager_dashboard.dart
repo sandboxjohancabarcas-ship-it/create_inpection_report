@@ -6,6 +6,7 @@ import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
 import 'door_conflict_review_page.dart';
+import 'conflict_review_page.dart';
 import 'package:wartungstool/pages/read_customer_data.dart';
 import 'package:wartungstool/services/excel_data_importer.dart';
 import 'package:file_picker/file_picker.dart';
@@ -128,8 +129,36 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       setState(() => isLoading = true);
       try {
         final excelFile = File(result.files.single.path!);
-        final importResult = await ExcelDataImporter.importFromFile(excelFile);
+        var importResult = await ExcelDataImporter.importFromFile(excelFile);
+
         if (mounted) {
+          // Stage 1: Handle Catalog Conflicts if any
+          if (importResult.catalogConflicts.isNotEmpty) {
+            setState(() => isLoading = false);
+            final resolutions = await Navigator.push<List<ConflictResolution>?>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ConflictReviewPage(conflicts: importResult.catalogConflicts),
+              ),
+            );
+
+            if (resolutions == null) {
+              // User cancelled conflict resolution, abort import
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Import abgebrochen (Katalogkonflikte nicht gelöst)'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              return;
+            }
+
+            // Resume import passing resolutions
+            setState(() => isLoading = true);
+            importResult = await ExcelDataImporter.importFromFile(excelFile, resolutions: resolutions);
+          }
+
+          // Stage 2: Handle Door Conflicts if any
           if (importResult.doorConflicts.isNotEmpty) {
             // Push to the new conflict resolution screen
             await Navigator.push<bool>(

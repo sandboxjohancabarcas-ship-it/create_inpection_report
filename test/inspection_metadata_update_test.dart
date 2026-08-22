@@ -19,12 +19,14 @@ void main() {
         'contactPerson': 'Herr Alt',
         'inspectorName': 'Prüfer 1',
         'jobNumber': 'JOB-100',
+        'projectNumber': 'P-000100',
       });
 
       final initial = await DatabaseService.getInspectionById(inspectionId);
       expect(initial, isNotNull);
       expect(initial!['clientName'], equals('Kunde Alt'));
       expect(initial['jobNumber'], equals('JOB-100'));
+      expect(initial['projectNumber'], equals('P-000100'));
 
       // Update metadata at once
       await DatabaseService.updateInspection({
@@ -35,6 +37,7 @@ void main() {
         'contactPerson': 'Frau Neu',
         'inspectorName': 'Prüfer 2',
         'jobNumber': 'JOB-200',
+        'projectNumber': 'P-000200',
       });
 
       final updated = await DatabaseService.getInspectionById(inspectionId);
@@ -44,6 +47,7 @@ void main() {
       expect(updated['jobNumber'], equals('JOB-200'));
       expect(updated['contactPerson'], equals('Frau Neu'));
       expect(updated['inspectorName'], equals('Prüfer 2'));
+      expect(updated['projectNumber'], equals('P-000200'));
     });
 
     test('Local DB updateInspection modifies all metadata fields at once', () async {
@@ -54,11 +58,13 @@ void main() {
         'contactPerson': 'Herr Alt',
         'inspectorName': 'Prüfer Local 1',
         'jobNumber': 'LJOB-100',
+        'projectNumber': 'P-000100',
       });
 
       final initial = await LocalDatabaseService.getInspectionById(inspectionId);
       expect(initial, isNotNull);
       expect(initial!['clientName'], equals('Local Kunde Alt'));
+      expect(initial['projectNumber'], equals('P-000100'));
 
       // Update metadata at once
       await LocalDatabaseService.updateInspection({
@@ -69,6 +75,7 @@ void main() {
         'contactPerson': 'Frau Local Neu',
         'inspectorName': 'Prüfer Local 2',
         'jobNumber': 'LJOB-200',
+        'projectNumber': 'P-000200',
       });
 
       final updated = await LocalDatabaseService.getInspectionById(inspectionId);
@@ -76,6 +83,7 @@ void main() {
       expect(updated!['clientName'], equals('Local Kunde Neu'));
       expect(updated['objectAddress'], equals('Local Neu 99'));
       expect(updated['jobNumber'], equals('LJOB-200'));
+      expect(updated['projectNumber'], equals('P-000200'));
     });
   });
 }

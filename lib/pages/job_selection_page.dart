@@ -615,6 +615,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           inspectionId: id,
                           clientName: job['clientName'] ?? 'Unbekannter Kunde',
                           jobNumber: job['jobNumber'] ?? 'N/A',
+                          projectNumber: job['projectNumber']?.toString() ?? '',
                           date: job['date'] ?? '',
                           doorCount: job['doorCount'] != null ? (job['doorCount'] as num).toInt() : null,
                           isSelected: isSelected,

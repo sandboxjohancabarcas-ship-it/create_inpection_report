@@ -296,6 +296,7 @@ class _DoorListPageState extends State<DoorListPage> {
                   inspectionId: id,
                   clientName: insp['clientName'] ?? 'Unbekannt',
                   jobNumber: insp['jobNumber'] ?? 'N/A',
+                  projectNumber: insp['projectNumber']?.toString() ?? '',
                   date: insp['date'] ?? '',
                   doorCount: insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null,
                   isSelected: isSelected,

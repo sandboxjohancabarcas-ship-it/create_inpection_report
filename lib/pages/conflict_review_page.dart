@@ -383,7 +383,7 @@ class _ConflictReviewPageState extends State<ConflictReviewPage> {
         ),
       );
 
-      Navigator.pop(context, true); // Return success
+      Navigator.pop(context, resolutions); // Return resolutions on success
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

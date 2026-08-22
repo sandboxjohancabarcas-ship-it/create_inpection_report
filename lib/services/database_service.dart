@@ -5,6 +5,7 @@ import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'dart:convert';
 
 /// Master Database Service (Manager Role)
 /// This is a stub to allow the project to compile for Windows.
@@ -20,7 +21,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 18, // v18: Added errorCode natural key to inspection_door_errors
+      version: 19, // v19: Added projectNumber to inspections table
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -69,7 +70,8 @@ class DatabaseService {
             date TEXT,
             contactPerson TEXT,
             inspectorName TEXT,
-            jobNumber TEXT
+            jobNumber TEXT,
+            projectNumber TEXT
           );
         ''');
         await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
@@ -208,6 +210,15 @@ class DatabaseService {
             print('[DatabaseService] Main DB upgraded to v18: errorCode column added and backfilled.');
           } catch (e) {
             print('Main DB migration warning (errorCode): \$e');
+          }
+        }
+
+        if (oldVersion < 19) {
+          try {
+            await db.execute('ALTER TABLE inspections ADD COLUMN projectNumber TEXT');
+            print('[DatabaseService] Main DB upgraded to v19: projectNumber column added.');
+          } catch (e) {
+            print('Main DB migration warning (projectNumber): $e');
           }
         }
       },
@@ -536,19 +547,97 @@ class DatabaseService {
     );
   }
 
+  static Future<Set<String>> _getInspectionDoorErrorsColumns(DatabaseExecutor db) async {
+    try {
+      final List<Map<String, dynamic>> tableInfo = await db.rawQuery('PRAGMA table_info(inspection_door_errors)');
+      return tableInfo.map((row) => row['name'] as String).toSet();
+    } catch (e) {
+      print('Error getting table info for inspection_door_errors: $e');
+      return {};
+    }
+  }
+
+  static Future<String> _fetchLargeAttachments(DatabaseExecutor db, int errorId) async {
+    final StringBuffer sb = StringBuffer();
+    int offset = 1; // SQLite SUBSTR is 1-indexed
+    const int chunkSize = 1000 * 1024; // 1MB chunks (approx 1,000,000 characters)
+    
+    while (true) {
+      try {
+        final chunkQuery = await db.rawQuery('''
+          SELECT SUBSTR(attachments, ?, ?) as chunk
+          FROM inspection_door_errors
+          WHERE id = ?
+        ''', [offset, chunkSize, errorId]);
+        
+        if (chunkQuery.isEmpty) break;
+        final String chunk = chunkQuery.first['chunk'] as String? ?? '';
+        if (chunk.isEmpty) break;
+        
+        sb.write(chunk);
+        if (chunk.length < chunkSize) {
+          break;
+        }
+        offset += chunk.length;
+      } catch (e) {
+        print('Error reading chunk for error ID $errorId at offset $offset: $e');
+        break;
+      }
+    }
+    return sb.toString();
+  }
+
   /// Fetches all errors for a set of inspection door IDs from Main DB
   static Future<List<Map<String, dynamic>>> getErrorsForInspectionDoorIds(List<int> ids) async {
     if (ids.isEmpty) return [];
     final db = await getDb();
     final String idString = ids.join(',');
-    return await db.rawQuery('''
-      SELECT ide.*,
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add('ide.$col');
+      }
+    }
+    final String selectString = selectCols.join(', ');
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT $selectString,
              COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
              COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description
       FROM inspection_door_errors ide
       LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE ide.inspectionDoorId IN ($idString)
     ''');
+
+    final List<Map<String, dynamic>> finalResults = [];
+    for (final row in results) {
+      final int? errorId = row['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          print('Error loading attachments for error ID $errorId (might be too big for CursorWindow): $e');
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+
+      final rowWithAttachments = Map<String, dynamic>.from(row);
+      rowWithAttachments['attachments'] = attachments;
+      finalResults.add(rowWithAttachments);
+    }
+    return finalResults;
   }
 
   static Future<List<Door>> getAllDoors() async {
@@ -620,19 +709,67 @@ class DatabaseService {
   static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(
       int inspectionDoorId) async {
     final db = await getDb();
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add(col);
+      }
+    }
+
     final maps = await db.query(
       'inspection_door_errors',
+      columns: selectCols,
       where: 'inspectionDoorId = ?',
       whereArgs: [inspectionDoorId],
     );
-    return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
+    
+    final List<InspectionDoorError> errors = [];
+    for (final map in maps) {
+      final int? errorId = map['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          print('Error loading attachments for error ID $errorId: $e');
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+      
+      final Map<String, dynamic> fullMap = Map<String, dynamic>.from(map);
+      fullMap['attachments'] = attachments;
+      errors.add(InspectionDoorError.fromMap(fullMap));
+    }
+    return errors;
   }
 
   /// Fetches detailed errors joined with error_catalog info for a single inspection door from Main DB.
   static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
     final db = await getDb();
-    return await db.rawQuery('''
-      SELECT ide.*,
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add('ide.$col');
+      }
+    }
+    final String selectString = selectCols.join(', ');
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT $selectString,
              COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
              COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description,
              COALESCE(ec.category, '') AS category
@@ -640,6 +777,33 @@ class DatabaseService {
       LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE ide.inspectionDoorId = ?
     ''', [inspectionDoorId]);
+
+    final List<Map<String, dynamic>> finalResults = [];
+    for (final row in results) {
+      final int? errorId = row['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          print('Error loading attachments for error ID $errorId: $e');
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+
+      final rowWithAttachments = Map<String, dynamic>.from(row);
+      rowWithAttachments['attachments'] = attachments;
+      finalResults.add(rowWithAttachments);
+    }
+    return finalResults;
   }
 
   static Future<void> insertErrorCatalog(ErrorCatalog error) async {
@@ -681,7 +845,45 @@ class DatabaseService {
         final pDoors = await packageDb.query('doors');
         final pInspections = await packageDb.query('inspections');
         final pJunctions = await packageDb.query('inspection_doors');
-        final pErrors = await packageDb.query('inspection_door_errors');
+        
+        final List<Map<String, dynamic>> pErrors = [];
+        final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(packageDb);
+        final List<String> selectCols = [];
+        final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+        for (final col in possibleCols) {
+          if (existingColumns.contains(col)) {
+            selectCols.add(col);
+          }
+        }
+
+        final rawErrors = await packageDb.query(
+          'inspection_door_errors',
+          columns: selectCols,
+        );
+        for (final row in rawErrors) {
+          final int? errorId = row['id'] as int?;
+          String attachments = '';
+          if (errorId != null && existingColumns.contains('attachments')) {
+            try {
+              final attachmentQuery = await packageDb.query(
+                'inspection_door_errors',
+                columns: ['attachments'],
+                where: 'id = ?',
+                whereArgs: [errorId],
+              );
+              if (attachmentQuery.isNotEmpty) {
+                attachments = attachmentQuery.first['attachments'] as String? ?? '';
+              }
+            } catch (e) {
+              print('Error loading attachments from package for error ID $errorId: $e');
+              attachments = await _fetchLargeAttachments(packageDb, errorId);
+            }
+          }
+          final fullRow = Map<String, dynamic>.from(row);
+          fullRow['attachments'] = attachments;
+          pErrors.add(fullRow);
+        }
+
         // Import ALL catalog entries (not just Pending) to enable errorId remapping
         final pCatalog = await packageDb.query('error_catalog');
 
@@ -1043,35 +1245,118 @@ class DatabaseService {
     final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
     final count = Sqflite.firstIntValue(existingCount) ?? 0;
     
-    if (count > 0) {
-      print('[Catalog] Database has $count entries. Initialization skipped.');
+    // Check if the database has any seeded/non-placeholder entries.
+    // Placeholders have description starting with 'Excel-Fehler' or are empty.
+    final nonPlaceholderCountRows = await db.rawQuery(
+      "SELECT COUNT(*) as count FROM error_catalog WHERE description NOT LIKE 'Excel-Fehler %' AND description != ''"
+    );
+    final nonPlaceholderCount = Sqflite.firstIntValue(nonPlaceholderCountRows) ?? 0;
+
+    if (count > 0 && nonPlaceholderCount > 0) {
+      print('[Catalog] Database has $count entries including seeded ones. Initialization skipped.');
       return;
     }
 
     final dbPath = await getDatabasesPath();
+    final jsonFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.json'));
     final csvFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.csv'));
+    List<ErrorCatalog> errors = [];
 
-    if (await csvFile.exists()) {
+    if (await jsonFile.exists()) {
+      print('[Catalog] Found JSON at ${jsonFile.path}. Importing...');
+      try {
+        final content = await jsonFile.readAsString();
+        errors = _parseJsonCatalog(content);
+      } catch (e) {
+        print('[Catalog] JSON Read/Parse Error: $e');
+      }
+    }
+
+    if (errors.isEmpty && await csvFile.exists()) {
       print('[Catalog] Found CSV at ${csvFile.path}. Importing...');
       try {
         final content = await csvFile.readAsString();
-        final List<ErrorCatalog> errors = _parseCsv(content);
-        await mergeErrorCatalog(errors);
-        print('[Catalog] Import successful. ${errors.length} items added.');
+        errors = _parseCsv(content);
       } catch (e) {
-        print('[Catalog] CSV Parse Error: $e');
-      }
-    } else {
-      print('[Catalog] No external CSV found. Loading from internal assets...');
-      try {
-        final content = await rootBundle.loadString('error_catalog.csv');
-        final List<ErrorCatalog> errors = _parseCsv(content);
-        await mergeErrorCatalog(errors);
-        print('[Catalog] Internal Seed successful.');
-      } catch (e) {
-        print('[Catalog] Asset Load Error: $e');
+        print('[Catalog] CSV Read/Parse Error: $e');
       }
     }
+
+    if (errors.isEmpty) {
+      print('[Catalog] No external files found. Loading from internal assets...');
+      try {
+        try {
+          final content = await rootBundle.loadString('error_catalog.json');
+          errors = _parseJsonCatalog(content);
+        } catch (_) {
+          final content = await rootBundle.loadString('error_catalog.csv');
+          errors = _parseCsv(content);
+        }
+      } catch (e) {
+        print('[Catalog] Asset Load Error: $e');
+        return;
+      }
+    }
+
+    try {
+      await db.transaction((txn) async {
+        for (final error in errors) {
+          final existing = await txn.query(
+            'error_catalog',
+            columns: ['errorId', 'description'],
+            where: 'code = ?',
+            whereArgs: [error.code],
+            limit: 1,
+          );
+
+          if (existing.isNotEmpty) {
+            final existingId = existing.first['errorId'] as int;
+            final existingDesc = existing.first['description'] as String? ?? '';
+            // Update in-place if it is an empty or placeholder entry
+            if (existingDesc.startsWith('Excel-Fehler') || existingDesc.isEmpty) {
+              await txn.update(
+                'error_catalog',
+                error.toMap()..remove('errorId'),
+                where: 'errorId = ?',
+                whereArgs: [existingId],
+              );
+            }
+          } else {
+            await txn.insert(
+              'error_catalog',
+              error.toMap()..remove('errorId'),
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+        }
+      });
+      print('[Catalog] Catalog check and initialize/update completed. ${errors.length} items parsed.');
+    } catch (e) {
+      print('[Catalog] Error during catalog initialization: $e');
+    }
+  }
+
+  /// Parses JSON catalog formatted data
+  static List<ErrorCatalog> _parseJsonCatalog(String jsonStr) {
+    final List<ErrorCatalog> results = [];
+    try {
+      final Map<String, dynamic> data = jsonDecode(jsonStr);
+      data.forEach((code, value) {
+        if (value is Map<String, dynamic>) {
+          results.add(ErrorCatalog(
+            code: code,
+            description: value['description'] as String? ?? '',
+            category: value['category'] as String? ?? 'Allgemein',
+            severity: value['severity'] as String? ?? 'medium',
+            recommendation: value['recommendation'] as String? ?? '',
+            normReference: value['normReference'] as String? ?? '',
+          ));
+        }
+      });
+    } catch (e) {
+      print('[Catalog] JSON Parse Error: $e');
+    }
+    return results;
   }
 
   /// Simple CSV parser for Error Catalog items
@@ -1104,14 +1389,49 @@ class DatabaseService {
   /// written directly and included in [DoorMergeResult.cleanDoors].
   /// Doors that differ from existing records produce [DoorConflict] entries
   /// and are NOT written — the Manager resolves them via [DoorConflictReviewPage].
+  static Future<List<Map<String, dynamic>>> _getPreviousInspectionsForDoor(int doorId) async {
+    final db = await getDb();
+    return await db.rawQuery('''
+      SELECT i.jobNumber, i.date, i.clientName, i.objectAddress, id.status, id.notes
+      FROM inspection_doors id
+      JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE id.doorId = ?
+      ORDER BY i.date DESC
+    ''', [doorId]);
+  }
+
+  static Future<DateTime?> getMostRecentInspectionDateForDoor(int doorId) async {
+    final db = await getDb();
+    final result = await db.rawQuery('''
+      SELECT MAX(i.date) as maxDate
+      FROM inspection_doors id
+      JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE id.doorId = ?
+    ''', [doorId]);
+    if (result.isNotEmpty && result.first['maxDate'] != null) {
+      final dateStr = result.first['maxDate'] as String;
+      return DateTime.tryParse(dateStr);
+    }
+    return null;
+  }
+
+  /// Analyses [incomingDoors] against the Master DB.
+  /// Doors that are genuinely new or identical to existing records are
+  /// written directly and included in [DoorMergeResult.cleanDoors].
+  /// Doors that differ from existing records produce [DoorConflict] entries
+  /// and are NOT written — the Manager resolves them via [DoorConflictReviewPage].
   static Future<DoorMergeResult> mergeDoors(
     List<Door> incomingDoors, {
     String jobNumber = '',
     bool validateLogic = true,
+    String sourceContext = '',
+    String currentInspectionDate = '',
   }) async {
     final db = await getDb();
     final cleanDoors = <Door>[];
     final conflicts = <DoorConflict>[];
+    final List<String> logs = [];
+    int propertyConflictCounter = 0;
 
     for (final incoming in incomingDoors) {
       // Step 1 — Internal logical validation (V01–V13), zero DB calls
@@ -1205,16 +1525,115 @@ class DatabaseService {
         );
         cleanDoors.add(existingDoor);
       } else {
-        // Has conflicts → queue for Manager review, do NOT write yet
-        conflicts.addAll(fieldConflicts);
-        // Since the door already exists in the database under this alias,
-        // we can still link the current inspection/junction to it.
-        // Therefore, we include it in cleanDoors so that junctions and errors can be linked.
-        cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+        // Discrepancies exist. Determine sliding chronological window:
+        final DateTime? dbInspectionDate = await getMostRecentInspectionDateForDoor(existingDoor.id!);
+        final DateTime incomingDate = DateTime.tryParse(currentInspectionDate) ?? DateTime.now();
+
+        if (dbInspectionDate == null) {
+          // No previous inspection date in DB. Treat incoming as newest. Auto-update without conflicts.
+          await db.update(
+            'doors',
+            incoming.toMap()..remove('id'),
+            where: 'doorAlias = ?',
+            whereArgs: [alias],
+          );
+          cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+          
+          for (final conflict in fieldConflicts) {
+            logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Initial inspection date set).');
+          }
+        } else {
+          final DateTime existingDate = dbInspectionDate;
+          final DateTime recentDate = incomingDate.isAfter(existingDate) ? incomingDate : existingDate;
+          final DateTime olderDate = incomingDate.isBefore(existingDate) ? incomingDate : existingDate;
+          final double diffYears = recentDate.difference(olderDate).inDays / 365.25;
+
+          if (diffYears > 3.0) {
+            // Older than 3 years (4th year or older in the past) -> Auto-resolve without UI conflict
+            if (incomingDate.isAfter(existingDate)) {
+              // Incoming sheet is newer: overwrite DB properties with incoming values
+              await db.update(
+                'doors',
+                incoming.toMap()..remove('id'),
+                where: 'doorAlias = ?',
+                whereArgs: [alias],
+              );
+              cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+
+              for (final conflict in fieldConflicts) {
+                if (conflict.type == DoorConflictType.technicalMismatch ||
+                    conflict.type == DoorConflictType.safetyFlagChange) {
+                  logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Incoming inspection is newer by ${diffYears.toStringAsFixed(1)} years).');
+                }
+              }
+            } else {
+              // Existing DB is newer: discard incoming properties, keep existing DB properties
+              cleanDoors.add(existingDoor);
+
+              for (final conflict in fieldConflicts) {
+                if (conflict.type == DoorConflictType.technicalMismatch ||
+                    conflict.type == DoorConflictType.safetyFlagChange) {
+                  logs.add('[SKIPPED STALE] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" ignored (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}"). DB inspection is newer by ${diffYears.toStringAsFixed(1)} years. Kept newer DB properties.');
+                }
+              }
+            }
+          } else {
+            // Within 3 years -> Generate conflicts for manager review
+            final List<DoorConflict> processedConflicts = [];
+            for (final conflict in fieldConflicts) {
+              if (conflict.type == DoorConflictType.technicalMismatch ||
+                  conflict.type == DoorConflictType.safetyFlagChange) {
+                propertyConflictCounter++;
+                final String ageDiffStr = diffYears.toStringAsFixed(1);
+                
+                logs.add('[CONFLICT QUEUED] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}") is within 3-year window (age diff: $ageDiffStr years). Queued for Manager.');
+
+                if (propertyConflictCounter >= 20) {
+                  final prevInspections = await _getPreviousInspectionsForDoor(existingDoor.id!);
+                  final String dbSources = prevInspections.map((i) =>
+                    'Job: ${i['jobNumber']} (Datum: ${i['date']}, Status: ${i['status']})'
+                  ).join(', ');
+
+                  final String details = '\n[DIAGNOSE] Mismatch in Feld "${conflict.fieldLabel}" für Alias "${conflict.incomingDoor.doorAlias}":'
+                    '\n  - Originaler DB-Wert: "${conflict.existingValue}" stammt aus früheren Inspektionen: [$dbSources].'
+                    '\n  - Importierter Wert: "${conflict.incomingValue}" kommt aus aktuellem Import ($sourceContext, Job: $jobNumber).'
+                    '\n  - Gleicher Alias? Ja, beide verwenden den eindeutigen Alias "${conflict.incomingDoor.doorAlias}".'
+                    '\n  - HINWEIS: Dies deutet darauf hin, dass die Eigenschaften der Tür zwischen den Excel-Listen verschiedener Jahre/Inspektionen geändert wurden (schlechte Excel-Datenqualität!).';
+
+                  print(details);
+
+                  processedConflicts.add(DoorConflict(
+                    existingDoor: conflict.existingDoor,
+                    incomingDoor: conflict.incomingDoor,
+                    type: conflict.type,
+                    fieldName: conflict.fieldName,
+                    fieldLabel: conflict.fieldLabel,
+                    existingValue: conflict.existingValue,
+                    incomingValue: conflict.incomingValue,
+                    ruleCode: conflict.ruleCode,
+                    message: '${conflict.message}$details',
+                    compliance: conflict.compliance,
+                    resolution: conflict.resolution,
+                  ));
+                } else {
+                  processedConflicts.add(conflict);
+                }
+              } else {
+                processedConflicts.add(conflict);
+              }
+            }
+            conflicts.addAll(processedConflicts);
+            cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+          }
+        }
       }
     }
 
-    return DoorMergeResult(cleanDoors: cleanDoors, conflicts: conflicts);
+    return DoorMergeResult(
+      cleanDoors: cleanDoors,
+      conflicts: conflicts,
+      protocolLogs: logs,
+    );
   }
 
   /// Applies the Manager's conflict resolutions from [DoorConflictReviewPage]

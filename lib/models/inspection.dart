@@ -568,7 +568,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Projekt: ${job['jobNumber']}'),
+                                Text('Auftrag: ${job['jobNumber']}'),
+                                if (job['projectNumber'] != null && job['projectNumber'].toString().isNotEmpty)
+                                  Text('Projekt: ${job['projectNumber']}'),
                                 Text('Datum: ${job['date']}'),
                               ],
                             ),

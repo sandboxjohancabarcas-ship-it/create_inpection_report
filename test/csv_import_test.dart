@@ -23,17 +23,17 @@ void main() {
 
       final catalog = await DatabaseService.getAllErrorCatalog();
 
-      // The bundled CSV has at least 21 entries (codes 1..21); verify a known one
+      // The bundled catalog has Retest entries; verify a known one (e.g. 0.10)
       expect(catalog.isNotEmpty, isTrue,
           reason: 'Catalog should be populated from the bundled asset');
       expect(
-        catalog.any((item) => item.code == '1'),
+        catalog.any((item) => item.code == '0.10'),
         isTrue,
-        reason: 'Entry with code "1" (Kein Zugang/Keine Prüfung) must be present',
+        reason: 'Entry with code "0.10" (Kein Zugang / Keine Prüfung) must be present',
       );
       expect(
-        catalog.firstWhere((item) => item.code == '1').description,
-        equals('Kein Zugang/Keine Prüfung'),
+        catalog.firstWhere((item) => item.code == '0.10').description,
+        equals('Kein Zugang / Keine Prüfung'),
       );
     });
 

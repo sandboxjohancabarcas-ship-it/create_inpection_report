@@ -36,7 +36,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 8,  // v8: Added errorCode natural key to inspection_door_errors
+      version: 9,  // v9: Added projectNumber to inspections table
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -82,7 +82,8 @@ class LocalDatabaseService {
             date TEXT,
             contactPerson TEXT,
             inspectorName TEXT,
-            jobNumber TEXT
+            jobNumber TEXT,
+            projectNumber TEXT
           );
         ''');
 
@@ -218,6 +219,15 @@ class LocalDatabaseService {
             print('Local Database upgraded to version 8: errorCode column added and backfilled.');
           } catch (e) {
             print('Local DB migration warning (errorCode): \$e');
+          }
+        }
+
+        if (oldVersion < 9) {
+          try {
+            await db.execute('ALTER TABLE inspections ADD COLUMN projectNumber TEXT');
+            print('Local Database upgraded to version 9: projectNumber column added.');
+          } catch (e) {
+            print('Local DB migration warning (projectNumber): $e');
           }
         }
       },
@@ -677,23 +687,111 @@ class LocalDatabaseService {
     );
   }
 
+  static Future<Set<String>> _getInspectionDoorErrorsColumns(DatabaseExecutor db) async {
+    try {
+      final List<Map<String, dynamic>> tableInfo = await db.rawQuery('PRAGMA table_info(inspection_door_errors)');
+      return tableInfo.map((row) => row['name'] as String).toSet();
+    } catch (e) {
+      print('Error getting table info for inspection_door_errors: $e');
+      return {};
+    }
+  }
+
+  static Future<String> _fetchLargeAttachments(DatabaseExecutor db, int errorId) async {
+    final StringBuffer sb = StringBuffer();
+    int offset = 1; // SQLite SUBSTR is 1-indexed
+    const int chunkSize = 1000 * 1024; // 1MB chunks (approx 1,000,000 characters)
+    
+    while (true) {
+      try {
+        final chunkQuery = await db.rawQuery('''
+          SELECT SUBSTR(attachments, ?, ?) as chunk
+          FROM inspection_door_errors
+          WHERE id = ?
+        ''', [offset, chunkSize, errorId]);
+        
+        if (chunkQuery.isEmpty) break;
+        final String chunk = chunkQuery.first['chunk'] as String? ?? '';
+        if (chunk.isEmpty) break;
+        
+        sb.write(chunk);
+        if (chunk.length < chunkSize) {
+          break;
+        }
+        offset += chunk.length;
+      } catch (e) {
+        print('Error reading chunk for error ID $errorId at offset $offset: $e');
+        break;
+      }
+    }
+    return sb.toString();
+  }
+
   // This method was missing its body in the previous diff, restoring it.
   static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(int inspectionDoorId) async {
     final db = await getDb();
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add(col);
+      }
+    }
+
     final maps = await db.query(
       'inspection_door_errors',
+      columns: selectCols,
       where: 'inspectionDoorId = ?',
       whereArgs: [inspectionDoorId],
     );
-    return maps.map((m) => InspectionDoorError.fromMap(m)).toList();
+    
+    final List<InspectionDoorError> errors = [];
+    for (final map in maps) {
+      final int? errorId = map['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          print('Error loading attachments for error ID $errorId: $e');
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+      
+      final Map<String, dynamic> fullMap = Map<String, dynamic>.from(map);
+      fullMap['attachments'] = attachments;
+      errors.add(InspectionDoorError.fromMap(fullMap));
+    }
+    return errors;
   }
 
   static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
     final db = await getDb();
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add('ide.$col');
+      }
+    }
+    final String selectString = selectCols.join(', ');
+
     // FIX 2: Use LEFT JOIN with COALESCE fallbacks (matching Manager DB pattern)
     // so that errors are always visible even if the catalog FK is broken.
-    return await db.rawQuery('''
-      SELECT ide.*,
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT $selectString,
              COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
              COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description,
              COALESCE(ec.category, '') AS category
@@ -701,6 +799,33 @@ class LocalDatabaseService {
       LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
       WHERE ide.inspectionDoorId = ?
     ''', [inspectionDoorId]);
+
+    final List<Map<String, dynamic>> finalResults = [];
+    for (final row in results) {
+      final int? errorId = row['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          print('Error loading attachments for error ID $errorId: $e');
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+
+      final rowWithAttachments = Map<String, dynamic>.from(row);
+      rowWithAttachments['attachments'] = attachments;
+      finalResults.add(rowWithAttachments);
+    }
+    return finalResults;
   }
   static Future<void> deleteInspectionDoorError(int id) async {
     final db = await getDb();

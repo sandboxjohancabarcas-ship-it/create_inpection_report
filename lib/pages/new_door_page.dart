@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/local_database_service.dart';
 import '../services/database_service.dart';
+import '../services/door_options_service.dart';
 import '../models/models.dart';
 import 'error_management_page.dart';
 
@@ -20,6 +21,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController customerAddressController;
   late TextEditingController contactPersonController;
   late TextEditingController jobNumberController;
+  late TextEditingController projectNumberController;
   late TextEditingController inspectorNameController;
   
   // Controllers for door technical fields
@@ -62,20 +64,26 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   // Date field
   DateTime inspectionDate = DateTime.now();
   int? currentInspectionId;
+  bool _isLoadingOptions = true;
 
   @override
   void initState() {
     super.initState();
+    _loadOptionsAndData();
+  }
+
+  Future<void> _loadOptionsAndData() async {
+    await DoorOptionsService.ensureLoaded();
 
     final d = widget.door;
 
-       // Note: These will now be handled separately from the Door object
+    // Note: These will now be handled separately from the Door object
     customerNameController = TextEditingController();
     customerAddressController = TextEditingController();
     contactPersonController = TextEditingController();
     jobNumberController = TextEditingController();
+    projectNumberController = TextEditingController();
     inspectorNameController = TextEditingController();
-
 
     // Initialize door technical controllers
     doorNumberController = TextEditingController(text: d?.doorNumber ?? '');
@@ -132,28 +140,35 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     escapeDirectionRespected = d?.escapeDirectionRespected ?? false;
     fullPanicStandWing = d?.fullPanicStandWing ?? false;
 
-    // Initialize dropdowns
-    accessControl = d?.accessControl;
-    panicFunction = d?.panicFunction;
-    doorType = d?.doorType;
-    material = d?.material;
-    dinConfiguration = d?.dinConfiguration;
-    closerType = d?.closerType;
-    closingSequenceSystem = d?.closingSequenceSystem;
-    fittingType = d?.fittingType;
+    // Initialize dropdowns (use defaults from config file if creating a new door)
+    accessControl = d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
+    panicFunction = d?.panicFunction ?? DoorOptionsService.getDefault('panicFunction');
+    doorType = d?.doorType ?? DoorOptionsService.getDefault('doorType');
+    material = d?.material ?? DoorOptionsService.getDefault('material');
+    dinConfiguration = d?.dinConfiguration ?? DoorOptionsService.getDefault('dinConfiguration');
+    closerType = d?.closerType ?? DoorOptionsService.getDefault('closerType');
+    closingSequenceSystem = d?.closingSequenceSystem ?? DoorOptionsService.getDefault('closingSequenceSystem');
+    fittingType = d?.fittingType ?? DoorOptionsService.getDefault('fittingType');
 
     // Initialize numeric fields
-    wingCount = d?.wingCount ?? 1;
+    wingCount = d?.wingCount ?? DoorOptionsService.getDefault('wingCount') ?? 1;
     pos = d?.pos ?? 0;
 
     if (d != null) {
-      _loadInspectionData();
+      await _loadInspectionData();
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoadingOptions = false;
+      });
     }
   }
 
   @override
   void dispose() {
     doorAliasController.dispose();
+    projectNumberController.dispose();
     super.dispose();
   }
 
@@ -180,6 +195,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         customerAddressController.text = insp['objectAddress'] ?? '';
         contactPersonController.text = insp['contactPerson'] ?? '';
         jobNumberController.text = insp['jobNumber'] ?? '';
+        projectNumberController.text = insp['projectNumber'] ?? '';
         inspectorNameController.text = insp['inspectorName'] ?? '';
         inspectionDate = DateTime.parse(insp['date']);
       });
@@ -205,25 +221,25 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       floor: floorController.text,
       roomNumber: roomNumberController.text,
       roomDesignation: roomDesignationController.text,
-      doorType: doorType ?? 'T30',
+      doorType: doorType ?? DoorOptionsService.getDefault('doorType') ?? 'T30',
       wingCount: wingCount,
-      material: material ?? 'Stahl',
+      material: material ?? DoorOptionsService.getDefault('material') ?? 'Stahl',
       manufacturer: manufacturerController.text,
-      dinConfiguration: dinConfiguration ?? 'DIN L',
-      closerType: closerType ?? 'TS93',
-      closingSequenceSystem: closingSequenceSystem ?? 'None',
+      dinConfiguration: dinConfiguration ?? DoorOptionsService.getDefault('dinConfiguration') ?? 'DIN L',
+      closerType: closerType ?? DoorOptionsService.getDefault('closerType') ?? 'TS93',
+      closingSequenceSystem: closingSequenceSystem ?? DoorOptionsService.getDefault('closingSequenceSystem') ?? 'None',
       lockDimensions: lockDimensionsController.text,
       closerOnHingeSide: closerOnHingeSide,
       closerOnOppositeSide: closerOnOppositeSide,
       lintelHeightUnder1m: lintelHeightUnder1m,
       escapeDoorControl: escapeDoorControl,
-      accessControl: accessControl ?? 'Nein',
+      accessControl: accessControl ?? DoorOptionsService.getDefault('accessControl') ?? 'Nein',
       escapeRouteSituation: escapeRouteSituation,
       escapeRouteSignage: escapeSignage,
       blindCylinder: blindCylinder,
       pzCylinder: pzCylinder,
-      fittingType: fittingType ?? 'Drücker',
-      panicFunction: panicFunction ?? 'Nein',
+      fittingType: fittingType ?? DoorOptionsService.getDefault('fittingType') ?? 'Drücker',
+      panicFunction: panicFunction ?? DoorOptionsService.getDefault('panicFunction') ?? 'Nein',
       escapeDirectionRespected: escapeDirectionRespected,
       fullPanicStandWing: fullPanicStandWing,
       doorFunctionOK: properFunction,
@@ -241,6 +257,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       'contactPerson': contactPersonController.text,
       'inspectorName': inspectorNameController.text,
       'jobNumber': jobNumberController.text,
+      'projectNumber': projectNumberController.text,
     };
     
     if (currentInspectionId != null) {
@@ -284,8 +301,59 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     if (mounted) Navigator.pop(context);
   }
 
+  List<String> _getDropdownItems(String key, String? currentValue) {
+    final list = DoorOptionsService.getStringOptions(key);
+    if (currentValue != null && currentValue.isNotEmpty && !list.contains(currentValue)) {
+      list.add(currentValue);
+    }
+    return list;
+  }
+
+  String? _getDropdownValue(String key, String? currentValue) {
+    final list = _getDropdownItems(key, currentValue);
+    return list.contains(currentValue) ? currentValue : null;
+  }
+
+  List<int> _getIntDropdownItems(String key, int? currentValue) {
+    final list = DoorOptionsService.getIntOptions(key);
+    if (currentValue != null && !list.contains(currentValue)) {
+      list.add(currentValue);
+    }
+    return list;
+  }
+
+  int? _getIntDropdownValue(String key, int? currentValue) {
+    final list = _getIntDropdownItems(key, currentValue);
+    return list.contains(currentValue) ? currentValue : null;
+  }
+
+  List<Map<String, String>> _getMapDropdownItems(String key, String? currentValue) {
+    final list = DoorOptionsService.getMapOptions(key);
+    if (currentValue != null && currentValue.isNotEmpty) {
+      final hasValue = list.any((e) => e['value'] == currentValue);
+      if (!hasValue) {
+        list.add({'value': currentValue, 'label': currentValue});
+      }
+    }
+    return list;
+  }
+
+  String? _getMapDropdownValue(String key, String? currentValue) {
+    final list = _getMapDropdownItems(key, currentValue);
+    final hasValue = list.any((e) => e['value'] == currentValue);
+    return hasValue ? currentValue : null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingOptions) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text("Türinspektion")),
       body: SingleChildScrollView(
@@ -320,6 +388,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             TextField(
               controller: jobNumberController,
               decoration: const InputDecoration(labelText: "Auftragsnummer"),
+            ),
+            
+            // Project number
+            TextField(
+              controller: projectNumberController,
+              decoration: const InputDecoration(labelText: "Projektnummer"),
             ),
             
             // Inspector name
@@ -397,8 +471,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Door type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Türart"),
-              initialValue: ["T30", "T60", "T90", "RS", "None"].contains(doorType) ? doorType : null,
-              items: ["T30", "T60", "T90", "RS", "None"]
+              initialValue: _getDropdownValue('doorType', doorType),
+              items: _getDropdownItems('doorType', doorType)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => doorType = val),
@@ -407,8 +481,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Wing count
             DropdownButtonFormField<int>(
               decoration: const InputDecoration(labelText: "Flügelanzahl"),
-              initialValue: [1, 2, 3].contains(wingCount) ? wingCount : 1,
-              items: [1, 2, 3]
+              initialValue: _getIntDropdownValue('wingCount', wingCount),
+              items: _getIntDropdownItems('wingCount', wingCount)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val.toString())))
                   .toList(),
               onChanged: (val) => setState(() => wingCount = val ?? 1),
@@ -417,8 +491,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Material
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Material"),
-              initialValue: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas", "None"].contains(material) ? material : "None",
-              items: ["Stahl", "Aluminium", "Holz", "Kunststoff", "Glas", "None"]
+              initialValue: _getDropdownValue('material', material),
+              items: _getDropdownItems('material', material)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => material = val),
@@ -433,8 +507,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // DIN configuration
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "DIN-Konfiguration"),
-              initialValue: ["DIN L", "DIN R", "DIN LR", "None"].contains(dinConfiguration) ? dinConfiguration : null,
-              items: ["DIN L", "DIN R", "DIN LR", "None"]
+              initialValue: _getDropdownValue('dinConfiguration', dinConfiguration),
+              items: _getDropdownItems('dinConfiguration', dinConfiguration)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => dinConfiguration = val),
@@ -443,21 +517,18 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Closer type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließerart"),
-              initialValue: ["TS93", "GEZE TS 5000", "Boden", "None"].contains(closerType) ? closerType : "None",
-              items: const [
-                DropdownMenuItem(value: "TS93", child: Text("Dorma TS 93")),
-                DropdownMenuItem(value: "GEZE TS 5000", child: Text("GEZE TS 5000")),
-                DropdownMenuItem(value: "Boden", child: Text("Bodenschließer")),
-                DropdownMenuItem(value: "None", child: Text("Kein Schließer")),
-              ],
+              initialValue: _getMapDropdownValue('closerType', closerType),
+              items: _getMapDropdownItems('closerType', closerType)
+                  .map((map) => DropdownMenuItem(value: map['value']!, child: Text(map['label']!)))
+                  .toList(),
               onChanged: (val) => setState(() => closerType = val),
             ),
 
             // Closing sequence system
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Schließfolgesystem"),
-              initialValue: ["None", "Einfach", "Doppel", "Mehrfach"].contains(closingSequenceSystem) ? closingSequenceSystem : "None",
-              items: ["None", "Einfach", "Doppel", "Mehrfach"]
+              initialValue: _getDropdownValue('closingSequenceSystem', closingSequenceSystem),
+              items: _getDropdownItems('closingSequenceSystem', closingSequenceSystem)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => closingSequenceSystem = val),
@@ -505,8 +576,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Access control
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Zutrittskontrolle"),
-              initialValue: ["HID multiclass SE", "Nein", "Primion", "Siedle", "None"].contains(accessControl) ? accessControl : "Nein",
-              items: ["HID multiclass SE", "Nein", "Primion", "Siedle", "None"]
+              initialValue: _getDropdownValue('accessControl', accessControl),
+              items: _getDropdownItems('accessControl', accessControl)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => accessControl = val),
@@ -550,8 +621,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Fitting type
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Beschlagart"),
-              initialValue: ["Drücker", "Knauf", "Hebel", "None"].contains(fittingType) ? fittingType : "None",
-              items: ["Drücker", "Knauf", "Hebel", "None"]
+              initialValue: _getDropdownValue('fittingType', fittingType),
+              items: _getDropdownItems('fittingType', fittingType)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => fittingType = val),
@@ -560,8 +631,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Panic function
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Panikfunktion"),
-              initialValue: ["A", "B", "E", "Nein"].contains(panicFunction) ? panicFunction : "Nein",
-              items: ["A", "B", "E", "Nein"]
+              initialValue: _getDropdownValue('panicFunction', panicFunction),
+              items: _getDropdownItems('panicFunction', panicFunction)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => panicFunction = val),

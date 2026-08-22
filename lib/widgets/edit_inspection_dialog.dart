@@ -43,6 +43,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
   late TextEditingController _clientNameController;
   late TextEditingController _objectAddressController;
   late TextEditingController _jobNumberController;
+  late TextEditingController _projectNumberController;
   late TextEditingController _contactPersonController;
   late TextEditingController _inspectorNameController;
   late DateTime _selectedDate;
@@ -55,6 +56,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     _clientNameController = TextEditingController();
     _objectAddressController = TextEditingController();
     _jobNumberController = TextEditingController();
+    _projectNumberController = TextEditingController();
     _contactPersonController = TextEditingController();
     _inspectorNameController = TextEditingController();
     _selectedDate = DateTime.now();
@@ -71,6 +73,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     _clientNameController.text = data['clientName']?.toString() ?? '';
     _objectAddressController.text = data['objectAddress']?.toString() ?? '';
     _jobNumberController.text = data['jobNumber']?.toString() ?? '';
+    _projectNumberController.text = data['projectNumber']?.toString() ?? '';
     _contactPersonController.text = data['contactPerson']?.toString() ?? '';
     _inspectorNameController.text = data['inspectorName']?.toString() ?? '';
     
@@ -103,6 +106,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     _clientNameController.dispose();
     _objectAddressController.dispose();
     _jobNumberController.dispose();
+    _projectNumberController.dispose();
     _contactPersonController.dispose();
     _inspectorNameController.dispose();
     super.dispose();
@@ -133,6 +137,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
         'clientName': _clientNameController.text.trim(),
         'objectAddress': _objectAddressController.text.trim(),
         'jobNumber': _jobNumberController.text.trim(),
+        'projectNumber': _projectNumberController.text.trim(),
         'date': _selectedDate.toIso8601String(),
         'contactPerson': _contactPersonController.text.trim(),
         'inspectorName': _inspectorNameController.text.trim(),
@@ -218,6 +223,16 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                       ),
                       validator: (value) =>
                           value == null || value.trim().isEmpty ? 'Bitte Auftragsnummer eingeben' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _projectNumberController,
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                      decoration: const InputDecoration(
+                        labelText: 'Projektnummer',
+                        prefixIcon: Icon(Icons.folder),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 12),
                     InkWell(

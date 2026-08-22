@@ -114,14 +114,41 @@ void main() {
       expect(allDoors.length, equals(2), reason: 'Both EG and 1.OG doors should exist without overwriting');
     });
 
-    final testDataDir = Directory(r'C:\Users\Cabarcas\WartungTool\create_inpection_report-1\test\test_data');
-    final filesToTest = testDataDir.existsSync()
-        ? testDataDir
-            .listSync()
-            .where((entity) => entity is File && entity.path.endsWith('.xlsx'))
-            .cast<File>()
-            .toList()
-        : <File>[];
+      final testDataDir = Directory(r'C:\Users\Cabarcas\WartungTool\create_inpection_report-1\test\test_data');
+
+      // Convert xlsm files to xlsx in the test data directory
+      if (testDataDir.existsSync()) {
+        try {
+          final xlsmFiles = testDataDir
+              .listSync()
+              .where((entity) {
+                if (entity is! File) return false;
+                final name = p.basename(entity.path);
+                return name.endsWith('.xlsm') && !name.startsWith('~\$');
+              })
+              .cast<File>()
+              .toList();
+          for (final xlsmFile in xlsmFiles) {
+            final xlsxPath = xlsmFile.path.substring(0, xlsmFile.path.length - 5) + '.xlsx';
+            xlsmFile.copySync(xlsxPath);
+            print('Converted test data file: ${xlsmFile.path} -> $xlsxPath');
+          }
+        } catch (e) {
+          print('Error converting xlsm to xlsx test data files: $e');
+        }
+      }
+
+      final filesToTest = testDataDir.existsSync()
+          ? testDataDir
+              .listSync()
+              .where((entity) {
+                if (entity is! File) return false;
+                final name = p.basename(entity.path);
+                return name.endsWith('.xlsx') && !name.startsWith('~\$');
+              })
+              .cast<File>()
+              .toList()
+          : <File>[];
 
     for (final file in filesToTest) {
       final filename = p.basename(file.path);
@@ -132,12 +159,8 @@ void main() {
         final hasFehler = decoder.tables.containsKey('Fehlerübersicht');
 
         if (!hasFehler) {
-          // This file is known to miss the "Fehlerübersicht" worksheet
-          expect(
-            () => ExcelDataImporter.importFromFile(file),
-            throwsA(isA<Exception>().having((e) => e.toString(), 'description', contains('Fehlerübersicht'))),
-          );
-          return;
+          // Seed the database catalog table from default assets so mapping works
+          await DatabaseService.checkAndInitializeCatalog();
         }
 
         final result = await ExcelDataImporter.importFromFile(file);
@@ -145,25 +168,107 @@ void main() {
         expect(result.sheetsProcessed, greaterThanOrEqualTo(1));
         expect(result.doorsImported, greaterThan(0));
 
+        if (!hasFehler) {
+          expect(
+            result.warnings.any((w) => w.contains('Fehlerübersicht')),
+            isTrue,
+            reason: 'Should log a warning when Fehlerübersicht is missing',
+          );
+        }
+
         if (result.warnings.isNotEmpty) {
           print('INFO: Warnings parsed for $filename:\n${result.warnings.join('\n')}');
         }
 
         final db = await DatabaseService.getDb();
         
+        final expectedProjMatch = RegExp(r'(P-\d+)', caseSensitive: false).firstMatch(filename);
+        final expectedProjectNumber = expectedProjMatch != null ? expectedProjMatch.group(1)!.toUpperCase() : '';
+        final dbInspections = await db.query('inspections');
+        expect(dbInspections, isNotEmpty);
+        for (final insp in dbInspections) {
+          expect(insp['projectNumber'], equals(expectedProjectNumber));
+        }
+
         final inspectionsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
         final doorsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
         final junctionsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ?? 0;
         final errorsLinkedCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ?? 0;
 
-        print('--- DIAGNOSTICS FOR $filename ---');
-        print('result.sheetsProcessed: ${result.sheetsProcessed}');
-        print('result.doorsImported: ${result.doorsImported}');
-        print('result.errorsLinked: ${result.errorsLinked}');
-        print('Master DB inspectionsCount: $inspectionsCount');
-        print('Master DB doorsCount: $doorsCount');
-        print('Master DB junctionsCount: $junctionsCount');
-        print('Master DB errorsLinkedCount: $errorsLinkedCount');
+        print('======================================================================');
+        print('MIGRATION REPORT FOR FILE: $filename');
+        print('======================================================================');
+        print('1. OVERALL METRICS:');
+        print('   - Total inspections (sheets) processed: ${result.sheetsProcessed}');
+        print('   - Total doors created/imported: ${result.doorsImported}');
+        print('   - Total door errors linked: ${result.errorsLinked}');
+        print('   - Total error catalog conflicts: ${result.catalogConflicts.length}');
+        print('   - Total import warnings/mismatches: ${result.warnings.length}');
+        print('----------------------------------------------------------------------');
+        print('2. DETAILED MIGRATION PROTOCOL (RAW LOGS):');
+        for (final logLine in result.logs) {
+          print('   [LOG] $logLine');
+        }
+        print('----------------------------------------------------------------------');
+        print('3. PER-INSPECTION (SHEET) BREAKDOWN:');
+        
+        // Parse sheet log statements to extract per-sheet numbers
+        // E.g., Blatt "Türliste EG" abgeschlossen: 14 Türen importiert, 5 Mängel verknüpft.
+        final sheetPattern = RegExp(r'Blatt "([^"]+)" abgeschlossen: (\d+) Türen importiert, (\d+) Mängel verknüpft\.');
+        int sheetsFound = 0;
+        for (final logLine in result.logs) {
+          final match = sheetPattern.firstMatch(logLine);
+          if (match != null) {
+            sheetsFound++;
+            final sheetName = match.group(1)!;
+            final sheetDoors = int.parse(match.group(2)!);
+            final sheetErrors = int.parse(match.group(3)!);
+            
+            // Associate warnings to this sheet by checking if the warning contains the sheet name
+            final sheetWarnings = result.warnings.where((w) => w.contains(sheetName) || w.contains('"$sheetName"')).toList();
+            
+            print('   - Inspection Worksheet "$sheetName":');
+            print('     * Doors created: $sheetDoors');
+            print('     * Defects linked: $sheetErrors');
+            print('     * Warnings/Mismatches: ${sheetWarnings.length}');
+            for (final warn in sheetWarnings) {
+              print('       -> Warning: $warn');
+            }
+          }
+        }
+        if (sheetsFound == 0) {
+          print('   - No worksheets successfully parsed.');
+        }
+        print('----------------------------------------------------------------------');
+        print('4. ERROR CATALOG ANALYSIS & MISMATCHES:');
+        final catalogLogs = result.logs.where((l) => l.contains('Fehlerkatalog') || l.contains('KATALOGKONFLIKTE'));
+        for (final clog in catalogLogs) {
+          print('   [Catalog] $clog');
+        }
+        if (result.catalogConflicts.isNotEmpty) {
+          print('   Catalog Conflicts Detailed:');
+          for (final conf in result.catalogConflicts) {
+            print('     * Code: ${conf.code}');
+            print('       - Reason: ${conf.reason}');
+            print('       - Excel Description: ${conf.incoming.description}');
+            print('       - DB Description: ${conf.existing?.description ?? "N/A"}');
+          }
+        } else {
+          print('   No catalog conflicts found.');
+        }
+        print('----------------------------------------------------------------------');
+        print('5. DOOR CONFLICTS FOR REVIEW:');
+        if (result.doorConflicts.isNotEmpty) {
+          print('   Door Conflicts Detailed (${result.doorConflicts.length} conflicts):');
+          for (final dc in result.doorConflicts) {
+            print('     * Door Number: ${dc.incomingDoor.doorNumber} (Floor: ${dc.incomingDoor.floor})');
+            print('       - Type: ${dc.type.label}');
+            print('       - Message: ${dc.message}');
+          }
+        } else {
+          print('   No door conflicts detected.');
+        }
+        print('======================================================================\n');
 
         expect(inspectionsCount, equals(result.sheetsProcessed));
         expect(doorsCount, lessThanOrEqualTo(result.doorsImported));

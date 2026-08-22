@@ -78,6 +78,7 @@ class TestDataGenerator {
             'contactPerson': "Herr Schmidt",
             'inspectorName': "Prüfingenieur $i",
             'jobNumber': jobNum,
+            'projectNumber': 'P-00${1000 + c}',
           });
 
           print('  Generating Job: $jobNum (Historical Date: $date)');

@@ -1056,7 +1056,12 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   Future<void> _addPhotoToError(InspectionDoorError error, ImageSource source) async {
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: source);
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
       if (image == null) return;
 
       final File file = File(image.path);

@@ -324,16 +324,18 @@ class DoorValidator {
     void checkTech(String field, String label, String inVal, String exVal) {
       if (inVal.trim() == exVal.trim()) return;
       if (inVal.trim().isEmpty) return; // Don't flag empty incoming as mismatch
+      final cleanInVal = inVal.isEmpty ? '(leer)' : inVal.trim();
+      final cleanExVal = exVal.isEmpty ? '(leer)' : exVal.trim();
       conflicts.add(DoorConflict(
         existingDoor: existing,
         incomingDoor: incoming,
         type: DoorConflictType.technicalMismatch,
         fieldName: field,
         fieldLabel: label,
-        existingValue: exVal.isEmpty ? '(leer)' : exVal,
-        incomingValue: inVal.isEmpty ? '(leer)' : inVal,
+        existingValue: cleanExVal,
+        incomingValue: cleanInVal,
         ruleCode: 'TECH',
-        message: 'Technisches Feld "$label" weicht vom Stammdatensatz ab.',
+        message: 'Technisches Feld "$label" weicht vom Stammdatensatz ab (Import: "$cleanInVal", Stamm: "$cleanExVal").',
       ));
     }
 

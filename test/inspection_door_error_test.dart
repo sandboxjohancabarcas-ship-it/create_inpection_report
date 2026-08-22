@@ -82,5 +82,32 @@ void main() {
       expect(loadedErrors.length, 1);
       expect(loadedErrors.first.attachments, 'photo1_base64_data,photo2_base64_data');
     });
+
+    test('should save and retrieve large attachments (3MB) using chunked reading without crashing', () async {
+      final db = await LocalDatabaseService.getDb();
+      await db.delete('inspection_door_errors');
+
+      // Generate a 3MB string
+      final String largeString = 'A' * 3 * 1024 * 1024;
+
+      final error = InspectionDoorError(
+        id: 1000,
+        inspectionDoorId: 456,
+        errorId: 5,
+        quantity: 1,
+        severity: 'medium',
+        notes: 'Test notes with large photo',
+        resolutionStatus: 'Open',
+        attachments: largeString,
+      );
+
+      await LocalDatabaseService.insertInspectionDoorError(error);
+
+      // Verify chunked retrieval works and matches the source string exactly
+      final loadedErrors = await LocalDatabaseService.getErrorsForInspectionDoor(456);
+      expect(loadedErrors.length, 1);
+      expect(loadedErrors.first.attachments.length, largeString.length);
+      expect(loadedErrors.first.attachments, largeString);
+    });
   });
 }

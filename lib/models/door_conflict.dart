@@ -142,6 +142,9 @@ class DoorMergeResult {
   /// Conflicts requiring Manager review.
   final List<DoorConflict> conflicts;
 
+  /// Detailed protocol logs for the migration decision history.
+  final List<String> protocolLogs;
+
   /// Count breakdown by type for the summary chips.
   int get identityCount => conflicts.where((c) => c.type == DoorConflictType.identityCollision).length;
   int get safetyCount => conflicts.where((c) => c.type == DoorConflictType.safetyFlagChange).length;
@@ -154,5 +157,6 @@ class DoorMergeResult {
   const DoorMergeResult({
     required this.cleanDoors,
     required this.conflicts,
+    this.protocolLogs = const [],
   });
 }
