@@ -8,8 +8,14 @@ import 'error_management_page.dart';
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
   final bool isManagerMode;
+  final int? inspectionId;
  
-  const DoorInspectionForm({super.key, this.door, this.isManagerMode = false});
+  const DoorInspectionForm({
+    super.key,
+    this.door,
+    this.isManagerMode = false,
+    this.inspectionId,
+  });
 
   @override
   _DoorInspectionFormState createState() => _DoorInspectionFormState();
@@ -178,26 +184,50 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         ? await DatabaseService.getDb() 
         : await LocalDatabaseService.getDb();
         
-    // Join inspections with inspection_doors to find the metadata for this specific door
-    final List<Map<String, dynamic>> results = await db.rawQuery('''
-      SELECT i.* 
-      FROM inspections i
-      INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
-      WHERE id.doorId = ?
-      LIMIT 1
-    ''', [widget.door!.id!]);
+    List<Map<String, dynamic>> results;
+    if (widget.inspectionId != null) {
+      results = await db.rawQuery('''
+        SELECT i.* 
+        FROM inspections i
+        INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+        WHERE id.doorId = ? AND i.inspectionId = ?
+        LIMIT 1
+      ''', [widget.door!.id!, widget.inspectionId!]);
+
+      if (results.isEmpty) {
+        results = await db.query(
+          'inspections',
+          where: 'inspectionId = ?',
+          whereArgs: [widget.inspectionId!],
+          limit: 1,
+        );
+      }
+    } else {
+      results = await db.rawQuery('''
+        SELECT i.* 
+        FROM inspections i
+        INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+        WHERE id.doorId = ?
+        ORDER BY i.date DESC
+        LIMIT 1
+      ''', [widget.door!.id!]);
+    }
 
     if (results.isNotEmpty) {
       final insp = results.first;
       setState(() {
-        currentInspectionId = insp['inspectionId'];
+        currentInspectionId = widget.inspectionId ?? insp['inspectionId'];
         customerNameController.text = insp['clientName'] ?? '';
         customerAddressController.text = insp['objectAddress'] ?? '';
         contactPersonController.text = insp['contactPerson'] ?? '';
         jobNumberController.text = insp['jobNumber'] ?? '';
         projectNumberController.text = insp['projectNumber'] ?? '';
         inspectorNameController.text = insp['inspectorName'] ?? '';
-        inspectionDate = DateTime.parse(insp['date']);
+        inspectionDate = DateTime.tryParse(insp['date'] ?? '') ?? DateTime.now();
+      });
+    } else if (widget.inspectionId != null) {
+      setState(() {
+        currentInspectionId = widget.inspectionId;
       });
     }
   }

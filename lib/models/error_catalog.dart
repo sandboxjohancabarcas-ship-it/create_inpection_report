@@ -70,12 +70,35 @@ class ErrorCatalog {
         'sourceInspectionDoorId': sourceInspectionDoorId,
       };
 
+  static String normalizeSeverity(dynamic raw) {
+    if (raw == null) return 'medium';
+    final lower = raw.toString().trim().toLowerCase().replaceAll('"', '');
+    switch (lower) {
+      case 'low':
+      case 'niedrig':
+      case 'hinweis':
+        return 'low';
+      case 'high':
+      case 'hoch':
+      case 'mangel':
+        return 'high';
+      case 'critical':
+      case 'kritisch':
+      case 'gefahr':
+        return 'critical';
+      case 'medium':
+      case 'mittel':
+      default:
+        return 'medium';
+    }
+  }
+
   factory ErrorCatalog.fromMap(Map<String, dynamic> map) => ErrorCatalog(
         errorId: map['errorId'],
         code: map['code'] ?? '',
         description: map['description'] ?? '',
         category: map['category'] ?? '',
-        severity: map['severity'] ?? 'medium',
+        severity: normalizeSeverity(map['severity']),
         recommendation: map['recommendation'] ?? '',
         normReference: map['normReference'] ?? '',
         status: map['status'] ?? 'Approved',

@@ -506,15 +506,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       decoration: InputDecoration(labelText: 'Schweregrad'),
-                      initialValue: severityController.text,
-                      items: ['low', 'medium', 'high', 'critical'].map((severity) {
+                      value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())
+                          ? severityController.text.toLowerCase()
+                          : 'medium',
+                      items: const ['low', 'medium', 'high', 'critical'].map((severity) {
                         return DropdownMenuItem<String>(
                           value: severity,
                           child: Text(_getSeverityDisplay(severity)),
                         );
                       }).toList(),
                       onChanged: (value) {
-                        setState(() => severityController.text = value!);
+                        if (value != null) {
+                          setState(() => severityController.text = value);
+                        }
                       },
                     ),
                     SizedBox(height: 8),
@@ -648,12 +652,38 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   void _showErrorDetails(InspectionDoorError error) async {
-    final ErrorCatalog currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(error.errorId ?? 0) 
-      ?? ErrorCatalog(
-          code: 'Unbekannt',
-          description: 'Fehler nicht im Katalog gefunden',
-          category: 'Unbekannt',
-        );
+    // 1. Try finding from already loaded catalog items in memory
+    ErrorCatalog? currentCatalog = availableErrors.where(
+      (e) => (error.errorId != null && error.errorId! > 0 && e.errorId == error.errorId) ||
+             (error.errorCode.isNotEmpty && e.code == error.errorCode),
+    ).firstOrNull;
+
+    // 2. If not found in memory, query the appropriate database
+    if (currentCatalog == null) {
+      if (widget.isManagerMode) {
+        if (error.errorId != null && error.errorId! > 0) {
+          currentCatalog = await DatabaseService.getErrorCatalogItemById(error.errorId!);
+        }
+        if (currentCatalog == null && error.errorCode.isNotEmpty) {
+          final results = await DatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog = results.where((e) => e.code == error.errorCode).firstOrNull ?? results.firstOrNull;
+        }
+      } else {
+        if (error.errorId != null && error.errorId! > 0) {
+          currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(error.errorId!);
+        }
+        if (currentCatalog == null && error.errorCode.isNotEmpty) {
+          final results = await LocalDatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog = results.where((e) => e.code == error.errorCode).firstOrNull ?? results.firstOrNull;
+        }
+      }
+    }
+
+    final ErrorCatalog catalogDetails = currentCatalog ?? ErrorCatalog(
+      code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
+      description: 'Fehler nicht im Katalog gefunden',
+      category: 'Unbekannt',
+    );
 
     if (!mounted) return;
     
@@ -667,20 +697,20 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Code: ${currentCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Code: ${catalogDetails.code}', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
-              Text('Beschreibung: ${currentCatalog.description}'),
+              Text('Beschreibung: ${catalogDetails.description}'),
               SizedBox(height: 8),
-              Text('Kategorie: ${currentCatalog.category}'),
+              Text('Kategorie: ${catalogDetails.category}'),
               SizedBox(height: 8),
-              Text('Schweregrad: ${_getSeverityDisplay(currentCatalog.severity)}'),
-              if (currentCatalog.recommendation.isNotEmpty) ...[
+              Text('Schweregrad: ${_getSeverityDisplay(catalogDetails.severity)}'),
+              if (catalogDetails.recommendation.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text('Empfehlung: ${currentCatalog.recommendation}'),
+                Text('Empfehlung: ${catalogDetails.recommendation}'),
               ],
-              if (currentCatalog.normReference.isNotEmpty) ...[
+              if (catalogDetails.normReference.isNotEmpty) ...[
                 SizedBox(height: 8),
-                Text('Normreferenz: ${currentCatalog.normReference}'),
+                Text('Normreferenz: ${catalogDetails.normReference}'),
               ],
               SizedBox(height: 16),
               Text('Notizen: ${error.notes}'),
@@ -951,8 +981,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
 
     final notesController = TextEditingController(text: error.notes);
-    // Normalize to lowercase to match the dropdown items and prevent crashes
-    String status = (error.resolutionStatus ?? 'open').toLowerCase();
+    final validStatuses = ['open', 'in_progress', 'resolved'];
+    String status = validStatuses.contains((error.resolutionStatus ?? 'open').toLowerCase())
+        ? (error.resolutionStatus ?? 'open').toLowerCase()
+        : 'open';
 
     if (!mounted) return;
     
@@ -972,15 +1004,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
               SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(labelText: 'Status'),
-                initialValue: status,
-                items: ['open', 'in_progress', 'resolved'].map((status) {
+                value: status,
+                items: validStatuses.map((s) {
                   return DropdownMenuItem<String>(
-                    value: status,
-                    child: Text(_getStatusDisplay(status)),
+                    value: s,
+                    child: Text(_getStatusDisplay(s)),
                   );
                 }).toList(),
                 onChanged: (value) {
-                  status = value!;
+                  if (value != null) {
+                    status = value;
+                  }
                 },
               ),
               SizedBox(height: 16),

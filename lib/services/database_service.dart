@@ -1303,7 +1303,7 @@ class DatabaseService {
         for (final error in errors) {
           final existing = await txn.query(
             'error_catalog',
-            columns: ['errorId', 'description'],
+            columns: ['errorId', 'description', 'severity'],
             where: 'code = ?',
             whereArgs: [error.code],
             limit: 1,
@@ -1312,8 +1312,11 @@ class DatabaseService {
           if (existing.isNotEmpty) {
             final existingId = existing.first['errorId'] as int;
             final existingDesc = existing.first['description'] as String? ?? '';
-            // Update in-place if it is an empty or placeholder entry
-            if (existingDesc.startsWith('Excel-Fehler') || existingDesc.isEmpty) {
+            final existingSeverity = existing.first['severity'] as String? ?? '';
+            // Update in-place if it is a placeholder or has invalid severity
+            if (existingDesc.startsWith('Excel-Fehler') ||
+                existingDesc.isEmpty ||
+                !['low', 'medium', 'high', 'critical'].contains(existingSeverity.toLowerCase())) {
               await txn.update(
                 'error_catalog',
                 error.toMap()..remove('errorId'),
@@ -1359,18 +1362,85 @@ class DatabaseService {
     return results;
   }
 
-  /// Simple CSV parser for Error Catalog items
+  /// RFC 4180 compliant CSV line parser supporting quoted fields and embedded commas
+  static List<String> _parseCsvLine(String line) {
+    final List<String> fields = [];
+    final StringBuffer currentField = StringBuffer();
+    bool inQuotes = false;
+
+    for (int i = 0; i < line.length; i++) {
+      final char = line[i];
+
+      if (char == '"') {
+        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+          // Escaped double quotes inside quotes: "" -> "
+          currentField.write('"');
+          i++;
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        fields.add(currentField.toString().trim());
+        currentField.clear();
+      } else {
+        currentField.write(char);
+      }
+    }
+    fields.add(currentField.toString().trim());
+    return fields;
+  }
+
+  /// Normalizes severity strings to one of: 'low', 'medium', 'high', 'critical'
+  static String normalizeSeverity(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return 'medium';
+    final lower = raw.trim().toLowerCase().replaceAll('"', '');
+    switch (lower) {
+      case 'low':
+      case 'niedrig':
+      case 'hinweis':
+        return 'low';
+      case 'high':
+      case 'hoch':
+      case 'mangel':
+        return 'high';
+      case 'critical':
+      case 'kritisch':
+      case 'gefahr':
+        return 'critical';
+      case 'medium':
+      case 'mittel':
+      default:
+        return 'medium';
+    }
+  }
+
+  /// Simple CSV parser for Error Catalog items with robust quote handling
   static List<ErrorCatalog> _parseCsv(String csv) {
     final List<ErrorCatalog> results = [];
     final lines = csv.split('\n');
-    for (var line in lines) {
-      final parts = line.split(',').map((p) => p.trim()).toList();
+    bool isHeader = true;
+
+    for (var rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+
+      if (isHeader) {
+        isHeader = false;
+        // Skip header if line starts with code column
+        if (line.toLowerCase().startsWith('code,') || line.toLowerCase().startsWith('"code"')) {
+          continue;
+        }
+      }
+
+      final parts = _parseCsvLine(line);
       if (parts.length >= 2 && parts[0].isNotEmpty) {
+        final rawSeverity = parts.length > 3 && parts[3].isNotEmpty ? parts[3] : 'medium';
         results.add(ErrorCatalog(
           code: parts[0],
           description: parts[1],
-          category: parts.length > 2 ? parts[2] : 'Allgemein',
-          severity: parts.length > 3 ? parts[3] : 'medium',
+          category: parts.length > 2 && parts[2].isNotEmpty ? parts[2] : 'Allgemein',
+          severity: normalizeSeverity(rawSeverity),
           recommendation: parts.length > 4 ? parts[4] : '',
           normReference: parts.length > 5 ? parts[5] : '',
         ));

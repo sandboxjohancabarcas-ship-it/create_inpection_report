@@ -285,7 +285,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     final codeController = TextEditingController(text: error?.code ?? '');
     final descriptionController = TextEditingController(text: error?.description ?? '');
     final categoryController = TextEditingController(text: error?.category ?? '');
-    final severityController = TextEditingController(text: error?.severity ?? 'medium');
+    final validSeverities = ['low', 'medium', 'high', 'critical'];
+    final rawSeverity = (error?.severity ?? 'medium').trim().toLowerCase().replaceAll('"', '');
+    final initialSeverity = validSeverities.contains(rawSeverity) 
+        ? rawSeverity 
+        : DatabaseService.normalizeSeverity(rawSeverity);
+    final severityController = TextEditingController(text: initialSeverity);
     final recommendationController = TextEditingController(text: error?.recommendation ?? '');
     final normReferenceController = TextEditingController(text: error?.normReference ?? '');
 
@@ -325,19 +330,23 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ),
                 SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: severityController.text,
+                  value: validSeverities.contains(severityController.text.toLowerCase())
+                      ? severityController.text.toLowerCase()
+                      : 'medium',
                   decoration: InputDecoration(
                     labelText: 'Schweregrad',
                     border: OutlineInputBorder(),
                   ),
-                  items: ['low', 'medium', 'high', 'critical'].map((severity) {
+                  items: validSeverities.map((severity) {
                     return DropdownMenuItem<String>(
                       value: severity,
                       child: Text(_getSeverityDisplay(severity)),
                     );
                   }).toList(),
                   onChanged: (value) {
-                    severityController.text = value!;
+                    if (value != null) {
+                      severityController.text = value;
+                    }
                   },
                 ),
                 SizedBox(height: 16),

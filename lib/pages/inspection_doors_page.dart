@@ -360,6 +360,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                       builder: (_) => DoorInspectionForm(
                                         door: door,
                                         isManagerMode: widget.isManagerMode,
+                                        inspectionId: widget.inspectionId,
                                       ),
                                     ),
                                   );
@@ -404,6 +405,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                   MaterialPageRoute(
                     builder: (_) => DoorInspectionForm(
                       isManagerMode: widget.isManagerMode,
+                      inspectionId: widget.inspectionId,
                     ),
                   ),
                 );
