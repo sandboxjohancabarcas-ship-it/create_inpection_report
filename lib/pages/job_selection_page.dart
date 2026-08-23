@@ -8,12 +8,10 @@ import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/test_data_generator.dart';
-import '../models/door.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import 'inspection_doors_page.dart';
-import 'DoorListPage.dart'; // Import DoorListPage for navigation
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
 
@@ -38,6 +36,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   final TextEditingController _searchController = TextEditingController();
   final Set<int> _selectedInspectionIds = {};
   InspectionList _currentVisibleResults = [];
+  List<String> _clients = ['Alle'];
+  String _selectedClient = 'Alle';
 
   final KinchiApiService _apiService = KinchiApiService();
 
@@ -292,7 +292,21 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     setState(() {
       _selectedInspectionIds.clear();
       _currentVisibleResults = [];
-      _inspectionsFuture = DatabaseService.searchInspections(_searchController.text);
+      _inspectionsFuture = DatabaseService.searchInspections(
+        _searchController.text,
+        clientFilter: _selectedClient,
+      );
+    });
+    // Refresh distinct clients list for filter chips
+    DatabaseService.getAllMasterClients().then((clients) {
+      if (mounted) {
+        setState(() {
+          _clients = ['Alle', ...clients];
+          if (!_clients.contains(_selectedClient)) {
+            _selectedClient = 'Alle';
+          }
+        });
+      }
     });
   }
 
@@ -554,6 +568,42 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               onChanged: (value) => _refreshInspections(),
             ),
           ),
+          // Customer filter chips
+          if (_clients.length > 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.business, size: 18, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  const Text('Kunde:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _clients.map((client) {
+                          final isSelected = client == _selectedClient;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text(client, style: const TextStyle(fontSize: 12)),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() => _selectedClient = client);
+                                  _refreshInspections();
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_searchController.text.isNotEmpty || _selectedInspectionIds.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),

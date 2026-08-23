@@ -962,6 +962,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
               ],
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_error_management',
         onPressed: _showAddErrorDialog,
         tooltip: 'Fehler hinzufügen',
         child: Icon(Icons.add),

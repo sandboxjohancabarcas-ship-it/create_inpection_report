@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/pages/DoorListPage.dart';
 import 'package:wartungstool/pages/main_navigation_page.dart';
 
 void main() async {
@@ -17,7 +18,6 @@ void main() async {
   }
 
   // Initialize Local Working Database (Both Roles)
-  // Inspector needs it to work; Manager needs it for import/export testing.
   await LocalDatabaseService.getDb();
 
   runApp(const MyApp());
@@ -29,11 +29,14 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'WartungsTool',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
-      home: MainNavigationPage(),
+      home: (Platform.isAndroid || Platform.isIOS)
+          ? const DoorListPage()
+          : const MainNavigationPage(),
     );
   }
 }

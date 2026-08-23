@@ -463,14 +463,15 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Türnummer"),
             ),
 
-            // Door Alias
+            // Door Alias (Barcode / Unique ID)
             TextField(
               controller: doorAliasController,
-              enabled: widget.isManagerMode, // Editable only by manager
+              enabled: true, // Editable by Inspector (first physical inspection barcode scan) and Manager
               maxLength: 12,
               decoration: const InputDecoration(
-                labelText: "Tür-Identität (Alias)",
-                helperText: "Dauerhafte, eindeutige ID (max. 12 Zeichen, Bearbeitungsrechte: Manager)",
+                labelText: "Tür-Identität (Alias / Barcode)",
+                helperText: "Dauerhafte, eindeutige ID (z.B. Barcode bei Erstprüfung)",
+                suffixIcon: Icon(Icons.qr_code_scanner),
               ),
             ),
             

@@ -5,10 +5,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import '../services/local_database_service.dart';
-import '../models/models.dart' hide JobSelectionPage; // Hide JobSelectionPage to prevent conflict
 import '../widgets/inspection_summary_card.dart';
 import 'new_door_page.dart';
-import 'job_selection_page.dart';
 import 'inspection_doors_page.dart';
 
 class DoorListPage extends StatefulWidget {
@@ -20,6 +18,8 @@ class DoorListPage extends StatefulWidget {
 
 class _DoorListPageState extends State<DoorListPage> {
   List<Map<String, dynamic>> inspections = [];
+  List<String> _clients = ['Alle'];
+  String _selectedClient = 'Alle';
   bool _isSyncing = false;
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
@@ -32,8 +32,20 @@ class _DoorListPageState extends State<DoorListPage> {
   }
 
   Future<void> loadInspections() async {
-    final results = await LocalDatabaseService.getAllInspections();
-    setState(() => inspections = results);
+    final results = await LocalDatabaseService.getAllInspections(
+      query: _searchController.text,
+      clientFilter: _selectedClient,
+    );
+    final clientList = await LocalDatabaseService.getAllLocalClients();
+    if (mounted) {
+      setState(() {
+        inspections = results;
+        _clients = ['Alle', ...clientList];
+        if (!_clients.contains(_selectedClient)) {
+          _selectedClient = 'Alle';
+        }
+      });
+    }
   }
 
   /// Confirms deletion with the user, consistent with JobSelectionPage logic.
@@ -87,7 +99,7 @@ class _DoorListPageState extends State<DoorListPage> {
   }
 
   /// Opens a file picker to select a .db file and imports it into the Working DB.
-  /// This allows inspectors to load packages prepared by the manager.
+  /// Supports merging packages or replacing the working DB.
   Future<void> _handleImportPaket() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
@@ -97,28 +109,37 @@ class _DoorListPageState extends State<DoorListPage> {
 
         if (!mounted) return;
 
-        final confirm = await showDialog<bool>(
+        final String? action = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Paket importieren'),
+            title: const Text('Inspektionspaket importieren'),
             content: const Text(
-              'Möchten Sie dieses Inspektionspaket importieren? '
-              'Bestehende lokale Daten auf diesem Gerät werden überschrieben.'
+              'Wie möchten Sie das Paket importieren?\n\n'
+              '• Hinzufügen (Merge): Ergänzt Ihre bestehenden Aufträge auf diesem Gerät.\n\n'
+              '• Ersetzen: Löscht vorherige Daten und übernimmt nur dieses Paket.'
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Importieren', style: TextStyle(color: Colors.red)),
+              TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Abbrechen')),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context, 'replace'),
+                child: const Text('Ersetzen', style: TextStyle(color: Colors.orange)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, 'merge'),
+                child: const Text('Hinzufügen (Merge)'),
               ),
             ],
           ),
         );
 
-        if (confirm != true) return;
+        if (action == null) return;
 
         setState(() => _isSyncing = true);
-        await LocalDatabaseService.importWorkingDb(path);
+        if (action == 'merge') {
+          await LocalDatabaseService.importAndMergePackage(path);
+        } else {
+          await LocalDatabaseService.importWorkingDb(path);
+        }
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -264,28 +285,58 @@ class _DoorListPageState extends State<DoorListPage> {
                   tooltip: 'Paket importieren',
                   onPressed: _isSyncing ? null : _handleImportPaket,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.cloud_download),
-                  tooltip: 'Auftrag aus Haupt-DB laden',
-                  onPressed: _isSyncing
-                      ? null
-                      : () async {
-                          final result = await Navigator.push<bool>(
-                            context,
-                            MaterialPageRoute(builder: (context) => const JobSelectionPage()),
-                          );
-                          if (result == true) {
-                            loadInspections();
-                          }
-                        },
-                ),
               ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          inspections.isEmpty
-              ? const Center(child: Text("Keine Aufträge geladen"))
-              : ListView.builder(
+          if (_clients.length > 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+              child: Row(
+                children: [
+                  const Icon(Icons.business, size: 18, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  const Text('Kunde:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _clients.map((client) {
+                          final isSelected = client == _selectedClient;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6.0),
+                            child: ChoiceChip(
+                              label: Text(client, style: const TextStyle(fontSize: 12)),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() => _selectedClient = client);
+                                  loadInspections();
+                                }
+                              },
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                inspections.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchController.text.isNotEmpty || _selectedClient != 'Alle'
+                              ? 'Keine passenden Aufträge gefunden'
+                              : 'Keine Aufträge geladen',
+                        ),
+                      )
+                    : ListView.builder(
               itemCount: inspections.length,
               itemBuilder: (context, index) {
                 final insp = inspections[index];
@@ -330,10 +381,10 @@ class _DoorListPageState extends State<DoorListPage> {
                 child: Card(
                   margin: EdgeInsets.all(32),
                   child: Padding(
-                    padding: EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
+                      children: const [
                         CircularProgressIndicator(),
                         SizedBox(height: 16),
                         Text("Synchronisierung läuft..."),
@@ -345,6 +396,9 @@ class _DoorListPageState extends State<DoorListPage> {
             ),
         ],
       ),
+    ),
+  ],
+),
       bottomNavigationBar: !isSelectionMode
           ? null
           : BottomAppBar(
@@ -366,6 +420,7 @@ class _DoorListPageState extends State<DoorListPage> {
               ),
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'fab_door_list',
         child: const Icon(Icons.add),
         onPressed: () async {
           await Navigator.push(

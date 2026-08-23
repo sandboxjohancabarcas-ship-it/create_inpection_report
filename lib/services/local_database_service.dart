@@ -233,9 +233,60 @@ class LocalDatabaseService {
       },
     );
 
-    await DatabaseService.populateMissingAliases(_db!, isLocal: true);
+    await _populateMissingAliases(_db!);
 
     return _db!;
+  }
+
+  static Future<void> _populateMissingAliases(Database db) async {
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT d.id, d.doorNumber, d.floor, i.clientName, i.objectAddress
+      FROM doors d
+      LEFT JOIN inspection_doors id ON d.id = id.doorId
+      LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE d.doorAlias IS NULL
+    ''');
+    
+    if (rows.isEmpty) return;
+    
+    for (final row in rows) {
+      final id = row['id'] as int;
+      final doorNumber = row['doorNumber'] as String? ?? '0';
+      final floor = row['floor'] as String? ?? '';
+      final clientName = row['clientName'] as String? ?? '';
+      final objectAddress = row['objectAddress'] as String? ?? '';
+      
+      String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+      if (generated.isEmpty) {
+        generated = 'DOOR-$id';
+      }
+      
+      String uniqueAlias = generated;
+      int suffix = 1;
+      while (true) {
+        final existing = await db.query(
+          'doors',
+          columns: ['id'],
+          where: 'doorAlias = ?',
+          whereArgs: [uniqueAlias],
+        );
+        if (existing.isEmpty) {
+          break;
+        }
+        final suffixStr = '-$suffix';
+        final maxBaseLen = 12 - suffixStr.length;
+        final base = generated.length > maxBaseLen ? generated.substring(0, maxBaseLen) : generated;
+        uniqueAlias = '$base$suffixStr';
+        suffix++;
+      }
+      
+      await db.update(
+        'doors',
+        {'doorAlias': uniqueAlias},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
   }
 
   /// Downloads a Job Package (one or many inspections) from the Main DB.
@@ -570,16 +621,53 @@ class LocalDatabaseService {
     );
   }
 
-  /// Fetches all inspections currently stored in the working database with their total door count.
-  static Future<List<Map<String, dynamic>>> getAllInspections() async {
+  /// Returns all distinct client names stored in the local working database
+  static Future<List<String>> getAllLocalClients() async {
     final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT clientName 
+      FROM inspections 
+      WHERE clientName IS NOT NULL AND TRIM(clientName) != ''
+      ORDER BY clientName ASC
+    ''');
+    return rows.map((r) => r['clientName'] as String).toList();
+  }
+
+  /// Fetches inspections stored in the working database with optional query and clientFilter.
+  static Future<List<Map<String, dynamic>>> getAllInspections({String query = '', String clientFilter = ''}) async {
+    final db = await getDb();
+    final cleanQuery = query.trim();
+    final cleanClient = clientFilter.trim();
+
+    String where = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
+      where += ' AND i.clientName = ?';
+      whereArgs.add(cleanClient);
+    }
+
+    if (cleanQuery.isNotEmpty) {
+      final searchTerm = '%$cleanQuery%';
+      where += ''' AND (
+        i.clientName LIKE ? 
+        OR i.jobNumber LIKE ? 
+        OR i.date LIKE ? 
+        OR i.objectAddress LIKE ? 
+        OR d.doorNumber LIKE ?
+      )''';
+      whereArgs.addAll([searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
+    }
+
     return await db.rawQuery('''
-      SELECT i.*, COUNT(id.doorId) as doorCount
+      SELECT i.*, COUNT(DISTINCT id.doorId) as doorCount
       FROM inspections i
       LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+      LEFT JOIN doors d ON id.doorId = d.id
+      WHERE $where
       GROUP BY i.inspectionId
       ORDER BY i.date DESC
-    ''');
+    ''', whereArgs);
   }
 
   /// Returns all doors associated with a specific inspection ID in the local DB.
@@ -993,7 +1081,7 @@ class LocalDatabaseService {
   }
 
   /// Imports an external .db file to replace the internal working.db.
-  /// Includes validation for file existence, extension, and schema compatibility.
+  /// Validates file existence, format, and schema compatibility.
   static Future<void> importWorkingDb(String sourcePath) async {
     final sourceFile = File(sourcePath);
     
@@ -1007,18 +1095,22 @@ class LocalDatabaseService {
     }
 
     // 2. Schema Compatibility Check
-    // Open the incoming file in read-only mode to verify the version
     Database? tempDb;
     try {
+      if (Platform.isWindows || Platform.isLinux) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
       tempDb = await openDatabase(sourcePath, readOnly: true);
-      final int version = await tempDb.getVersion();
-      const int expectedVersion = 8; // Must match the version in getDb()
+      final tables = await tempDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tableNames = tables.map((t) => t['name'] as String).toSet();
       
-      if (version != expectedVersion) {
-        throw Exception('Inkompatible Paketversion: Erwartet v$expectedVersion, Datei ist v$version.');
+      if (!tableNames.contains('doors') || !tableNames.contains('inspections')) {
+        throw Exception('Die ausgewählte Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
       }
     } catch (e) {
-      throw Exception('Validierungsfehler: Die Datei ist beschädigt oder keine gültige Datenbank.');
+      if (e is Exception) rethrow;
+      throw Exception('Validierungsfehler: $e');
     } finally {
       await tempDb?.close();
     }
@@ -1029,9 +1121,69 @@ class LocalDatabaseService {
     final destinationPath = await _getWorkingDbPath();
     try {
       await sourceFile.copy(destinationPath);
+      // Re-initialize to ensure migrations are applied if needed
+      await getDb();
       print('Database successfully validated and imported.');
     } catch (e) {
       throw Exception('Fehler beim Dateizugriff während des Imports: $e');
+    }
+  }
+
+  /// Imports an external inspection package and merges it into the local working DB.
+  /// Allows technicians to load multiple inspection packages without losing existing local data.
+  static Future<void> importAndMergePackage(String packagePath) async {
+    final localDb = await getDb();
+    
+    if (Platform.isWindows || Platform.isLinux) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
+    final packageDb = await openDatabase(packagePath, readOnly: true);
+
+    try {
+      // Validate structure
+      final tables = await packageDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tableNames = tables.map((t) => t['name'] as String).toSet();
+      if (!tableNames.contains('doors') || !tableNames.contains('inspections')) {
+        throw Exception('Die Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
+      }
+
+      await localDb.transaction((txn) async {
+        final pInspections = await packageDb.query('inspections');
+        final pDoors = await packageDb.query('doors');
+        final pJunctions = await packageDb.query('inspection_doors');
+        final pErrors = await packageDb.query('inspection_door_errors');
+        final pCatalog = await packageDb.query('error_catalog');
+
+        // 1. Merge catalog
+        final catalogList = pCatalog.map((m) => ErrorCatalog.fromMap(m)).toList();
+        await _batchInsertCatalog(txn, catalogList, ConflictAlgorithm.replace);
+
+        // 2. Merge inspections
+        for (var insp in pInspections) {
+          final data = Map<String, dynamic>.from(insp);
+          data.remove('doorCount');
+          await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        // 3. Merge doors
+        for (var door in pDoors) {
+          await txn.insert('doors', door, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        // 4. Merge junctions
+        for (var junction in pJunctions) {
+          await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        // 5. Merge errors
+        for (var err in pErrors) {
+          await txn.insert('inspection_door_errors', err, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+    } finally {
+      await packageDb.close();
     }
   }
 }

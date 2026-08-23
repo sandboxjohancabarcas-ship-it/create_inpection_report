@@ -197,6 +197,14 @@ Win32Window::MessageHandler(HWND hwnd,
 
       return 0;
     }
+    case WM_GETMINMAXINFO: {
+      auto info = reinterpret_cast<MINMAXINFO*>(lparam);
+      // Ensure window is never resized smaller than 640x480 to prevent swapchain / EGL context loss
+      info->ptMinTrackSize.x = 640;
+      info->ptMinTrackSize.y = 480;
+      return 0;
+    }
+
     case WM_SIZE: {
       RECT rect = GetClientArea();
       if (child_content_ != nullptr) {

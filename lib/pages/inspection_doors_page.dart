@@ -398,6 +398,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       floatingActionButton: (widget.isManagerMode || isSelectionMode)
           ? null
           : FloatingActionButton(
+              heroTag: 'fab_inspection_doors',
               tooltip: 'Neue Tür hinzufügen',
               onPressed: () async {
                 await Navigator.push(

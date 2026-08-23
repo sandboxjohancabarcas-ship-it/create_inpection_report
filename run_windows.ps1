@@ -109,7 +109,7 @@ if ($Mode -eq "clean") {
 # 4. Launch Flutter
 Write-Host ""
 Write-Host "[3/3] Launching application on Windows..." -ForegroundColor Cyan
-$flutterArgs = @("run", "-d", "Windows")
+$flutterArgs = @("run", "-d", "Windows", "--no-enable-impeller")
 if ($Release) {
     $flutterArgs += "--release"
 }

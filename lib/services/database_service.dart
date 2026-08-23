@@ -1,11 +1,13 @@
 import 'dart:io';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:wartungstool/models/models.dart';
-import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
+import 'local_database_service.dart';
 
 /// Master Database Service (Manager Role)
 /// This is a stub to allow the project to compile for Windows.
@@ -380,34 +382,42 @@ class DatabaseService {
   }
 
   /// Searches inspections by client name, job number, date, or door number.
-  /// Includes doorCount and limits results to 50 jobs for performance.
-  static Future<List<Map<String, dynamic>>> searchInspections(String query) async {
+  /// Supports optional clientFilter and limits results to 100 jobs for performance.
+  static Future<List<Map<String, dynamic>>> searchInspections(String query, {String clientFilter = ''}) async {
     final db = await getDb();
-    if (query.trim().isEmpty) {
-      return await db.rawQuery('''
-        SELECT i.*, COUNT(id.doorId) as doorCount
-        FROM inspections i
-        LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
-        GROUP BY i.inspectionId
-        ORDER BY i.date DESC
-        LIMIT 50
-      ''');
+    final cleanQuery = query.trim();
+    final cleanClient = clientFilter.trim();
+
+    String where = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
+      where += ' AND i.clientName = ?';
+      whereArgs.add(cleanClient);
     }
 
-    final searchTerm = '%$query%';
+    if (cleanQuery.isNotEmpty) {
+      final searchTerm = '%$cleanQuery%';
+      where += ''' AND (
+        i.clientName LIKE ? 
+        OR i.jobNumber LIKE ? 
+        OR i.date LIKE ? 
+        OR i.objectAddress LIKE ? 
+        OR d.doorNumber LIKE ?
+      )''';
+      whereArgs.addAll([searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
+    }
+
     return await db.rawQuery('''
-      SELECT i.*, COUNT(DISTINCT id.doorId) as doorCount FROM inspections i
+      SELECT i.*, COUNT(DISTINCT id.doorId) as doorCount 
+      FROM inspections i
       LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
       LEFT JOIN doors d ON id.doorId = d.id
-      WHERE i.clientName LIKE ? 
-         OR i.jobNumber LIKE ? 
-         OR i.date LIKE ? 
-         OR i.objectAddress LIKE ? 
-         OR d.doorNumber LIKE ?
+      WHERE $where
       GROUP BY i.inspectionId
       ORDER BY i.date DESC
-      LIMIT 50
-    ''', [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
+      LIMIT 100
+    ''', whereArgs);
   }
 
   /// Performs a global search across all doors in the master database.
@@ -646,6 +656,105 @@ class DatabaseService {
     return maps.map((map) => Door.fromMap(map)).toList();
   }
 
+  /// Returns all distinct client names from Master DB for filtering
+  static Future<List<String>> getAllMasterClients() async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT clientName 
+      FROM inspections 
+      WHERE clientName IS NOT NULL AND TRIM(clientName) != ''
+      ORDER BY clientName ASC
+    ''');
+    return rows.map((r) => r['clientName'] as String).toList();
+  }
+
+  /// Returns detailed master door records joined with client and inspection info
+  static Future<List<Map<String, dynamic>>> searchMasterDoorsDetailed({
+    String query = '',
+    String clientFilter = '',
+  }) async {
+    final db = await getDb();
+    final cleanQuery = query.trim();
+    final cleanClient = clientFilter.trim();
+
+    String whereClause = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
+      whereClause += ' AND i.clientName = ?';
+      whereArgs.add(cleanClient);
+    }
+
+    if (cleanQuery.isNotEmpty) {
+      final searchTerm = '%$cleanQuery%';
+      whereClause += '''
+        AND (
+          d.doorNumber LIKE ? 
+          OR d.doorAlias LIKE ?
+          OR d.roomDesignation LIKE ?
+          OR d.roomNumber LIKE ?
+          OR d.floor LIKE ?
+          OR d.manufacturer LIKE ?
+          OR i.clientName LIKE ?
+          OR i.jobNumber LIKE ?
+        )
+      ''';
+      whereArgs.addAll([
+        searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm,
+      ]);
+    }
+
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT 
+        d.*,
+        i.inspectionId,
+        i.clientName,
+        i.jobNumber,
+        i.objectAddress,
+        i.date AS lastInspectionDate,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_door_errors ide
+          INNER JOIN inspection_doors id2 ON ide.inspectionDoorId = id2.id
+          WHERE id2.doorId = d.id
+        ) AS totalErrorCount
+      FROM doors d
+      LEFT JOIN inspection_doors id ON d.id = id.doorId
+      LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE $whereClause
+      GROUP BY d.id
+      ORDER BY d.doorNumber ASC, d.id DESC
+    ''', whereArgs);
+
+    return rows;
+  }
+
+  /// Exports an inspection package (.db) from Master DB to the Downloads folder
+  static Future<String> exportJobPackage(List<int> inspectionIds) async {
+    final String downloadPath = Platform.isAndroid 
+        ? '/storage/emulated/0/Download' 
+        : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final exportPath = join(downloadPath, 'inspektion_paket_$timestamp.db');
+    
+    await LocalDatabaseService.downloadJobPackage(inspectionIds: inspectionIds);
+    await LocalDatabaseService.exportWorkingDb(exportPath);
+    return exportPath;
+  }
+
+  /// Exports an inspection package (.db) for specific selected door IDs
+  static Future<String> exportDoorsPackage(List<int> doorIds) async {
+    final db = await getDb();
+    final idList = doorIds.join(',');
+    final rows = await db.rawQuery('SELECT DISTINCT inspectionId FROM inspection_doors WHERE doorId IN ($idList)');
+    final inspectionIds = rows.map((r) => r['inspectionId'] as int).toList();
+    if (inspectionIds.isEmpty) {
+      throw Exception('Keine zugeordneten Aufträge für diese Türen gefunden.');
+    }
+    return await exportJobPackage(inspectionIds);
+  }
+
   static Future<void> updateDoor(Door door) async {
     final db = await getDb();
     await db.update(
@@ -659,6 +768,20 @@ class DatabaseService {
   static Future<void> deleteDoor(int id) async {
     final db = await getDb();
     await db.delete('doors', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<void> deleteDoors(List<int> ids) async {
+    if (ids.isEmpty) return;
+    final db = await getDb();
+    final idList = ids.join(',');
+    await db.transaction((txn) async {
+      await txn.execute('''
+        DELETE FROM inspection_door_errors 
+        WHERE inspectionDoorId IN (SELECT id FROM inspection_doors WHERE doorId IN ($idList))
+      ''');
+      await txn.delete('inspection_doors', where: 'doorId IN ($idList)');
+      await txn.delete('doors', where: 'id IN ($idList)');
+    });
   }
 
   /// Return all entries for a specific category.
