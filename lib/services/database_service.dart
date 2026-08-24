@@ -958,9 +958,18 @@ class DatabaseService {
 
   /// Merges an inspection result package (.db file) from an inspector into the Master DB.
   /// Uses Job Number (auftragsnummer) and Door Alias as correlation keys.
-  static Future<void> importAndMergePackage(String packagePath) async {
+  static Future<ImportReport> importAndMergePackage(String packagePath) async {
     final masterDb = await getDb();
     final packageDb = await openDatabase(packagePath, readOnly: true);
+
+    int newDoorsCount = 0;
+    int updatedDoorsCount = 0;
+    int newInspectionsCount = 0;
+    int updatedInspectionsCount = 0;
+    int totalErrorsImported = 0;
+    int totalAttachmentsImported = 0;
+    final List<DoorChangeItem> doorChanges = [];
+    final List<String> newCatalogProposals = [];
 
     try {
       await masterDb.transaction((txn) async {
@@ -1005,7 +1014,11 @@ class DatabaseService {
           final fullRow = Map<String, dynamic>.from(row);
           fullRow['attachments'] = attachments;
           pErrors.add(fullRow);
+          if (attachments.isNotEmpty) {
+            totalAttachmentsImported++;
+          }
         }
+        totalErrorsImported = pErrors.length;
 
         // Import ALL catalog entries (not just Pending) to enable errorId remapping
         final pCatalog = await packageDb.query('error_catalog');
@@ -1017,6 +1030,7 @@ class DatabaseService {
           final packageCatalogId = row['errorId'] as int;
           final code = row['code'] as String? ?? '';
           final status = row['status'] as String? ?? 'Approved';
+          final description = row['description'] as String? ?? '';
           final data = Map<String, dynamic>.from(row)..remove('errorId');
           int masterCatalogId;
           final existing = await txn.query('error_catalog',
@@ -1033,10 +1047,12 @@ class DatabaseService {
             masterCatalogId = await txn.insert(
                 'error_catalog', data,
                 conflictAlgorithm: ConflictAlgorithm.ignore);
+            if (status == 'Pending') {
+              newCatalogProposals.add('$code: $description');
+            }
           }
           catalogIdMap[packageCatalogId] = masterCatalogId;
         }
-
 
         // 3. Merge Doors and create ID Mapping (Package ID -> Master ID)
         Map<int, int> doorIdMap = {};
@@ -1053,8 +1069,10 @@ class DatabaseService {
           if (existing.isNotEmpty) {
             masterId = existing.first['id'] as int;
             await txn.update('doors', data, where: 'id = ?', whereArgs: [masterId]);
+            updatedDoorsCount++;
           } else {
             masterId = await txn.insert('doors', data..remove('id'));
+            newDoorsCount++;
           }
           doorIdMap[packageId] = masterId;
         }
@@ -1073,8 +1091,10 @@ class DatabaseService {
           if (existing.isNotEmpty) {
             masterId = existing.first['inspectionId'] as int;
             await txn.update('inspections', data, where: 'inspectionId = ?', whereArgs: [masterId]);
+            updatedInspectionsCount++;
           } else {
             masterId = await txn.insert('inspections', data..remove('inspectionId'));
+            newInspectionsCount++;
           }
           inspectionIdMap[packageId] = masterId;
         }
@@ -1083,7 +1103,8 @@ class DatabaseService {
         Map<int, int> junctionIdMap = {};
         for (var row in pJunctions) {
           final packageId = row['id'] as int;
-          final mDoorId = doorIdMap[row['doorId']];
+          final packageDoorId = row['doorId'] as int?;
+          final mDoorId = doorIdMap[packageDoorId];
           final mInspId = inspectionIdMap[row['inspectionId']];
 
           if (mDoorId == null || mInspId == null) continue;
@@ -1092,6 +1113,9 @@ class DatabaseService {
             ..['doorId'] = mDoorId
             ..['inspectionId'] = mInspId
             ..remove('id');
+
+          final isNewJunction = (await txn.query('inspection_doors', 
+              where: 'inspectionId = ? AND doorId = ?', whereArgs: [mInspId, mDoorId], limit: 1)).isEmpty;
 
           // Check if this door/job combo already has a junction
           final existing = await txn.query('inspection_doors', 
@@ -1105,6 +1129,27 @@ class DatabaseService {
             masterId = await txn.insert('inspection_doors', data);
           }
           junctionIdMap[packageId] = masterId;
+
+          // Track door change detail for summary
+          if (packageDoorId != null) {
+            final doorRow = pDoors.firstWhere((d) => d['id'] == packageDoorId, orElse: () => {});
+            final alias = doorRow['doorAlias'] as String? ?? '';
+            final doorNum = doorRow['doorNumber'] as String? ?? '';
+            final roomDesig = doorRow['roomDesignation'] as String? ?? '';
+            final status = row['status'] as String? ?? 'InProgress';
+
+            // Count defects for this junction
+            final junctionErrorCount = pErrors.where((e) => e['inspectionDoorId'] == packageId).length;
+
+            doorChanges.add(DoorChangeItem(
+              doorAlias: alias,
+              doorNumber: doorNum,
+              roomDesignation: roomDesig,
+              changeType: isNewJunction ? 'new' : 'updated',
+              status: status,
+              errorCount: junctionErrorCount,
+            ));
+          }
         }
 
         // Build reverse lookup: masterCatalogId → code for errorCode population
@@ -1129,8 +1174,6 @@ class DatabaseService {
               ? catalogIdMap[packageErrorId]
               : null;
 
-          // FIX 4: Fallback — if catalogIdMap lookup failed (e.g. due to ID mismatch
-          // from the inspector's local DB), try to resolve via errorCode natural key.
           final String rawErrorCode = row['errorCode'] as String? ?? '';
           if (mappedErrorId == null && rawErrorCode.isNotEmpty) {
             final fallback = await txn.query('error_catalog',
@@ -1149,7 +1192,6 @@ class DatabaseService {
             ..['errorCode'] = errorCode
             ..remove('id');
 
-          // Check if an error entry for this door junction and error code/ID already exists in Master DB.
           List<Map<String, dynamic>> existingErrors = [];
           if (errorCode.isNotEmpty) {
             existingErrors = await txn.query(
@@ -1185,6 +1227,19 @@ class DatabaseService {
           }
         }
       });
+
+      return ImportReport(
+        packageName: basename(packagePath),
+        importedAt: DateTime.now(),
+        newDoorsCount: newDoorsCount,
+        updatedDoorsCount: updatedDoorsCount,
+        newInspectionsCount: newInspectionsCount,
+        updatedInspectionsCount: updatedInspectionsCount,
+        totalErrorsImported: totalErrorsImported,
+        totalAttachmentsImported: totalAttachmentsImported,
+        doorChanges: doorChanges,
+        newCatalogProposals: newCatalogProposals,
+      );
     } finally {
       await packageDb.close();
     }
@@ -1616,6 +1671,8 @@ class DatabaseService {
   static Future<DoorMergeResult> mergeDoors(
     List<Door> incomingDoors, {
     String jobNumber = '',
+    String clientName = '',
+    String objectAddress = '',
     bool validateLogic = true,
     String sourceContext = '',
     String currentInspectionDate = '',
@@ -1625,6 +1682,9 @@ class DatabaseService {
     final conflicts = <DoorConflict>[];
     final List<String> logs = [];
     int propertyConflictCounter = 0;
+
+    final cleanClient = clientName.trim();
+    final cleanAddress = objectAddress.trim();
 
     for (final incoming in incomingDoors) {
       // Step 1 — Internal logical validation (V01–V13), zero DB calls
@@ -1665,16 +1725,32 @@ class DatabaseService {
       );
 
       if (existingRows.isEmpty) {
-        // Genuinely new door — check alias collision by doorNumber on same floor
-        // to catch identity collisions before inserting.
-        final numberCollision = await db.query(
-          'doors',
-          where: 'doorNumber = ? AND floor = ? AND doorAlias != ?',
-          whereArgs: [incoming.doorNumber, incoming.floor, alias],
-          limit: 1,
-        );
-        if (numberCollision.isNotEmpty) {
-          final collidingExisting = Door.fromMap(numberCollision.first);
+        // Check if a door already exists for the SAME customer & building/object address
+        // matching doorNumber and floor (to prevent creating a duplicate door for the same building/customer).
+        List<Map<String, dynamic>> sameBuildingCollision = [];
+        if (cleanClient.isNotEmpty && cleanAddress.isNotEmpty) {
+          sameBuildingCollision = await db.rawQuery('''
+            SELECT d.* 
+            FROM doors d
+            INNER JOIN inspection_doors id ON d.id = id.doorId
+            INNER JOIN inspections i ON id.inspectionId = i.inspectionId
+            WHERE d.doorNumber = ? 
+              AND d.floor = ? 
+              AND LOWER(i.clientName) = LOWER(?)
+              AND LOWER(i.objectAddress) = LOWER(?)
+              AND d.doorAlias != ?
+            LIMIT 1
+          ''', [
+            incoming.doorNumber,
+            incoming.floor,
+            cleanClient,
+            cleanAddress,
+            alias,
+          ]);
+        }
+
+        if (sameBuildingCollision.isNotEmpty) {
+          final collidingExisting = Door.fromMap(sameBuildingCollision.first);
           conflicts.add(DoorConflict(
             existingDoor: collidingExisting,
             incomingDoor: incoming,
@@ -1685,8 +1761,8 @@ class DatabaseService {
             incomingValue: alias,
             ruleCode: 'IDENTITY',
             message:
-                'Türnummer "${incoming.doorNumber}" auf Geschoss "${incoming.floor}" existiert bereits '
-                'mit einem anderen Alias (${collidingExisting.doorAlias}). '
+                'Für den Kunden "$cleanClient" (Objekt: "$cleanAddress") existiert auf Geschoss "${incoming.floor}" '
+                'bereits Türnummer "${incoming.doorNumber}" (Alias: ${collidingExisting.doorAlias}). '
                 'Bitte prüfen, ob dies dieselbe physische Tür ist.',
             resolution: DoorResolutionAction.keepExisting,
           ));
@@ -1694,7 +1770,7 @@ class DatabaseService {
           continue;
         }
 
-        // Safe to insert
+        // Genuinely new door (different customer/building or new door location)
         final id = await db.insert(
           'doors',
           incoming.toMap()..remove('id'),

@@ -318,6 +318,8 @@ class ExcelDataImporter {
       final mergeResult = await DatabaseService.mergeDoors(
         sheetDoors,
         jobNumber: meta['jobNumber'] ?? '',
+        clientName: meta['clientName'] ?? '',
+        objectAddress: meta['objectAddress'] ?? '',
         sourceContext: 'Blatt: "$sheetName" (Datei: ${excelFile.path})',
         currentInspectionDate: meta['date'] ?? '',
       );

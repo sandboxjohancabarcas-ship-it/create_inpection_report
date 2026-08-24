@@ -7,6 +7,7 @@ import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
 import '../services/test_data_generator.dart';
 import '../widgets/edit_inspection_dialog.dart';
+import '../widgets/import_report_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
 
@@ -18,9 +19,13 @@ class MasterDoorsPage extends StatefulWidget {
 }
 
 enum MasterViewMode { customerInspections, doorInventory }
+enum ErrorFilterOption { all, withErrors, errorFree }
+enum ErrorSortOption { defaultSort, mostErrors, leastErrors }
 
 class _MasterDoorsPageState extends State<MasterDoorsPage> {
   MasterViewMode _viewMode = MasterViewMode.customerInspections;
+  ErrorFilterOption _errorFilter = ErrorFilterOption.all;
+  ErrorSortOption _errorSort = ErrorSortOption.defaultSort;
   List<Map<String, dynamic>> _masterDoors = [];
   List<Map<String, dynamic>> _inspections = [];
   List<String> _clients = ['Alle'];
@@ -188,16 +193,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
         if (confirm != true) return;
 
         setState(() => _isProcessing = true);
-        await DatabaseService.importAndMergePackage(path);
+        final report = await DatabaseService.importAndMergePackage(path);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ergebnis-Paket erfolgreich in die Haupt-DB integriert.'),
-              backgroundColor: Colors.green,
-            ),
-          );
           await _loadData();
+          await ImportReportDialog.show(context, report);
         }
       }
     } catch (e) {
@@ -554,6 +554,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     });
   }
 
+  void _toggleCustomerInspections(List<int> inspectionIds) {
+    setState(() {
+      final allSelected = inspectionIds.every((id) => _selectedInspectionIds.contains(id));
+      if (allSelected) {
+        _selectedInspectionIds.removeAll(inspectionIds);
+      } else {
+        _selectedInspectionIds.addAll(inspectionIds);
+      }
+    });
+  }
+
   Future<void> _handleDeleteSelectedDoors() async {
     if (_selectedDoorIds.isEmpty) return;
 
@@ -696,7 +707,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           ] else if (isInspectionSelectionMode) ...[
             IconButton(
               icon: const Icon(Icons.upload_file),
-              tooltip: 'Prüfpakete exportieren',
+              tooltip: 'Paket für Techniker exportieren',
               onPressed: _handleExportSelectedInspections,
             ),
             IconButton(
@@ -885,10 +896,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         label: const Text('GAEB XML'),
                       ),
                       const VerticalDivider(),
-                      TextButton.icon(
-                        onPressed: _isProcessing ? null : _handleExportSelectedInspections,
-                        icon: const Icon(Icons.upload_file, color: Colors.green),
-                        label: Text('Paket (${_selectedInspectionIds.length})', style: const TextStyle(color: Colors.green)),
+                      Tooltip(
+                        message: 'Paket für Techniker exportieren',
+                        child: TextButton.icon(
+                          onPressed: _isProcessing ? null : _handleExportSelectedInspections,
+                          icon: const Icon(Icons.upload_file, color: Colors.green),
+                          label: Text('Paket (${_selectedInspectionIds.length})', style: const TextStyle(color: Colors.green)),
+                        ),
                       ),
                     ],
                   ),
@@ -957,19 +971,70 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           (sum, item) => sum + ((item['doorCount'] as num?)?.toInt() ?? 0),
         );
 
+        final customerInspectionIds = clientInspections
+            .map((job) => job['inspectionId'] as int)
+            .toList();
+
+        final bool isAllCustomerSelected = customerInspectionIds.isNotEmpty &&
+            customerInspectionIds.every((id) => _selectedInspectionIds.contains(id));
+        final bool isAnyCustomerSelected = customerInspectionIds
+            .any((id) => _selectedInspectionIds.contains(id));
+
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6),
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
             initiallyExpanded: true,
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Icon(Icons.business, color: Theme.of(context).colorScheme.primary),
+            leading: Checkbox(
+              value: isAllCustomerSelected
+                  ? true
+                  : (isAnyCustomerSelected ? null : false),
+              tristate: true,
+              onChanged: (_) => _toggleCustomerInspections(customerInspectionIds),
             ),
-            title: Text(
-              clientName,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    clientName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _isProcessing
+                      ? null
+                      : () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          setState(() => _isProcessing = true);
+                          try {
+                            final exportPath = await DatabaseService.exportJobPackage(customerInspectionIds);
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('Kundenpaket ($clientName) mit ${customerInspectionIds.length} Auftrag/Aufträgen exportiert:\n$exportPath'),
+                                  backgroundColor: Colors.green,
+                                  duration: const Duration(seconds: 5),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isProcessing = false);
+                          }
+                        },
+                  icon: const Icon(Icons.upload_file, color: Colors.green, size: 18),
+                  label: Text(
+                    'Kundenpaket (${customerInspectionIds.length})',
+                    style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             subtitle: Text(
               '${clientInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt',
@@ -982,19 +1047,18 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
+                  border: Border.all(
+                    color: isSelected ? Colors.blue.shade400 : Colors.grey.shade200,
+                    width: isSelected ? 1.5 : 1.0,
+                  ),
                   borderRadius: BorderRadius.circular(8),
+                  color: isSelected ? Colors.blue.shade50.withValues(alpha: 0.3) : null,
                 ),
                 child: ListTile(
-                  leading: _selectedInspectionIds.isNotEmpty
-                      ? Checkbox(
-                          value: isSelected,
-                          onChanged: (_) => _toggleInspectionSelection(id),
-                        )
-                      : CircleAvatar(
-                          backgroundColor: Colors.blue.shade50,
-                          child: Icon(Icons.assignment, color: Colors.blue.shade700, size: 20),
-                        ),
+                  leading: Checkbox(
+                    value: isSelected,
+                    onChanged: (_) => _toggleInspectionSelection(id),
+                  ),
                   title: Row(
                     children: [
                       Text(
@@ -1036,11 +1100,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.upload_file, color: Colors.indigo),
-                        tooltip: 'Paket für Techniker exportieren',
-                        onPressed: _isProcessing ? null : () => _handleExportInspection(id),
-                      ),
                       IconButton(
                         icon: const Icon(Icons.description, color: Colors.teal),
                         tooltip: 'GAEB 90 exportieren',
@@ -1103,156 +1162,307 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   Widget _buildDoorInventoryView() {
     final isSelectionMode = _selectedDoorIds.isNotEmpty;
 
-    if (_masterDoors.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.door_sliding_outlined, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            Text(
-              _searchController.text.isNotEmpty || _selectedClient != 'Alle'
-                  ? 'Keine passenden Türen gefunden'
-                  : 'Keine Türen in der Hauptdatenbank vorhanden',
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-            ),
-          ],
-        ),
-      );
+    // Apply Error Status Filter
+    List<Map<String, dynamic>> displayDoors = List.from(_masterDoors);
+    if (_errorFilter == ErrorFilterOption.withErrors) {
+      displayDoors = displayDoors.where((d) {
+        final count = (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return count > 0;
+      }).toList();
+    } else if (_errorFilter == ErrorFilterOption.errorFree) {
+      displayDoors = displayDoors.where((d) {
+        final count = (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return count == 0;
+      }).toList();
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: _masterDoors.length,
-      itemBuilder: (context, index) {
-        final doorMap = _masterDoors[index];
-        final id = doorMap['id'] as int;
-        final door = Door.fromMap(doorMap);
-        final isSelected = _selectedDoorIds.contains(id);
-        final int errorCount = (doorMap['totalErrorCount'] as num?)?.toInt() ?? 0;
-        final String clientName = doorMap['clientName'] ?? 'Ohne Zuordnung';
-        final String jobNumber = doorMap['jobNumber'] ?? '';
-        final int? inspectionId = doorMap['inspectionId'] as int?;
+    // Apply Error Status Sorting
+    if (_errorSort == ErrorSortOption.mostErrors) {
+      displayDoors.sort((a, b) {
+        final countA = (a['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final countB = (b['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return countB.compareTo(countA); // Descending: Most errors first
+      });
+    } else if (_errorSort == ErrorSortOption.leastErrors) {
+      displayDoors.sort((a, b) {
+        final countA = (a['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final countB = (b['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return countA.compareTo(countB); // Ascending: Least errors / error-free first
+      });
+    }
 
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          elevation: isSelected ? 4 : 1,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          child: ListTile(
-            leading: isSelectionMode
-                ? Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleDoorSelection(id),
-                  )
-                : CircleAvatar(
-                    backgroundColor: errorCount > 0 ? Colors.red.shade100 : Colors.green.shade100,
-                    child: Icon(
-                      Icons.door_front_door,
-                      color: errorCount > 0 ? Colors.red.shade800 : Colors.green.shade800,
-                    ),
-                  ),
-            title: Row(
+    return Column(
+      children: [
+        // Error Filter & Sort Control Bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Text(
-                  door.doorNumber.isNotEmpty ? 'Tür ${door.doorNumber}' : 'Tür ohne Nummer',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                const Icon(Icons.filter_list, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                const Text('Mängelfilter:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                 const SizedBox(width: 8),
-                if (door.doorAlias != null && door.doorAlias!.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      border: Border.all(color: Colors.blue.shade300),
-                      borderRadius: BorderRadius.circular(4),
+                ChoiceChip(
+                  label: const Text('Alle Türen', style: TextStyle(fontSize: 11)),
+                  selected: _errorFilter == ErrorFilterOption.all,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _errorFilter = ErrorFilterOption.all);
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.red),
+                      const SizedBox(width: 4),
+                      const Text('Mit Mängeln', style: TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                  selected: _errorFilter == ErrorFilterOption.withErrors,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _errorFilter = ErrorFilterOption.withErrors);
+                  },
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                      const SizedBox(width: 4),
+                      const Text('Mängelfrei', style: TextStyle(fontSize: 11)),
+                    ],
+                  ),
+                  selected: _errorFilter == ErrorFilterOption.errorFree,
+                  onSelected: (selected) {
+                    if (selected) setState(() => _errorFilter = ErrorFilterOption.errorFree);
+                  },
+                ),
+                const SizedBox(width: 16),
+                const Icon(Icons.sort, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                const Text('Sortierung:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                const SizedBox(width: 6),
+                PopupMenuButton<ErrorSortOption>(
+                  initialValue: _errorSort,
+                  onSelected: (opt) => setState(() => _errorSort = opt),
+                  child: Chip(
+                    avatar: Icon(
+                      _errorSort == ErrorSortOption.mostErrors
+                          ? Icons.arrow_downward
+                          : _errorSort == ErrorSortOption.leastErrors
+                              ? Icons.arrow_upward
+                              : Icons.swap_vert,
+                      size: 14,
+                      color: _errorSort == ErrorSortOption.mostErrors
+                          ? Colors.red
+                          : _errorSort == ErrorSortOption.leastErrors
+                              ? Colors.green
+                              : null,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.qr_code, size: 12, color: Colors.blue.shade700),
-                        const SizedBox(width: 4),
-                        Text(
-                          door.doorAlias!,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue.shade800,
-                          ),
-                        ),
-                      ],
+                    label: Text(
+                      _errorSort == ErrorSortOption.mostErrors
+                          ? 'Meiste Mängel zuerst'
+                          : _errorSort == ErrorSortOption.leastErrors
+                              ? 'Wenigste Mängel zuerst'
+                              : 'Standard (Reihenfolge)',
+                      style: const TextStyle(fontSize: 11),
                     ),
                   ),
-                const Spacer(),
-                if (errorCount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(12),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: ErrorSortOption.defaultSort,
+                      child: Text('Standard (Reihenfolge)'),
                     ),
-                    child: Text(
-                      '$errorCount ${errorCount == 1 ? "Mangel" : "Mängel"}',
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    PopupMenuItem(
+                      value: ErrorSortOption.mostErrors,
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_downward, color: Colors.red, size: 18),
+                          SizedBox(width: 8),
+                          Text('Meiste Mängel zuerst'),
+                        ],
+                      ),
                     ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade600,
-                      borderRadius: BorderRadius.circular(12),
+                    PopupMenuItem(
+                      value: ErrorSortOption.leastErrors,
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_upward, color: Colors.green, size: 18),
+                          SizedBox(width: 8),
+                          Text('Wenigste Mängel / Mängelfrei zuerst'),
+                        ],
+                      ),
                     ),
-                    child: const Text(
-                      'Mängelfrei',
-                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ),
+                  ],
+                ),
               ],
             ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Kunde: $clientName ${jobNumber.isNotEmpty ? "($jobNumber)" : ""}',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${door.floor.isNotEmpty ? "${door.floor} | " : ""}${door.roomDesignation.isNotEmpty ? door.roomDesignation : "Kein Raum"} ${door.roomNumber.isNotEmpty ? "(${door.roomNumber})" : ""}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Typ: ${door.doorType} | Material: ${door.material} | Schließer: ${door.closerType}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-            trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
-            onTap: () async {
-              if (isSelectionMode) {
-                _toggleDoorSelection(id);
-              } else {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DoorInspectionForm(
-                      door: door,
-                      isManagerMode: true,
-                      inspectionId: inspectionId,
-                    ),
-                  ),
-                );
-                _loadData();
-              }
-            },
-            onLongPress: () => _toggleDoorSelection(id),
           ),
-        );
-      },
+        ),
+        const Divider(height: 1),
+
+        // List Content
+        Expanded(
+          child: displayDoors.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.door_sliding_outlined, size: 64, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorFilter == ErrorFilterOption.withErrors
+                            ? 'Keine Türen mit Mängeln gefunden'
+                            : _errorFilter == ErrorFilterOption.errorFree
+                                ? 'Keine mängelfreien Türen gefunden'
+                                : _searchController.text.isNotEmpty || _selectedClient != 'Alle'
+                                    ? 'Keine passenden Türen gefunden'
+                                    : 'Keine Türen in der Hauptdatenbank vorhanden',
+                        style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: displayDoors.length,
+                  itemBuilder: (context, index) {
+                    final doorMap = displayDoors[index];
+                    final id = doorMap['id'] as int;
+                    final door = Door.fromMap(doorMap);
+                    final isSelected = _selectedDoorIds.contains(id);
+                    final int errorCount = (doorMap['totalErrorCount'] as num?)?.toInt() ?? 0;
+                    final String clientName = doorMap['clientName'] ?? 'Ohne Zuordnung';
+                    final String jobNumber = doorMap['jobNumber'] ?? '';
+                    final int? inspectionId = doorMap['inspectionId'] as int?;
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      elevation: isSelected ? 4 : 1,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ListTile(
+                        leading: isSelectionMode
+                            ? Checkbox(
+                                value: isSelected,
+                                onChanged: (_) => _toggleDoorSelection(id),
+                              )
+                            : CircleAvatar(
+                                backgroundColor: errorCount > 0 ? Colors.red.shade100 : Colors.green.shade100,
+                                child: Icon(
+                                  Icons.door_front_door,
+                                  color: errorCount > 0 ? Colors.red.shade800 : Colors.green.shade800,
+                                ),
+                              ),
+                        title: Row(
+                          children: [
+                            Text(
+                              door.doorNumber.isNotEmpty ? 'Tür ${door.doorNumber}' : 'Tür ohne Nummer',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 8),
+                            if (door.doorAlias != null && door.doorAlias!.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  border: Border.all(color: Colors.blue.shade300),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.qr_code, size: 12, color: Colors.blue.shade700),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      door.doorAlias!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.blue.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            const Spacer(),
+                            if (errorCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '$errorCount ${errorCount == 1 ? "Mangel" : "Mängel"}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade600,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text(
+                                  'Mängelfrei',
+                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Kunde: $clientName ${jobNumber.isNotEmpty ? "($jobNumber)" : ""}',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${door.floor.isNotEmpty ? "${door.floor} | " : ""}${door.roomDesignation.isNotEmpty ? door.roomDesignation : "Kein Raum"} ${door.roomNumber.isNotEmpty ? "(${door.roomNumber})" : ""}',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Typ: ${door.doorType} | Material: ${door.material} | Schließer: ${door.closerType}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                              ),
+                            ],
+                          ),
+                        ),
+                        trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
+                        onTap: () async {
+                          if (isSelectionMode) {
+                            _toggleDoorSelection(id);
+                          } else {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => DoorInspectionForm(
+                                  door: door,
+                                  isManagerMode: true,
+                                  inspectionId: inspectionId,
+                                ),
+                              ),
+                            );
+                            _loadData();
+                          }
+                        },
+                        onLongPress: () => _toggleDoorSelection(id),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }

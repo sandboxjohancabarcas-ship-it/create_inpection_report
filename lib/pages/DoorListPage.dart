@@ -4,8 +4,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
+import '../models/models.dart';
 import '../services/local_database_service.dart';
 import '../widgets/inspection_summary_card.dart';
+import '../widgets/import_report_dialog.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
 
@@ -135,22 +137,27 @@ class _DoorListPageState extends State<DoorListPage> {
         if (action == null) return;
 
         setState(() => _isSyncing = true);
+        ImportReport? report;
         if (action == 'merge') {
-          await LocalDatabaseService.importAndMergePackage(path);
+          report = await LocalDatabaseService.importAndMergePackage(path);
         } else {
           await LocalDatabaseService.importWorkingDb(path);
         }
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Paket erfolgreich importiert.'), backgroundColor: Colors.green),
-          );
           // Reset search state to show all newly imported doors
           setState(() {
             _searchController.clear();
             _isSearching = false;
           });
           await loadInspections();
+          if (report != null) {
+            await ImportReportDialog.show(context, report);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Paket erfolgreich importiert.'), backgroundColor: Colors.green),
+            );
+          }
         }
       }
     } catch (e) {

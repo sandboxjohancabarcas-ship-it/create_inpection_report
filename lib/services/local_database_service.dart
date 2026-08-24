@@ -491,13 +491,13 @@ class LocalDatabaseService {
   }
 
   /// Creates a new door record found by an inspector in the field.
-  /// Uses a manual door number and generates a TEMP- alias for tracking.
+  /// Uses a manual door number and generates a clean TMP- alias for tracking.
   static Future<int> createNewDoorInField(String doorNumber) async {
     final door = Door(
       id: null, // Pass null for auto-incrementing ID
       pos: 0, // Default position for new field entries
       doorNumber: doorNumber, // Inspector manually enters this
-      doorAlias: 'TEMP-${DateTime.now().millisecondsSinceEpoch}-$doorNumber',
+      doorAlias: Door.generateTemporaryAlias(doorNumber),
       floor: '',
       roomNumber: '',
       roomDesignation: '',
@@ -1131,7 +1131,7 @@ class LocalDatabaseService {
 
   /// Imports an external inspection package and merges it into the local working DB.
   /// Allows technicians to load multiple inspection packages without losing existing local data.
-  static Future<void> importAndMergePackage(String packagePath) async {
+  static Future<ImportReport> importAndMergePackage(String packagePath) async {
     final localDb = await getDb();
     
     if (Platform.isWindows || Platform.isLinux) {
@@ -1140,6 +1140,15 @@ class LocalDatabaseService {
     }
 
     final packageDb = await openDatabase(packagePath, readOnly: true);
+
+    int newDoorsCount = 0;
+    int updatedDoorsCount = 0;
+    int newInspectionsCount = 0;
+    int updatedInspectionsCount = 0;
+    int totalErrorsImported = 0;
+    int totalAttachmentsImported = 0;
+    final List<DoorChangeItem> doorChanges = [];
+    final List<String> newCatalogProposals = [];
 
     try {
       // Validate structure
@@ -1158,30 +1167,91 @@ class LocalDatabaseService {
 
         // 1. Merge catalog
         final catalogList = pCatalog.map((m) => ErrorCatalog.fromMap(m)).toList();
+        for (var cat in catalogList) {
+          final existing = await txn.query('error_catalog', where: 'code = ?', whereArgs: [cat.code], limit: 1);
+          if (existing.isEmpty && cat.status == 'Pending') {
+            newCatalogProposals.add('${cat.code}: ${cat.description}');
+          }
+        }
         await _batchInsertCatalog(txn, catalogList, ConflictAlgorithm.replace);
 
         // 2. Merge inspections
         for (var insp in pInspections) {
           final data = Map<String, dynamic>.from(insp);
           data.remove('doorCount');
+          final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '') as String;
+          final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
+          if (existing.isNotEmpty) {
+            updatedInspectionsCount++;
+          } else {
+            newInspectionsCount++;
+          }
           await txn.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         // 3. Merge doors
         for (var door in pDoors) {
+          final alias = door['doorAlias'] as String? ?? '';
+          final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+          if (existing.isNotEmpty) {
+            updatedDoorsCount++;
+          } else {
+            newDoorsCount++;
+          }
           await txn.insert('doors', door, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         // 4. Merge junctions
         for (var junction in pJunctions) {
+          final doorId = junction['doorId'] as int?;
+          final doorRow = doorId != null ? pDoors.firstWhere((d) => d['id'] == doorId, orElse: () => {}) : {};
+          final alias = doorRow['doorAlias'] as String? ?? '';
+          final doorNum = doorRow['doorNumber'] as String? ?? '';
+          final roomDesig = doorRow['roomDesignation'] as String? ?? '';
+          final status = junction['status'] as String? ?? 'InProgress';
+          final junctionId = junction['id'] as int?;
+
+          final existingJunction = await txn.query('inspection_doors',
+              where: 'inspectionId = ? AND doorId = ?',
+              whereArgs: [junction['inspectionId'], junction['doorId']],
+              limit: 1);
+
           await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
+
+          final errCount = pErrors.where((e) => e['inspectionDoorId'] == junctionId).length;
+          doorChanges.add(DoorChangeItem(
+            doorAlias: alias,
+            doorNumber: doorNum,
+            roomDesignation: roomDesig,
+            changeType: existingJunction.isEmpty ? 'new' : 'updated',
+            status: status,
+            errorCount: errCount,
+          ));
         }
 
         // 5. Merge errors
+        totalErrorsImported = pErrors.length;
         for (var err in pErrors) {
+          final att = err['attachments'] as String? ?? '';
+          if (att.isNotEmpty) {
+            totalAttachmentsImported++;
+          }
           await txn.insert('inspection_door_errors', err, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
+
+      return ImportReport(
+        packageName: basename(packagePath),
+        importedAt: DateTime.now(),
+        newDoorsCount: newDoorsCount,
+        updatedDoorsCount: updatedDoorsCount,
+        newInspectionsCount: newInspectionsCount,
+        updatedInspectionsCount: updatedInspectionsCount,
+        totalErrorsImported: totalErrorsImported,
+        totalAttachmentsImported: totalAttachmentsImported,
+        doorChanges: doorChanges,
+        newCatalogProposals: newCatalogProposals,
+      );
     } finally {
       await packageDb.close();
     }

@@ -207,44 +207,30 @@ class Door {
         doorFunctionOK: map['doorFunctionOK'] == 1,
       );
 
-  static String generateAlias(String customer, String address, String doorNumber, {String floor = ''}) {
-    if (customer.isEmpty && address.isEmpty && doorNumber.isEmpty && floor.isEmpty) {
+  /// Generates an intelligent, human-readable, structured business alias.
+  /// Format: [CUSTOMER 5]-[ADDRESS 5]-[FLOOR 2..3]-[DOOR 2..4]
+  /// Examples:
+  /// - "Gottsberg GmbH", "Ebner-Eschenbach-Weg 43, 21035 Hamburg", "EG", "1" -> "GOTTS-EBN43-EG-01"
+  /// - "Konz Schäfer", "Hauptstraße 12b", "1. OG", "4" -> "KONSC-HAU12-OG1-04"
+  /// - "Siemens AG", "Werner-von-Siemens-Ring 50", "2. Obergeschoss", "T-201" -> "SIEME-WSI50-OG2-T201"
+  /// - "Deutsche Bahn", "Bahnhofsplatz 1", "", "12" -> "DBAHN-BAH01-12"
+  static String generateAlias(
+    String customer,
+    String address,
+    String doorNumber, {
+    String floor = '',
+  }) {
+    if (customer.trim().isEmpty &&
+        address.trim().isEmpty &&
+        doorNumber.trim().isEmpty &&
+        floor.trim().isEmpty) {
       return '';
     }
 
-    String clean(String val) {
-      return val.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
-    }
-
-    final cCust = clean(customer);
-    final cAddr = clean(address);
-    final cFloor = clean(floor);
-    final cDoor = clean(doorNumber);
-
-    int targetCustLen = 3;
-    int targetAddrLen = 3;
-    int targetFloorLen = cFloor.isNotEmpty ? (cFloor.length > 3 ? 3 : cFloor.length) : 0;
-
-    int custLen = cCust.length < targetCustLen ? cCust.length : targetCustLen;
-    int addrLen = cAddr.length < targetAddrLen ? cAddr.length : targetAddrLen;
-    int floorLen = cFloor.length < targetFloorLen ? cFloor.length : targetFloorLen;
-
-    const int maxLen = 14;
-    int spaceForDoor = maxLen - custLen - addrLen - floorLen;
-    int hyphens = 0;
-    if (custLen > 0) hyphens++;
-    if (addrLen > 0) hyphens++;
-    if (floorLen > 0) hyphens++;
-    spaceForDoor -= hyphens;
-
-    if (spaceForDoor < 1) spaceForDoor = 1;
-
-    int doorLen = cDoor.length < spaceForDoor ? cDoor.length : spaceForDoor;
-
-    String custPart = cCust.substring(0, custLen);
-    String addrPart = cAddr.substring(0, addrLen);
-    String floorPart = cFloor.substring(0, floorLen);
-    String doorPart = cDoor.isNotEmpty ? cDoor.substring(cDoor.length - doorLen) : '';
+    final custPart = _extractCustomerToken(customer, targetLength: 5);
+    final addrPart = _extractAddressToken(address, targetLength: 5);
+    final floorPart = _normalizeFloorToken(floor);
+    final doorPart = _normalizeDoorNumber(doorNumber);
 
     List<String> parts = [];
     if (custPart.isNotEmpty) parts.add(custPart);
@@ -252,10 +238,193 @@ class Door {
     if (floorPart.isNotEmpty) parts.add(floorPart);
     if (doorPart.isNotEmpty) parts.add(doorPart);
 
-    String alias = parts.join('-');
-    if (alias.length > maxLen) {
-      alias = alias.substring(0, maxLen);
+    return parts.join('-');
+  }
+
+  /// Standardized, compact temporary alias for doors created ad-hoc in the field.
+  /// Format: TMP-[HEX4]-[DOOR] (e.g. TMP-F4A1-01)
+  static String generateTemporaryAlias(String doorNumber) {
+    final hexStamp = (DateTime.now().millisecondsSinceEpoch % 0xFFFF)
+        .toRadixString(16)
+        .padLeft(4, '0')
+        .toUpperCase();
+    final cleanDoor = _normalizeDoorNumber(doorNumber);
+    return cleanDoor.isNotEmpty ? 'TMP-$hexStamp-$cleanDoor' : 'TMP-$hexStamp';
+  }
+
+  /// Transliterates German umlauts and accents into standard ASCII.
+  static String _transliterate(String input) {
+    return input
+        .replaceAll('ä', 'ae')
+        .replaceAll('Ä', 'AE')
+        .replaceAll('ö', 'oe')
+        .replaceAll('Ö', 'OE')
+        .replaceAll('ü', 'ue')
+        .replaceAll('Ü', 'UE')
+        .replaceAll('ß', 'ss');
+  }
+
+  /// Extracts a meaningful 4-5 char acronym/stem for the customer.
+  static String _extractCustomerToken(String rawCustomer, {int targetLength = 5}) {
+    if (rawCustomer.trim().isEmpty) return '';
+
+    String cleaned = _transliterate(rawCustomer.trim());
+
+    // Remove common German & international legal form suffixes
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(GmbH\s*&\s*Co\.?\s*KG|GmbH|AG|e\.?V\.?|KG|GbR|OHG|SE|UG|Ltd\.?|Inc\.?|Corp\.?|Holding|Verwaltung|Immobilien)\b', caseSensitive: false),
+      '',
+    );
+
+    // Remove common stop words
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(und|&|von|der|die|das|des|dem|den|im|am|fur|fuer)\b', caseSensitive: false),
+      '',
+    );
+
+    // Extract alphanumeric word tokens
+    final words = cleaned
+        .split(RegExp(r'[^a-zA-Z0-9]+'))
+        .where((w) => w.trim().isNotEmpty)
+        .toList();
+
+    if (words.isEmpty) {
+      final fallback = rawCustomer.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+      return fallback.length > targetLength ? fallback.substring(0, targetLength) : fallback;
     }
-    return alias;
+
+    if (words.length == 1) {
+      final w = words.first.toUpperCase();
+      return w.length > targetLength ? w.substring(0, targetLength) : w;
+    }
+
+    if (words.length == 2) {
+      final w1 = words[0].toUpperCase();
+      final w2 = words[1].toUpperCase();
+      final len1 = w1.length >= 3 ? 3 : w1.length;
+      final len2 = (targetLength - len1).clamp(1, w2.length);
+      return '${w1.substring(0, len1)}${w2.substring(0, len2)}';
+    }
+
+    // 3 or more words (e.g. "Hamburg Port Authority")
+    String combined = '';
+    for (int i = 0; i < words.length && combined.length < targetLength; i++) {
+      final w = words[i].toUpperCase();
+      int take = (targetLength - combined.length) > (words.length - i) ? 2 : 1;
+      if (take > w.length) take = w.length;
+      combined += w.substring(0, take);
+    }
+    return combined;
+  }
+
+  /// Extracts a meaningful 4-5 char address token combining street stem & building/house number.
+  static String _extractAddressToken(String rawAddress, {int targetLength = 5}) {
+    if (rawAddress.trim().isEmpty) return '';
+
+    String cleaned = _transliterate(rawAddress.trim());
+
+    // 1. Extract House/Building Number (e.g. "43", "12a", "3B", "H4")
+    // Avoid capturing 5-digit German postal codes (e.g. 21035)
+    String numberPart = '';
+    final numMatch = RegExp(r'\b(?<!\d)(\d{1,4}[a-zA-Z]?)\b(?!\s*\d{4})').allMatches(cleaned);
+    for (final m in numMatch) {
+      final val = m.group(1)!;
+      if (val.length < 5) {
+        numberPart = val.toUpperCase();
+      }
+    }
+
+    // 2. Strip street suffixes and noise
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(strasse|straße|str\.?|weg|platz|pl\.?|allee|chaussee|ring|gasse|damm|ufer|stieg|pfad|zeile|haus|gebaeude|bauteil)\b', caseSensitive: false),
+      '',
+    );
+
+    // Remove common stop words in address (e.g. von, der, am, im)
+    cleaned = cleaned.replaceAll(
+      RegExp(r'\b(und|&|von|der|die|das|des|dem|den|im|am|an|fur|fuer)\b', caseSensitive: false),
+      '',
+    );
+
+    // Remove postal code + city if present (e.g. "21035 Hamburg")
+    cleaned = cleaned.replaceAll(RegExp(r'\b\d{5}\b.*$'), '');
+
+    final words = cleaned
+        .split(RegExp(r'[^a-zA-Z0-9]+'))
+        .where((w) => w.trim().isNotEmpty && !RegExp(r'^\d+$').hasMatch(w))
+        .toList();
+
+    String streetPart = '';
+    if (words.isNotEmpty) {
+      if (words.length == 1) {
+        streetPart = words.first.toUpperCase();
+      } else {
+        // Multi-word street (e.g. "Ebner-Eschenbach" -> "EBNE" or "Werner Siemens" -> "WERSI")
+        final w1 = words[0].toUpperCase();
+        final w2 = words[1].toUpperCase();
+        final len1 = w1.length >= 3 ? 3 : w1.length;
+        final len2 = (targetLength - len1).clamp(1, w2.length);
+        streetPart = '${w1.substring(0, len1)}${w2.substring(0, len2)}';
+      }
+    } else {
+      streetPart = cleaned.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    }
+
+    if (numberPart.isNotEmpty) {
+      final availableForStreet = targetLength - numberPart.length;
+      if (availableForStreet > 0) {
+        final st = streetPart.length > availableForStreet ? streetPart.substring(0, availableForStreet) : streetPart;
+        return '$st$numberPart';
+      }
+      return numberPart.length > targetLength ? numberPart.substring(0, targetLength) : numberPart;
+    }
+
+    return streetPart.length > targetLength ? streetPart.substring(0, targetLength) : streetPart;
+  }
+
+  /// Normalizes floor to 2-3 standard uppercase characters (e.g. "EG", "OG1", "UG", "KG", "DG").
+  static String _normalizeFloorToken(String rawFloor) {
+    if (rawFloor.trim().isEmpty) return '';
+
+    String cleaned = _transliterate(rawFloor.trim().toLowerCase());
+
+    if (cleaned.contains('erd') || cleaned == 'eg' || cleaned.contains('parterre') || cleaned.contains('ground')) {
+      return 'EG';
+    }
+    if (cleaned.contains('dach') || cleaned == 'dg') {
+      return 'DG';
+    }
+    if (cleaned.contains('keller') || cleaned == 'kg') {
+      return 'KG';
+    }
+    if (cleaned.contains('unter') || cleaned.contains('ug') || cleaned.contains('basement')) {
+      final ugMatch = RegExp(r'(\d+)\.?\s*(?:ug|unter)|(?:ug|unter)\s*(\d+)').firstMatch(cleaned);
+      if (ugMatch != null) {
+        final num = ugMatch.group(1) ?? ugMatch.group(2) ?? '';
+        if (num.isNotEmpty) return 'UG$num';
+      }
+      return 'UG';
+    }
+
+    final ogMatch = RegExp(r'(\d+)\.?\s*(?:og|ober|etage|stock)|(?:og|ober)\s*(\d+)').firstMatch(cleaned);
+    if (ogMatch != null) {
+      final num = ogMatch.group(1) ?? ogMatch.group(2) ?? '';
+      if (num.isNotEmpty) return 'OG$num';
+    }
+
+    if (cleaned.contains('og')) return 'OG';
+
+    final fallback = cleaned.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    return fallback.length > 3 ? fallback.substring(0, 3) : fallback;
+  }
+
+  /// Normalizes door numbers (pads single digits to 2 digits, cleans noise).
+  static String _normalizeDoorNumber(String rawDoor) {
+    if (rawDoor.trim().isEmpty) return '';
+    String cleaned = rawDoor.trim().replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
+    if (RegExp(r'^\d$').hasMatch(cleaned)) {
+      return '0$cleaned';
+    }
+    return cleaned;
   }
 }

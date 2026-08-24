@@ -18,7 +18,7 @@ class DoorInspectionForm extends StatefulWidget {
   });
 
   @override
-  _DoorInspectionFormState createState() => _DoorInspectionFormState();
+  State<DoorInspectionForm> createState() => _DoorInspectionFormState();
 }
 
 class _DoorInspectionFormState extends State<DoorInspectionForm> {
@@ -391,6 +391,54 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Action buttons (Top)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      await saveDoor();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Speichern'),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (widget.door != null && currentInspectionId != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ErrorManagementPage(
+                              doorId: widget.door!.id!,
+                              doorNumber: widget.door!.doorNumber,
+                              inspectionId: currentInspectionId!,
+                              isManagerMode: widget.isManagerMode,
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('Fehler verwalten'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
             // Inspection Metadata Section
             const Text("Inspektionsdaten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
@@ -467,7 +515,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             TextField(
               controller: doorAliasController,
               enabled: true, // Editable by Inspector (first physical inspection barcode scan) and Manager
-              maxLength: 12,
+              maxLength: 24,
               decoration: const InputDecoration(
                 labelText: "Tür-Identität (Alias / Barcode)",
                 helperText: "Dauerhafte, eindeutige ID (z.B. Barcode bei Erstprüfung)",
@@ -695,51 +743,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               value: properFunction,
               onChanged: (val) => setState(() => properFunction = val),
             ),
-
-            const SizedBox(height: 30),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await saveDoor();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: Text('Speichern'),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (widget.door != null && currentInspectionId != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ErrorManagementPage(
-                              doorId: widget.door!.id!,
-                              doorNumber: widget.door!.doorNumber,
-                              inspectionId: currentInspectionId!,
-                              isManagerMode: widget.isManagerMode,
-                            ),
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
-                        );
-                      }
-                    },
-                    child: const Text('Fehler verwalten'),
-                  ),
-                ),
-              ],
-            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),

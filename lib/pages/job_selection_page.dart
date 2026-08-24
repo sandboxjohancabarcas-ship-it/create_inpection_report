@@ -11,6 +11,7 @@ import '../services/test_data_generator.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
+import '../widgets/import_report_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -426,16 +427,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         if (confirm != true) return;
 
         setState(() => _isImporting = true);
-        await DatabaseService.importAndMergePackage(path);
+        final report = await DatabaseService.importAndMergePackage(path);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Paket erfolgreich in Haupt-DB integriert.'),
-              backgroundColor: Colors.green,
-            ),
-          );
           _refreshInspections();
+          await ImportReportDialog.show(context, report);
         }
       }
     } catch (e) {

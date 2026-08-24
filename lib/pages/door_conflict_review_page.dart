@@ -449,11 +449,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                       child: TextField(
                         controller: _newAliasControllers[key],
                         decoration: const InputDecoration(
-                          labelText: 'Neuer Tür-Alias (max 14 Zeichen)',
+                          labelText: 'Neuer Tür-Alias (max 24 Zeichen)',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
-                        maxLength: 14,
+                        maxLength: 24,
                       ),
                     ),
                 ],
