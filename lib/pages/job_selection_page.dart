@@ -12,6 +12,7 @@ import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/import_report_dialog.dart';
+import '../widgets/batch_migration_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -398,51 +399,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
   /// Handles the import of an inspector's result package into the Main DB
   Future<void> _handleImportResultPackage() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
-
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
-
-        if (!mounted) return;
-
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Ergebnis-Paket importieren'),
-            content: const Text(
-              'Möchten Sie dieses Paket in die Haupt-Datenbank einspielen? '
-              'Bestehende Daten werden bei Übereinstimmung (Alias/Auftragsnummer) aktualisiert.'
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Importieren', style: TextStyle(color: Colors.blue)),
-              ),
-            ],
-          ),
-        );
-
-        if (confirm != true) return;
-
-        setState(() => _isImporting = true);
-        final report = await DatabaseService.importAndMergePackage(path);
-
-        if (mounted) {
-          _refreshInspections();
-          await ImportReportDialog.show(context, report);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isImporting = false);
-    }
+    await BatchMigrationDialog.show(context, onMigrationCompleted: _refreshInspections);
   }
 
   void _showSeedDataDialog() {

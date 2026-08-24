@@ -16,6 +16,36 @@ class DoorChangeItem {
   });
 }
 
+class InspectionFileReportItem {
+  final String fileName;
+  final String clientName;
+  final String objectAddress;
+  final String jobNumber;
+  final String inspectionDate;
+  final int newDoorsCount;
+  final int updatedDoorsCount;
+  final int defectsRecordedCount;
+  final int attachmentsCount;
+  final List<DoorChangeItem> doorChanges;
+  final String status;
+
+  InspectionFileReportItem({
+    required this.fileName,
+    this.clientName = '',
+    this.objectAddress = '',
+    this.jobNumber = '',
+    this.inspectionDate = '',
+    this.newDoorsCount = 0,
+    this.updatedDoorsCount = 0,
+    this.defectsRecordedCount = 0,
+    this.attachmentsCount = 0,
+    this.doorChanges = const [],
+    this.status = 'Erfolgreich',
+  });
+
+  int get totalDoors => newDoorsCount + updatedDoorsCount;
+}
+
 class ImportReport {
   final String packageName;
   final DateTime importedAt;
@@ -27,6 +57,7 @@ class ImportReport {
   final int totalAttachmentsImported;
   final List<DoorChangeItem> doorChanges;
   final List<String> newCatalogProposals;
+  final List<InspectionFileReportItem> fileReports;
 
   ImportReport({
     required this.packageName,
@@ -39,6 +70,7 @@ class ImportReport {
     required this.totalAttachmentsImported,
     required this.doorChanges,
     required this.newCatalogProposals,
+    this.fileReports = const [],
   });
 
   int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;

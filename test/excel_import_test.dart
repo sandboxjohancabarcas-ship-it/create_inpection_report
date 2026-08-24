@@ -39,7 +39,7 @@ void main() {
 
       expect(egAlias, isNot(equals(ogAlias)));
       expect(egAlias, contains('EG'));
-      expect(ogAlias, contains('1OG'));
+      expect(ogAlias, contains('OG1'));
     });
 
     test('Inserting doors with same doorNumber on different floors preserves both records', () async {
@@ -311,5 +311,57 @@ void main() {
         }
       });
     }
+
+    test('searchInspections matches inspections by doorAlias', () async {
+      final doorId = await DatabaseService.insertDoor(Door(
+        id: null,
+        pos: 1,
+        doorAlias: 'SPRIN-BIL40-UG-45',
+        doorNumber: '45',
+        floor: 'UG',
+        roomNumber: '001',
+        roomDesignation: 'Keller',
+        doorType: 'T30',
+        wingCount: 1,
+        material: 'Stahl',
+        manufacturer: 'Dorma',
+        dinConfiguration: 'DIN L',
+        closerType: 'TS93',
+        closingSequenceSystem: '',
+        lockDimensions: '',
+        closerOnHingeSide: false,
+        closerOnOppositeSide: false,
+        lintelHeightUnder1m: false,
+        escapeDoorControl: false,
+        accessControl: '',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: false,
+        fittingType: '',
+        panicFunction: '',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
+      ));
+
+      final inspId = await DatabaseService.insertInspection({
+        'clientName': 'Sprinkenhof',
+        'objectAddress': 'Billstraße 40',
+        'date': '2025-05-10',
+        'jobNumber': '25-999-AB',
+      });
+
+      await DatabaseService.insertInspectionDoor({
+        'inspectionId': inspId,
+        'doorId': doorId,
+        'status': 'Passed',
+        'notes': 'Test',
+      });
+
+      final results = await DatabaseService.searchInspections('SPRIN-BIL40-UG-45');
+      expect(results.length, equals(1));
+      expect(results.first['inspectionId'], equals(inspId));
+    });
   });
 }

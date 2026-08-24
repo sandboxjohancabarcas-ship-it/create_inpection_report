@@ -23,11 +23,18 @@ class ImportReportDialog extends StatelessWidget {
     final theme = Theme.of(context);
     final formattedDate = DateFormat('dd.MM.yyyy HH:mm').format(report.importedAt);
 
+    final bool hasFileReports = report.fileReports.isNotEmpty;
+    final bool hasCatalogProposals = report.newCatalogProposals.isNotEmpty;
+
+    int tabCount = 1; // Doors tab by default
+    if (hasFileReports) tabCount++;
+    if (hasCatalogProposals) tabCount++;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 620,
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        width: 720,
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -50,12 +57,12 @@ class ImportReportDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Import-Zusammenfassung',
+                        'Import- & Migrations-Bericht',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Paket: ${report.packageName} • $formattedDate',
+                        'Paket / Quelle: ${report.packageName} • $formattedDate',
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                       ),
                     ],
@@ -69,7 +76,7 @@ class ImportReportDialog extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Overview Metric Chips / Cards
+            // Overview Metric Cards
             Row(
               children: [
                 _buildStatCard(
@@ -104,7 +111,7 @@ class ImportReportDialog extends StatelessWidget {
 
             // Tabbed / Section Details
             DefaultTabController(
-              length: report.newCatalogProposals.isNotEmpty ? 2 : 1,
+              length: tabCount,
               child: Expanded(
                 child: Column(
                   children: [
@@ -113,8 +120,10 @@ class ImportReportDialog extends StatelessWidget {
                       unselectedLabelColor: Colors.grey.shade600,
                       indicatorColor: theme.primaryColor,
                       tabs: [
-                        Tab(text: 'Türen (${report.doorChanges.length})'),
-                        if (report.newCatalogProposals.isNotEmpty)
+                        if (hasFileReports)
+                          Tab(text: 'Inspektions-Dateien (${report.fileReports.length})'),
+                        Tab(text: 'Alle Türen (${report.doorChanges.length})'),
+                        if (hasCatalogProposals)
                           Tab(text: 'Katalog-Vorschläge (${report.newCatalogProposals.length})'),
                       ],
                     ),
@@ -122,6 +131,9 @@ class ImportReportDialog extends StatelessWidget {
                     Expanded(
                       child: TabBarView(
                         children: [
+                          if (hasFileReports)
+                            _buildPerFileReportList(context),
+
                           // Doors Tab
                           report.doorChanges.isEmpty
                               ? const Center(child: Text('Keine Tür-Details vorhanden.'))
@@ -189,7 +201,7 @@ class ImportReportDialog extends StatelessWidget {
                                 ),
 
                           // Catalog Proposals Tab
-                          if (report.newCatalogProposals.isNotEmpty)
+                          if (hasCatalogProposals)
                             ListView.separated(
                               itemCount: report.newCatalogProposals.length,
                               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -228,6 +240,153 @@ class ImportReportDialog extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPerFileReportList(BuildContext context) {
+    return ListView.separated(
+      itemCount: report.fileReports.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = report.fileReports[index];
+        final isError = item.status.contains('Fehler') || item.status.contains('Übersprungen');
+        final hasConflicts = item.status.contains('Konflikte');
+
+        final Color statusColor = isError
+            ? Colors.red
+            : hasConflicts
+                ? Colors.orange
+                : Colors.green;
+
+        return Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+          ),
+          child: ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: statusColor.withValues(alpha: 0.1),
+              child: Icon(
+                isError
+                    ? Icons.error_outline
+                    : hasConflicts
+                        ? Icons.rule_folder
+                        : Icons.task_alt,
+                color: statusColor,
+                size: 22,
+              ),
+            ),
+            title: Text(
+              item.fileName,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  if (item.clientName.isNotEmpty)
+                    _buildMetaChip(Icons.person_outline, item.clientName),
+                  if (item.objectAddress.isNotEmpty)
+                    _buildMetaChip(Icons.location_on_outlined, item.objectAddress),
+                  if (item.jobNumber.isNotEmpty)
+                    _buildMetaChip(Icons.assignment_outlined, item.jobNumber),
+                  if (item.inspectionDate.isNotEmpty)
+                    _buildMetaChip(Icons.calendar_today_outlined, item.inspectionDate),
+                ],
+              ),
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                item.status,
+                style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 11),
+              ),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildFileStat('Neugeschafene Türen', '+${item.newDoorsCount}', Colors.indigo),
+                        _buildFileStat('Aktualisierte Türen', '${item.updatedDoorsCount}', Colors.blue),
+                        _buildFileStat('Mängel', '${item.defectsRecordedCount}', Colors.orange),
+                        _buildFileStat('Fotos / Anhänge', '${item.attachmentsCount}', Colors.teal),
+                      ],
+                    ),
+                    if (item.doorChanges.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text('Enthaltene Türen:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 140),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: item.doorChanges.length,
+                          itemBuilder: (context, dIdx) {
+                            final door = item.doorChanges[dIdx];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              child: Text(
+                                '• ${door.doorNumber.isNotEmpty ? "Tür ${door.doorNumber}" : door.doorAlias} (${door.roomDesignation})',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetaChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.grey.shade700),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade800)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFileStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color)),
+        Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+      ],
     );
   }
 

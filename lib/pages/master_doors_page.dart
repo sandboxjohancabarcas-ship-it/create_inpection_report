@@ -8,6 +8,8 @@ import '../services/kinchi_api_service.dart';
 import '../services/test_data_generator.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/import_report_dialog.dart';
+import '../widgets/batch_migration_dialog.dart';
+import '../services/customer_normalizer.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
 
@@ -717,9 +719,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ] else ...[
             IconButton(
-              icon: const Icon(Icons.drive_folder_upload),
-              tooltip: 'Techniker-Ergebnis importieren',
-              onPressed: _isProcessing ? null : _handleImportResultPackage,
+              icon: const Icon(Icons.unarchive),
+              tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
+              onPressed: _isProcessing ? null : () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadData),
             ),
             IconButton(
               icon: const Icon(Icons.science_outlined),
@@ -952,13 +954,14 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
     for (final insp in _inspections) {
-      final client = (insp['clientName']?.toString().trim().isNotEmpty ?? false)
-          ? insp['clientName'].toString().trim()
+      final rawClient = insp['clientName']?.toString().trim() ?? '';
+      final canonicalDisplay = rawClient.isNotEmpty
+          ? CustomerNormalizer.getCanonicalName(rawClient)
           : 'Ohne Kundenzuordnung';
-      grouped.putIfAbsent(client, () => []).add(insp);
+      grouped.putIfAbsent(canonicalDisplay, () => []).add(insp);
     }
 
-    final clientKeys = grouped.keys.toList()..sort();
+    final clientKeys = grouped.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1188,6 +1191,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
         final countA = (a['totalErrorCount'] as num?)?.toInt() ?? 0;
         final countB = (b['totalErrorCount'] as num?)?.toInt() ?? 0;
         return countA.compareTo(countB); // Ascending: Least errors / error-free first
+      });
+    } else {
+      // Default: Hierarchical sort by Floor -> Room -> Door Number
+      displayDoors.sort((aMap, bMap) {
+        final doorA = Door.fromMap(aMap);
+        final doorB = Door.fromMap(bMap);
+        return CustomerNormalizer.compareDoors(doorA, doorB);
       });
     }
 

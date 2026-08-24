@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -404,8 +405,15 @@ class DatabaseService {
         OR i.date LIKE ? 
         OR i.objectAddress LIKE ? 
         OR d.doorNumber LIKE ?
+        OR d.doorAlias LIKE ?
+        OR d.roomNumber LIKE ?
+        OR d.roomDesignation LIKE ?
+        OR d.floor LIKE ?
       )''';
-      whereArgs.addAll([searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]);
+      whereArgs.addAll([
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm
+      ]);
     }
 
     return await db.rawQuery('''
@@ -665,7 +673,21 @@ class DatabaseService {
       WHERE clientName IS NOT NULL AND TRIM(clientName) != ''
       ORDER BY clientName ASC
     ''');
-    return rows.map((r) => r['clientName'] as String).toList();
+
+    final Map<String, String> canonicalMap = {};
+    for (final row in rows) {
+      final rawName = (row['clientName'] as String? ?? '').trim();
+      if (rawName.isEmpty) continue;
+      final key = CustomerNormalizer.getCanonicalKey(rawName);
+      final cleanName = CustomerNormalizer.getCanonicalName(rawName);
+      if (!canonicalMap.containsKey(key)) {
+        canonicalMap[key] = cleanName;
+      }
+    }
+
+    final result = canonicalMap.values.toList();
+    result.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return result;
   }
 
   /// Returns detailed master door records joined with client and inspection info
@@ -970,6 +992,7 @@ class DatabaseService {
     int totalAttachmentsImported = 0;
     final List<DoorChangeItem> doorChanges = [];
     final List<String> newCatalogProposals = [];
+    final List<InspectionFileReportItem> fileReports = [];
 
     try {
       await masterDb.transaction((txn) async {
@@ -1226,6 +1249,20 @@ class DatabaseService {
             );
           }
         }
+
+        fileReports.add(InspectionFileReportItem(
+          fileName: basename(packagePath),
+          clientName: pInspections.isNotEmpty ? (pInspections.first['clientName'] as String? ?? '') : '',
+          objectAddress: pInspections.isNotEmpty ? (pInspections.first['objectAddress'] as String? ?? '') : '',
+          jobNumber: pInspections.isNotEmpty ? (pInspections.first['jobNumber'] as String? ?? '') : '',
+          inspectionDate: pInspections.isNotEmpty ? (pInspections.first['date'] as String? ?? '') : '',
+          newDoorsCount: newDoorsCount,
+          updatedDoorsCount: updatedDoorsCount,
+          defectsRecordedCount: totalErrorsImported,
+          attachmentsCount: totalAttachmentsImported,
+          doorChanges: doorChanges,
+          status: 'Erfolgreich',
+        ));
       });
 
       return ImportReport(
@@ -1239,6 +1276,7 @@ class DatabaseService {
         totalAttachmentsImported: totalAttachmentsImported,
         doorChanges: doorChanges,
         newCatalogProposals: newCatalogProposals,
+        fileReports: fileReports,
       );
     } finally {
       await packageDb.close();

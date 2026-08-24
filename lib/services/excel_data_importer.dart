@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/models/door_conflict.dart';
+import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class ExcelImportResult {
@@ -26,6 +27,8 @@ class ExcelImportResult {
     this.doorConflicts = const [],
     this.catalogConflicts = const [],
   });
+
+  bool get hasDoorConflicts => doorConflicts.isNotEmpty;
 }
 
 class ExcelDataImporter {
@@ -45,7 +48,25 @@ class ExcelDataImporter {
     final RegExpMatch? projMatch = projRegExp.firstMatch(fileName);
     final String projectNumber = projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
 
-    final List<int> bytes = await excelFile.readAsBytes();
+    File fileToRead = excelFile;
+    File? tempXlsx;
+
+    final ext = p.extension(excelFile.path).toLowerCase();
+    if (ext == '.xlsm' || ext == '.xlms') {
+      try {
+        final tempPath = p.join(
+          Directory.systemTemp.path,
+          '${p.basenameWithoutExtension(excelFile.path)}_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+        );
+        tempXlsx = await excelFile.copy(tempPath);
+        fileToRead = tempXlsx;
+        logs.add('Makro-Datei ($ext) in temporäre .xlsx umgewandelt: $tempPath');
+      } catch (e) {
+        logs.add('Hinweis: Konvertierung von $ext in .xlsx übersprungen ($e)');
+      }
+    }
+
+    final List<int> bytes = await fileToRead.readAsBytes();
     final decoder = SpreadsheetDecoder.decodeBytes(bytes);
 
     final allSheets = decoder.tables.keys.toList();
@@ -128,34 +149,51 @@ class ExcelDataImporter {
     final List<Map<String, dynamic>> doorSheetsToProcess = [];
     for (var sheetName in decoder.tables.keys) {
       final lowerName = sheetName.trim().toLowerCase();
-      final isDoorSheet = lowerName.startsWith('türlisten') || 
-                          lowerName.startsWith('türliste') || 
-                          lowerName.startsWith('türen') || 
-                          lowerName.startsWith('doors');
+      // Inspection sheets MUST start with "türlisten" (e.g. "Türlisten 04.09.2025")
+      final isTuerlistenSheet = lowerName.startsWith('türlisten') || 
+                                lowerName.startsWith('türliste') || 
+                                lowerName.startsWith('türen') || 
+                                lowerName.startsWith('doors');
 
-      if (!isDoorSheet) {
-        logs.add('Arbeitsblatt "$sheetName" übersprungen (kein Türlisten-Format).');
+      if (!isTuerlistenSheet) {
+        logs.add('Arbeitsblatt "$sheetName" übersprungen (kein "Türlisten"-Präfix).');
         continue;
       }
 
       final sheet = decoder.tables[sheetName]!;
-      if (sheet.maxRows < 4) {
-        final warn = 'Arbeitsblatt "$sheetName" hat nicht genügend Zeilen (${sheet.maxRows} < 4).';
+      if (sheet.maxRows < 2) {
+        final warn = 'Arbeitsblatt "$sheetName" hat nicht genügend Zeilen (${sheet.maxRows} < 2).';
         warnings.add(warn);
         logs.add('WARNUNG: $warn');
         continue;
       }
 
-      final row0 = sheet.rows[0];
-      if (row0.isEmpty || row0[0] == null) {
-        final warn = 'Arbeitsblatt "$sheetName" hat eine leere erste Zeile.';
-        warnings.add(warn);
-        logs.add('WARNUNG: $warn');
-        continue;
+      String metadataText = '';
+      for (int r = 0; r < sheet.maxRows && r < 3; r++) {
+        final row = sheet.rows[r];
+        if (row.isNotEmpty && row[0] != null && row[0].toString().trim().isNotEmpty) {
+          metadataText = row[0].toString();
+          break;
+        }
       }
 
-      final metadataText = row0[0].toString();
       final meta = _parseMetadata(metadataText);
+
+      // Extract date from sheet name if present (e.g. "Türlisten 04.09.2025")
+      final sheetDateMatch = RegExp(r'(\d{2})[\.\-_](\d{2})[\.\-_](\d{4}|\d{2})').firstMatch(sheetName) ??
+                             RegExp(r'(\d{4})[\.\-_](\d{2})[\.\-_](\d{2})').firstMatch(sheetName);
+      if (sheetDateMatch != null) {
+        if (sheetDateMatch.group(1)!.length == 4) {
+          meta['date'] = '${sheetDateMatch.group(1)}-${sheetDateMatch.group(2)!.padLeft(2, '0')}-${sheetDateMatch.group(3)!.padLeft(2, '0')}';
+        } else {
+          final day = sheetDateMatch.group(1)!.padLeft(2, '0');
+          final month = sheetDateMatch.group(2)!.padLeft(2, '0');
+          var year = sheetDateMatch.group(3)!;
+          if (year.length == 2) year = '20$year';
+          meta['date'] = '$year-$month-$day';
+        }
+      }
+
       final String dateStr = meta['date'] ?? '';
       final DateTime sheetDate = DateTime.tryParse(dateStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -205,8 +243,20 @@ class ExcelDataImporter {
       sheetsProcessed++;
       logs.add('Inspektion ID $inspectionId für "$sheetName" (Auftrag: ${meta['jobNumber']}) in Datenbank erstellt.');
 
-      // Analyze Column headers at Row 2 (3rd row) to build error column mappings
-      final headerRow = sheet.rows[2];
+      // Analyze Column headers to build error column mappings
+      int headerRowIndex = 2;
+      for (int r = 0; r < sheet.maxRows && r < 4; r++) {
+        final rRow = sheet.rows[r];
+        if (rRow.isNotEmpty && rRow[0] != null) {
+          final firstVal = rRow[0].toString().trim().toLowerCase();
+          if (firstVal == 'pos' || firstVal == 'pos.' || firstVal == 'lfd' || firstVal == 'nr') {
+            headerRowIndex = r;
+            break;
+          }
+        }
+      }
+
+      final headerRow = sheet.rows[headerRowIndex];
       final errorColumns = <int, String>{}; // colIndex -> code
       
       // Scan from column 27 (AB) onwards for error headers
@@ -239,13 +289,16 @@ class ExcelDataImporter {
       final sheetDoors = <Door>[];
       final sheetDoorRows = <int, List<dynamic>>{}; // doorIndex -> raw row for error linking
 
-      // Process Door data rows (Row 3 onwards)
-      for (int r = 3; r < sheet.maxRows; r++) {
+      // Process Door data rows (Row after header onwards)
+      for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
         final row = sheet.rows[r];
         if (row.isEmpty || row[0] == null || row[0].toString().trim().isEmpty) continue;
 
         final pos = _toInt(row[0]);
-        final doorNumber = _toStr(row[1]);
+        final rawDoorNumberCell = row.length > 1 ? row[1] : null;
+        final rawStr = _toStr(rawDoorNumberCell);
+        final doorNumber = _sanitizeDoorNumber(rawStr, pos: pos, rowIndex: r);
+
         final floor = _toStr(row[2]);
         final roomNumber = _toStr(row[3]);
         final roomDesignation = _toStr(row[4]);
@@ -332,24 +385,24 @@ class ExcelDataImporter {
             '— diese Türen wurden NICHT importiert und warten auf Freigabe.');
       }
 
-      // Build a set of aliases that were written cleanly (for error linking)
-      final cleanAliasSet = mergeResult.cleanDoors
-          .map((d) => d.doorAlias?.trim() ?? '')
-          .where((a) => a.isNotEmpty)
-          .toSet();
-
-      // ── Link errors only for cleanly imported doors ──────────────────────
+      // ── Link errors and inspection records for all doors in sheet ──────────────
       for (int di = 0; di < sheetDoors.length; di++) {
         final door = sheetDoors[di];
         final alias = door.doorAlias?.trim() ?? '';
-        if (!cleanAliasSet.contains(alias)) continue; // skip conflicted doors
 
         // Resolve the actual DB id for this door
-        final inserted = mergeResult.cleanDoors
-            .firstWhere((d) => (d.doorAlias?.trim() ?? '') == alias,
-                orElse: () => door);
-        final doorId = inserted.id;
-        if (doorId == null) continue;
+        Door? inserted = mergeResult.cleanDoors
+            .where((d) => (d.doorAlias?.trim() ?? '') == alias)
+            .firstOrNull;
+
+        int? doorId = inserted?.id;
+        if (doorId == null && alias.isNotEmpty) {
+          final existing = await DatabaseService.getDoorByAlias(alias);
+          doorId = existing?.id;
+        }
+        if (doorId == null) {
+          doorId = await DatabaseService.insertDoor(door);
+        }
 
         final doorFunctionOK = door.doorFunctionOK;
         final row = sheetDoorRows[di] ?? [];
@@ -443,6 +496,12 @@ class ExcelDataImporter {
       print('Migration protocol written to: ${logFile.absolute.path}');
     } catch (e) {
       print('Failed to write migration protocol log file: $e');
+    } finally {
+      if (tempXlsx != null && tempXlsx.existsSync()) {
+        try {
+          tempXlsx.deleteSync();
+        } catch (_) {}
+      }
     }
 
     return ExcelImportResult(
@@ -482,8 +541,10 @@ class ExcelDataImporter {
       formattedDate = DateTime.now().toIso8601String().substring(0, 10);
     }
 
+    final cleanClient = CustomerNormalizer.getCanonicalName(client);
+
     return {
-      'clientName': client.isNotEmpty ? client : 'Stadt Geesthacht',
+      'clientName': cleanClient.isNotEmpty ? cleanClient : 'Stadt Geesthacht',
       'objectAddress': object.isNotEmpty ? object : 'Fam. Zentrum Regenbogen',
       'date': formattedDate,
       'contactPerson': contact.isNotEmpty ? contact : 'Herr Basau',
@@ -494,7 +555,48 @@ class ExcelDataImporter {
 
   static String _toStr(dynamic val) {
     if (val == null) return '';
-    return val.toString().trim();
+
+    if (val is double) {
+      if (val % 1 == 0) {
+        return val.toInt().toString();
+      }
+      final strVal = val.toString().trim();
+      return strVal.endsWith('.0') ? strVal.substring(0, strVal.length - 2) : strVal;
+    }
+
+    if (val is int) {
+      return val.toString();
+    }
+
+    if (val is DateTime) {
+      if (val.year == 1899 || val.year == 1900) {
+        if (val.minute == 0 && val.second == 0) {
+          return val.hour.toString();
+        }
+        return '0';
+      }
+      return '${val.day.toString().padLeft(2, '0')}.${val.month.toString().padLeft(2, '0')}.${val.year}';
+    }
+
+    final rawStr = val.toString().trim();
+    if (rawStr.isEmpty) return '';
+
+    // Handle Excel time formatting quirks (e.g. 00:00:00 -> "0", 01:00:00 -> "1")
+    final timeMatch = RegExp(r'^0*(\d{1,3}):00:00$').firstMatch(rawStr);
+    if (timeMatch != null) {
+      final hourStr = timeMatch.group(1)!;
+      return hourStr.isEmpty ? '0' : hourStr;
+    }
+    if (rawStr == '00:00' || rawStr == '00:00:00') {
+      return '0';
+    }
+
+    // Strip trailing decimal zeroes from numeric strings (e.g. "1.0" -> "1")
+    if (RegExp(r'^\d+\.0+$').hasMatch(rawStr)) {
+      return rawStr.split('.').first;
+    }
+
+    return rawStr;
   }
 
   static int _toInt(dynamic val, {int defaultValue = 0}) {
@@ -516,5 +618,30 @@ class ExcelDataImporter {
       return numVal > 0;
     }
     return false;
+  }
+
+  /// Sanitizes door numbers by stripping unknown noise characters (commas, question marks, isolated dashes).
+  /// Preserves valid alphanumeric formats like "21.A", "2202.5", "EG.01", "T-01".
+  static String _sanitizeDoorNumber(String raw, {int pos = 0, int rowIndex = 0}) {
+    if (raw.isEmpty) {
+      return pos > 0 ? pos.toString() : 'TÜR-$rowIndex';
+    }
+
+    String cleaned = raw.trim();
+
+    // Convert decimal commas to dots (e.g. "2202,5" -> "2202.5")
+    cleaned = cleaned.replaceAll(',', '.');
+
+    // Remove unwanted special characters, keeping alphanumeric, German umlauts, dots, and hyphens
+    cleaned = cleaned.replaceAll(RegExp(r'[^\w\.\-äöüÄÖÜß]'), '');
+
+    // Strip leading or trailing isolated dots or hyphens (e.g. "21-" -> "21", ".21" -> "21")
+    cleaned = cleaned.replaceAll(RegExp(r'^[\.\-]+|[\.\-]+$'), '');
+
+    if (cleaned.isEmpty || cleaned == '?') {
+      return pos > 0 ? pos.toString() : 'TÜR-$rowIndex';
+    }
+
+    return cleaned;
   }
 }
