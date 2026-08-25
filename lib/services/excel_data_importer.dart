@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
@@ -145,11 +146,11 @@ class ExcelDataImporter {
     int totalDoorsImported = 0;
     int totalErrorsLinked = 0;
 
-    // 2. Locate and pre-parse dates of Türlisten sheets, then sort them newest-first
+    // 2. Locate and pre-parse dates of Türlisten inspection sheets, then sort them newest-first
     final List<Map<String, dynamic>> doorSheetsToProcess = [];
     for (var sheetName in decoder.tables.keys) {
       final lowerName = sheetName.trim().toLowerCase();
-      // Inspection sheets MUST start with "türlisten" (e.g. "Türlisten 04.09.2025")
+      // Inspection sheets MUST have prefix "türlisten", "türliste", "türen", or "doors"
       final isTuerlistenSheet = lowerName.startsWith('türlisten') || 
                                 lowerName.startsWith('türliste') || 
                                 lowerName.startsWith('türen') || 
@@ -212,14 +213,6 @@ class ExcelDataImporter {
       return dateB.compareTo(dateA);
     });
 
-    String? canonicalClient;
-    String? canonicalAddress;
-    if (doorSheetsToProcess.isNotEmpty) {
-      final firstMeta = doorSheetsToProcess.first['meta'] as Map<String, String>;
-      canonicalClient = firstMeta['clientName'];
-      canonicalAddress = firstMeta['objectAddress'];
-    }
-
     logs.add('Reihenfolge der verarbeiteten Blätter (neueste zuerst): ' + 
       doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', '));
 
@@ -228,11 +221,8 @@ class ExcelDataImporter {
       final sheet = dsInfo['sheet'];
       final Map<String, String> meta = Map<String, String>.from(dsInfo['meta'] as Map);
       meta['projectNumber'] = projectNumber;
-      if (canonicalClient != null && canonicalClient.isNotEmpty) {
-        meta['clientName'] = canonicalClient;
-      }
-      if (canonicalAddress != null && canonicalAddress.isNotEmpty) {
-        meta['objectAddress'] = canonicalAddress;
+      if (meta['clientName'] != null && meta['clientName']!.isNotEmpty) {
+        meta['clientName'] = CustomerNormalizer.getCanonicalName(meta['clientName']!);
       }
 
       logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
@@ -245,23 +235,33 @@ class ExcelDataImporter {
 
       // Analyze Column headers to build error column mappings
       int headerRowIndex = 2;
-      for (int r = 0; r < sheet.maxRows && r < 4; r++) {
+      for (int r = 0; r < sheet.maxRows && r < 10; r++) {
         final rRow = sheet.rows[r];
-        if (rRow.isNotEmpty && rRow[0] != null) {
-          final firstVal = rRow[0].toString().trim().toLowerCase();
-          if (firstVal == 'pos' || firstVal == 'pos.' || firstVal == 'lfd' || firstVal == 'nr') {
-            headerRowIndex = r;
-            break;
+        if (rRow.isNotEmpty) {
+          bool foundHeader = false;
+          for (int c = 0; c < rRow.length && c < 5; c++) {
+            if (rRow[c] != null) {
+              final cellVal = rRow[c].toString().trim().toLowerCase();
+              if (cellVal == 'pos' || cellVal == 'pos.' || cellVal == 'lfd' || cellVal == 'nr' || cellVal == 'tür-nr' || cellVal == 'türnummer' || cellVal == 'tür nr') {
+                headerRowIndex = r;
+                foundHeader = true;
+                break;
+              }
+            }
           }
+          if (foundHeader) break;
         }
       }
 
-      final headerRow = sheet.rows[headerRowIndex];
+      if (headerRowIndex >= sheet.rows.length) {
+        headerRowIndex = 0;
+      }
+      final headerRow = sheet.rows.isNotEmpty ? sheet.rows[headerRowIndex] : [];
       final errorColumns = <int, String>{}; // colIndex -> code
       
       // Scan from column 27 (AB) onwards for error headers
       for (int c = 27; c < headerRow.length; c++) {
-        final val = headerRow[c];
+        final val = _cell(headerRow, c);
         if (val == null) continue;
         final headerStr = val.toString().trim();
         if (headerStr.toLowerCase() == 'anmerkung') {
@@ -292,41 +292,51 @@ class ExcelDataImporter {
       // Process Door data rows (Row after header onwards)
       for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
         final row = sheet.rows[r];
-        if (row.isEmpty || row[0] == null || row[0].toString().trim().isEmpty) continue;
+        if (row.isEmpty) continue;
 
-        final pos = _toInt(row[0]);
-        final rawDoorNumberCell = row.length > 1 ? row[1] : null;
+        final posVal = _toStr(_cell(row, 0));
+        final doorNumVal = _toStr(_cell(row, 1));
+        
+        // Skip row if both pos and doorNumber are blank or if row contains summary/footer text
+        if ((posVal.isEmpty && doorNumVal.isEmpty) ||
+            _isSummaryOrFooterText(posVal) ||
+            _isSummaryOrFooterText(doorNumVal)) {
+          continue;
+        }
+
+        final pos = _toInt(_cell(row, 0));
+        final rawDoorNumberCell = _cell(row, 1);
         final rawStr = _toStr(rawDoorNumberCell);
         final doorNumber = _sanitizeDoorNumber(rawStr, pos: pos, rowIndex: r);
 
-        final floor = _toStr(row[2]);
-        final roomNumber = _toStr(row[3]);
-        final roomDesignation = _toStr(row[4]);
+        final floor = _toStr(_cell(row, 2));
+        final roomNumber = _toStr(_cell(row, 3));
+        final roomDesignation = _toStr(_cell(row, 4));
         
         // Normalization check on physical properties
-        final doorType = _toStr(row[5]);
-        final wingCount = _toInt(row[6], defaultValue: 1);
-        final material = _toStr(row[7]);
-        final manufacturer = _toStr(row[8]);
-        final dinConfig = _toStr(row[9]);
-        final closerType = _toStr(row[10]);
-        final closingSeq = _toStr(row[11]);
-        final lockDim = _toStr(row[12]);
+        final doorType = _toStr(_cell(row, 5));
+        final wingCount = _toInt(_cell(row, 6), defaultValue: 1);
+        final material = _toStr(_cell(row, 7));
+        final manufacturer = _toStr(_cell(row, 8));
+        final dinConfig = _toStr(_cell(row, 9));
+        final closerType = _toStr(_cell(row, 10));
+        final closingSeq = _toStr(_cell(row, 11));
+        final lockDim = _toStr(_cell(row, 12));
         
-        final closerHinge = _toBool(row[13]);
-        final closerOpposite = _toBool(row[14]);
-        final lintelUnder1m = _toBool(row[15]);
-        final escapeDoorControl = _toBool(row[16]);
-        final accessControl = _toStr(row[17]);
-        final escapeRouteSituation = _toBool(row[18]);
-        final escapeRouteSignage = _toBool(row[19]);
-        final blindCyl = _toBool(row[20]);
-        final pzCyl = _toBool(row[21]);
-        final fittingType = _toStr(row[22]);
-        final panicFunc = _toStr(row[23]);
-        final escapeDirectionRespected = _toBool(row[24]);
-        final fullPanicStandWing = _toBool(row[25]);
-        final doorFunctionOK = _toBool(row[26]);
+        final closerHinge = _toBool(_cell(row, 13));
+        final closerOpposite = _toBool(_cell(row, 14));
+        final lintelUnder1m = _toBool(_cell(row, 15));
+        final escapeDoorControl = _toBool(_cell(row, 16));
+        final accessControl = _toStr(_cell(row, 17));
+        final escapeRouteSituation = _toBool(_cell(row, 18));
+        final escapeRouteSignage = _toBool(_cell(row, 19));
+        final blindCyl = _toBool(_cell(row, 20));
+        final pzCyl = _toBool(_cell(row, 21));
+        final fittingType = _toStr(_cell(row, 22));
+        final panicFunc = _toStr(_cell(row, 23));
+        final escapeDirectionRespected = _toBool(_cell(row, 24));
+        final fullPanicStandWing = _toBool(_cell(row, 25));
+        final doorFunctionOK = _toBool(_cell(row, 26));
 
         // Handle door alias creation (include floor to distinguish doors with identical numbers across floors)
         final alias = Door.generateAlias(meta['clientName']!, meta['objectAddress']!, doorNumber, floor: floor);
@@ -553,6 +563,30 @@ class ExcelDataImporter {
     };
   }
 
+  static bool _isSummaryOrFooterText(String str) {
+    final lower = str.trim().toLowerCase();
+    if (lower.isEmpty) return false;
+    return lower.startsWith('gesamtzahl') ||
+        lower.startsWith('summe') ||
+        lower.startsWith('unterschrift') ||
+        lower.startsWith('kunde') ||
+        lower.startsWith('objekt') ||
+        lower.startsWith('monteur') ||
+        lower.startsWith('datum') ||
+        lower.startsWith('bemerkung') ||
+        lower.startsWith('anzahl') ||
+        lower.startsWith('gesamt') ||
+        lower.startsWith('geprüft') ||
+        lower.startsWith('prüfer');
+  }
+
+  static dynamic _cell(List<dynamic>? row, int index) {
+    if (row == null || index < 0 || index >= row.length) {
+      return null;
+    }
+    return row[index];
+  }
+
   static String _toStr(dynamic val) {
     if (val == null) return '';
 
@@ -622,8 +656,11 @@ class ExcelDataImporter {
 
   /// Sanitizes door numbers by stripping unknown noise characters (commas, question marks, isolated dashes).
   /// Preserves valid alphanumeric formats like "21.A", "2202.5", "EG.01", "T-01".
+  @visibleForTesting
+  static String sanitizeDoorNumberForTest(String raw) => _sanitizeDoorNumber(raw);
+
   static String _sanitizeDoorNumber(String raw, {int pos = 0, int rowIndex = 0}) {
-    if (raw.isEmpty) {
+    if (raw.isEmpty || _isSummaryOrFooterText(raw)) {
       return pos > 0 ? pos.toString() : 'TÜR-$rowIndex';
     }
 

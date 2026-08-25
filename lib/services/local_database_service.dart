@@ -289,6 +289,18 @@ class LocalDatabaseService {
     }
   }
 
+  /// Updates the doorAlias for a door ID in local working.db.
+  static Future<int> updateDoorAlias(int doorId, String newAlias) async {
+    final db = await getDb();
+    final cleanAlias = newAlias.trim();
+    return await db.update(
+      'doors',
+      {'doorAlias': cleanAlias},
+      where: 'id = ?',
+      whereArgs: [doorId],
+    );
+  }
+
   /// Downloads a Job Package (one or many inspections) from the Main DB.
   /// This enables the "Wide Spectrum" of history or single jobs.
   static Future<void> downloadJobPackage({

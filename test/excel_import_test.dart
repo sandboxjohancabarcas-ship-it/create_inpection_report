@@ -363,5 +363,10 @@ void main() {
       expect(results.length, equals(1));
       expect(results.first['inspectionId'], equals(inspId));
     });
+
+    test('_sanitizeDoorNumber filters out summary and footer text', () {
+      final sanitized = ExcelDataImporter.sanitizeDoorNumberForTest('Gesamtzahl Türen: 45');
+      expect(sanitized.startsWith('TÜR-'), isTrue);
+    });
   });
 }

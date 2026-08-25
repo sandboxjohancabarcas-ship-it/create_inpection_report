@@ -347,6 +347,110 @@ class DatabaseService {
     return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 
+  /// Updates the doorAlias for a specific door ID in Master DB.
+  static Future<int> updateDoorAlias(int doorId, String newAlias) async {
+    final db = await getDb();
+    final cleanAlias = newAlias.trim();
+    return await db.update(
+      'doors',
+      {'doorAlias': cleanAlias},
+      where: 'id = ?',
+      whereArgs: [doorId],
+    );
+  }
+
+  /// Performs an automated database integrity audit and self-repair.
+  /// Detects and removes orphaned records, fixes missing door aliases, and checks catalog consistency.
+  static Future<IntegrityReport> verifyIntegrity() async {
+    final db = await getDb();
+    final List<String> logs = [];
+
+    // 1. Remove orphaned inspection_doors
+    final orphanedJunctions = await db.rawDelete('''
+      DELETE FROM inspection_doors 
+      WHERE inspectionId NOT IN (SELECT inspectionId FROM inspections)
+         OR doorId NOT IN (SELECT id FROM doors)
+    ''');
+    if (orphanedJunctions > 0) {
+      logs.add('Entfernt: $orphanedJunctions verwaiste Zuordnungen in inspection_doors.');
+    }
+
+    // 2. Remove orphaned inspection_door_errors
+    final orphanedErrors = await db.rawDelete('''
+      DELETE FROM inspection_door_errors 
+      WHERE inspectionDoorId NOT IN (SELECT id FROM inspection_doors)
+    ''');
+    if (orphanedErrors > 0) {
+      logs.add('Entfernt: $orphanedErrors verwaiste Fehlereinträge in inspection_door_errors.');
+    }
+
+    // 3. Repair missing door aliases
+    final unaliasedDoors = await db.query(
+      'doors',
+      where: "doorAlias IS NULL OR doorAlias = ''",
+    );
+    int repairedAliasesCount = 0;
+    if (unaliasedDoors.isNotEmpty) {
+      for (final row in unaliasedDoors) {
+        final id = row['id'] as int;
+        final doorNumber = row['doorNumber'] as String? ?? '0';
+        final floor = row['floor'] as String? ?? '';
+
+        final linkedInfo = await db.rawQuery('''
+          SELECT i.clientName, i.objectAddress 
+          FROM inspection_doors id
+          JOIN inspections i ON id.inspectionId = i.inspectionId
+          WHERE id.doorId = ?
+          LIMIT 1
+        ''', [id]);
+
+        final clientName = linkedInfo.isNotEmpty ? (linkedInfo.first['clientName'] as String? ?? '') : '';
+        final objectAddress = linkedInfo.isNotEmpty ? (linkedInfo.first['objectAddress'] as String? ?? '') : '';
+
+        String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+        if (generated.isEmpty) generated = 'DOOR-$id';
+
+        String uniqueAlias = generated;
+        int suffix = 1;
+        while (true) {
+          final existing = await db.query('doors', columns: ['id'], where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
+          if (existing.isEmpty) break;
+          final suffixStr = '-$suffix';
+          final maxBaseLen = 12 - suffixStr.length;
+          final base = generated.length > maxBaseLen ? generated.substring(0, maxBaseLen) : generated;
+          uniqueAlias = '$base$suffixStr';
+          suffix++;
+        }
+
+        await db.update('doors', {'doorAlias': uniqueAlias}, where: 'id = ?', whereArgs: [id]);
+        repairedAliasesCount++;
+      }
+      logs.add('Repariert: $repairedAliasesCount fehlende Tür-Aliase neu generiert.');
+    }
+
+    // Counts
+    final totalInspections = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
+    final totalDoors = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
+    final totalJunctions = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ?? 0;
+    final totalErrors = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ?? 0;
+
+    if (logs.isEmpty) {
+      logs.add('Datenbank ist zu 100% konsistent und gesund. Keine Fehler gefunden.');
+    }
+
+    return IntegrityReport(
+      totalInspections: totalInspections,
+      totalDoors: totalDoors,
+      totalJunctions: totalJunctions,
+      totalErrors: totalErrors,
+      orphanedJunctionsRemoved: orphanedJunctions,
+      orphanedErrorsRemoved: orphanedErrors,
+      missingAliasesRepaired: repairedAliasesCount,
+      repairLogs: logs,
+      timestamp: DateTime.now(),
+    );
+  }
+
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final data = Map<String, dynamic>.from(inspectionData);

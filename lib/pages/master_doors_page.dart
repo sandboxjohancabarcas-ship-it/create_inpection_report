@@ -9,6 +9,7 @@ import '../services/test_data_generator.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/import_report_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
+import '../widgets/migration_log_dialog.dart';
 import '../services/customer_normalizer.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
@@ -724,6 +725,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               onPressed: _isProcessing ? null : () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadData),
             ),
             IconButton(
+              icon: const Icon(Icons.published_with_changes, color: Colors.deepPurpleAccent),
+              tooltip: 'Migrations-Audit & DB-Reparatur',
+              onPressed: () => MigrationLogDialog.show(context),
+            ),
+            IconButton(
               icon: const Icon(Icons.science_outlined),
               tooltip: 'Testdaten generieren',
               onPressed: _isProcessing ? null : _showSeedDataDialog,
@@ -1049,15 +1055,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isSelected ? Colors.blue.shade400 : Colors.grey.shade200,
-                    width: isSelected ? 1.5 : 1.0,
+                child: Material(
+                  color: isSelected ? Colors.blue.shade50.withValues(alpha: 0.3) : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(
+                      color: isSelected ? Colors.blue.shade400 : Colors.grey.shade200,
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  borderRadius: BorderRadius.circular(8),
-                  color: isSelected ? Colors.blue.shade50.withValues(alpha: 0.3) : null,
-                ),
-                child: ListTile(
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
                   leading: Checkbox(
                     value: isSelected,
                     onChanged: (_) => _toggleInspectionSelection(id),
@@ -1150,7 +1158,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     }
                   },
                 ),
-              );
+              ),
+            );
             }).toList(),
           ),
         );

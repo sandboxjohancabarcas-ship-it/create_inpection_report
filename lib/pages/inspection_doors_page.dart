@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:collection/collection.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
+import '../widgets/barcode_scanner_dialog.dart';
 import 'new_door_page.dart';
 
 class InspectionDoorsPage extends StatefulWidget {
@@ -121,6 +123,111 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red));
     } finally {
       setState(() => _isSyncing = false);
+    }
+  }
+
+  Future<void> _handleScanBarcode() async {
+    final scanned = await BarcodeScannerDialog.show(
+      context,
+      title: 'Barcode für Türsuche / Alias-Zuweisung scannen',
+    );
+    if (scanned == null || scanned.isEmpty || !mounted) return;
+
+    final matchingDoor = _doors.firstWhereOrNull(
+      (d) => (d.doorAlias?.toLowerCase() == scanned.toLowerCase()) || (d.doorNumber.toLowerCase() == scanned.toLowerCase()),
+    );
+
+    if (matchingDoor != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tür ${matchingDoor.doorNumber} (Alias: ${matchingDoor.doorAlias}) gefunden!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DoorInspectionForm(
+            door: matchingDoor,
+            isManagerMode: widget.isManagerMode,
+            inspectionId: widget.inspectionId,
+          ),
+        ),
+      );
+      _loadDoors();
+    } else {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Barcode nicht zugeordnet'),
+          content: Text('Der gescannte Barcode "$scanned" konnte keiner Tür in diesem Auftrag zugeordnet werden.\n\nMöchten Sie diesen Barcode einer bestehenden Tür als Alias zuweisen?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cancel'),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context, 'assign'),
+              icon: const Icon(Icons.link),
+              label: const Text('Existierender Tür zuweisen'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == 'assign' && mounted) {
+        _showAssignBarcodeDialog(scanned);
+      }
+    }
+  }
+
+  void _showAssignBarcodeDialog(String scannedAlias) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tür für Alias-Zuweisung wählen'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: _doors.length,
+            itemBuilder: (context, index) {
+              final door = _doors[index];
+              return ListTile(
+                leading: const Icon(Icons.door_front_door, color: Colors.deepPurple),
+                title: Text('Tür ${door.doorNumber}'),
+                subtitle: Text('Aktueller Alias: ${door.doorAlias ?? "Keiner"}\n${door.floor} | ${door.roomDesignation}'),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _updateDoorAlias(door, scannedAlias);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateDoorAlias(Door door, String newAlias) async {
+    if (door.id == null) return;
+    if (widget.isManagerMode) {
+      await DatabaseService.updateDoorAlias(door.id!, newAlias);
+    } else {
+      await LocalDatabaseService.updateDoorAlias(door.id!, newAlias);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Neuer Alias "$newAlias" für Tür ${door.doorNumber} gespeichert.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _loadDoors();
     }
   }
 
@@ -247,6 +354,11 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           )
         ] : [
           IconButton(
+            icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
+            tooltip: 'Barcode / QR-Code scannen',
+            onPressed: _handleScanBarcode,
+          ),
+          IconButton(
             icon: const Icon(Icons.edit_note),
             tooltip: 'Auftrags-Metadaten bearbeiten',
             onPressed: () async {
@@ -349,7 +461,27 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                 ],
                               ),
                               subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
-                              trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
+                              trailing: isSelectionMode
+                                  ? null
+                                  : Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 20),
+                                          tooltip: 'Barcode scannen & Alias zuweisen',
+                                          onPressed: () async {
+                                            final scanned = await BarcodeScannerDialog.show(
+                                              context,
+                                              title: 'Neuen Barcode für Tür ${door.doorNumber} scannen',
+                                            );
+                                            if (scanned != null && scanned.isNotEmpty && mounted) {
+                                              await _updateDoorAlias(door, scanned);
+                                            }
+                                          },
+                                        ),
+                                        const Icon(Icons.edit_note),
+                                      ],
+                                    ),
                               onTap: () async {
                                 if (isSelectionMode) {
                                   _toggleSelection(door.id!);

@@ -5,3 +5,4 @@ export 'inspection_door.dart';
 export 'error_catalog.dart';
 export 'inspection_door_error.dart';
 export 'import_report.dart';
+export 'integrity_report.dart';
