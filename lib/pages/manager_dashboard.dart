@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'error_consolidation_page.dart';
 import '../widgets/batch_migration_dialog.dart';
+import '../widgets/export_center_dialog.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -251,6 +252,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       appBar: AppBar(
         title: Text('Manager Dashboard - Fehlerkatalog'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.drive_file_move_outlined),
+            onPressed: () => ExportCenterDialog.show(context),
+            tooltip: 'Daten Export & Bericht (Excel/PDF/DB)',
+          ),
           IconButton(
             icon: const Icon(Icons.drive_folder_upload),
             onPressed: () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadErrors),

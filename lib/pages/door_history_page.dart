@@ -7,6 +7,8 @@ import '../widgets/master_portal_home_button.dart';
 /// Single Door History View ("Tür-Akte" / Patient Clinical Record)
 /// Displays the master technical specs, health status badge,
 /// lifetime statistics, and a chronological timeline of all historical inspections & defects.
+import '../widgets/export_center_dialog.dart';
+
 class DoorHistoryPage extends StatefulWidget {
   final int? doorId;
   final String? doorAlias;
@@ -68,8 +70,17 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
         title: const Text('Tür-Akte (Prüfhistorie)'),
         backgroundColor: Colors.blueGrey.shade900,
         foregroundColor: Colors.white,
-        actions: const [
-          MasterPortalHomeButton(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Tür-Akte exportieren',
+            onPressed: () {
+              final door = _historyData?['door'] as Map<String, dynamic>?;
+              final alias = door?['doorAlias'] as String? ?? widget.doorAlias;
+              ExportCenterDialog.show(context, initialDoorAlias: alias);
+            },
+          ),
+          const MasterPortalHomeButton(color: Colors.white),
         ],
       ),
       body: _isLoading

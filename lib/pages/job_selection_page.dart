@@ -12,6 +12,7 @@ import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/import_report_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
+import '../widgets/export_center_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -419,6 +420,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             icon: const Icon(Icons.delete_sweep_outlined),
             tooltip: 'Alle Aufträge löschen',
             onPressed: _isImporting || _isDownloading ? null : _handlePurgeAll,
+          ),
+          IconButton(
+            icon: const Icon(Icons.drive_file_move_outlined),
+            tooltip: 'Daten Export & Bericht (Excel/PDF/DB)',
+            onPressed: () => ExportCenterDialog.show(context),
           ),
           IconButton(
             icon: const Icon(Icons.drive_folder_upload),

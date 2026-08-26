@@ -2423,5 +2423,117 @@ class DatabaseService {
       }
     });
   }
+
+  /// Returns all inspections in the master database
+  static Future<List<Map<String, dynamic>>> getAllInspections() async {
+    final db = await getDb();
+    return await db.query('inspections', orderBy: 'date DESC');
+  }
+
+  /// Returns all distinct door aliases stored in the master database
+  static Future<List<String>> getAllDoorAliases() async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT doorAlias 
+      FROM doors 
+      WHERE doorAlias IS NOT NULL AND TRIM(doorAlias) != ''
+      ORDER BY doorAlias ASC
+    ''');
+    return rows.map((r) => r['doorAlias'] as String).toList();
+  }
+
+  /// Returns all distinct client names available in the master database
+  static Future<List<String>> getAllClientsForExport() async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT clientName 
+      FROM inspections 
+      WHERE clientName IS NOT NULL AND TRIM(clientName) != ''
+      ORDER BY clientName ASC
+    ''');
+    return rows.map((r) => r['clientName'] as String).toList();
+  }
+
+  /// Returns full export payload for a single inspection job
+  static Future<Map<String, dynamic>> getSingleInspectionExportData(int inspectionId) async {
+    final db = await getDb();
+
+    final inspRows = await db.query(
+      'inspections',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+      limit: 1,
+    );
+    if (inspRows.isEmpty) return {};
+
+    final insp = inspRows.first;
+
+    final List<Map<String, dynamic>> doorRows = await db.rawQuery('''
+      SELECT d.*, id.id as junctionId, id.status as junctionStatus, id.notes as junctionNotes
+      FROM doors d
+      INNER JOIN inspection_doors id ON d.id = id.doorId
+      WHERE id.inspectionId = ?
+      ORDER BY d.doorNumber ASC
+    ''', [inspectionId]);
+
+    final List<Map<String, dynamic>> processedDoors = [];
+    for (final d in doorRows) {
+      final junctionId = d['junctionId'] as int;
+      final errors = await db.rawQuery('''
+        SELECT ide.*, ec.code as errorCode, ec.description as errorDesc, ec.category as errorCat
+        FROM inspection_door_errors ide
+        LEFT JOIN error_catalog ec ON ide.errorCode = ec.code OR ide.errorId = ec.errorId
+        WHERE ide.inspectionDoorId = ?
+      ''', [junctionId]);
+
+      final doorData = Map<String, dynamic>.from(d);
+      doorData['errors'] = errors;
+      processedDoors.add(doorData);
+    }
+
+    return {
+      'inspection': insp,
+      'doors': processedDoors,
+    };
+  }
+
+  /// Returns complete historical audit data for a single customer across all inspections
+  static Future<Map<String, dynamic>> getClientAuditExportData(String clientName) async {
+    final db = await getDb();
+
+    final inspRows = await db.query(
+      'inspections',
+      where: 'clientName = ?',
+      whereArgs: [clientName],
+      orderBy: 'date DESC',
+    );
+
+    final List<Map<String, dynamic>> inspectionsWithDoors = [];
+
+    for (final insp in inspRows) {
+      final inspId = insp['inspectionId'] as int;
+      final data = await getSingleInspectionExportData(inspId);
+      if (data.isNotEmpty) {
+        inspectionsWithDoors.add(data);
+      }
+    }
+
+    return {
+      'clientName': clientName,
+      'inspections': inspectionsWithDoors,
+    };
+  }
+
+  /// Returns full multi-client audit export data
+  static Future<List<Map<String, dynamic>>> getMultiClientAuditExportData(List<String> clientNames) async {
+    final List<Map<String, dynamic>> result = [];
+    for (final client in clientNames) {
+      final data = await getClientAuditExportData(client);
+      if (data.isNotEmpty && (data['inspections'] as List).isNotEmpty) {
+        result.add(data);
+      }
+    }
+    return result;
+  }
 }
 
