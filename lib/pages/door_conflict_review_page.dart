@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:wartungstool/models/door.dart';
 import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/database_service.dart';
+import '../models/models.dart';
+import '../widgets/master_portal_home_button.dart';
 
 class DoorConflictReviewPage extends StatefulWidget {
   final List<DoorConflict> conflicts;
@@ -79,6 +81,9 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
         title: Text('Türdatenkonflikte lösen (${_doorKeys.length} Türen)'),
         backgroundColor: Colors.blueGrey.shade900,
         foregroundColor: Colors.white,
+        actions: const [
+          MasterPortalHomeButton(color: Colors.white),
+        ],
       ),
       body: Column(
         children: [

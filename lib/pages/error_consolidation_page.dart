@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../widgets/master_portal_home_button.dart';
 
 class ErrorConsolidationPage extends StatefulWidget {
   const ErrorConsolidationPage({super.key});
@@ -64,6 +65,7 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
         title: const Text('Fehler-Katalog Konsolidierung'),
         actions: [
           IconButton(onPressed: _refreshList, icon: const Icon(Icons.refresh)),
+          const MasterPortalHomeButton(),
         ],
       ),
       body: FutureBuilder<List<ErrorCatalog>>(

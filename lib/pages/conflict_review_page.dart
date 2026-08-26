@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wartungstool/models/error_catalog.dart';
 import 'package:wartungstool/services/database_service.dart';
+import '../widgets/master_portal_home_button.dart';
 
 class ConflictReviewPage extends StatefulWidget {
   final List<ImportConflict> conflicts;
@@ -37,10 +38,11 @@ class _ConflictReviewPageState extends State<ConflictReviewPage> {
         title: Text('Konflikte lösen (${widget.conflicts.length})'),
         actions: [
           IconButton(
-            icon: Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline),
             onPressed: _showHelp,
             tooltip: 'Hilfe',
           ),
+          const MasterPortalHomeButton(),
         ],
       ),
       body: Column(

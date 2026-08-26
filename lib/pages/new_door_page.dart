@@ -3,6 +3,7 @@ import '../services/local_database_service.dart';
 import '../services/database_service.dart';
 import '../services/door_options_service.dart';
 import '../models/models.dart';
+import '../widgets/master_portal_home_button.dart';
 import 'error_management_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
@@ -385,7 +386,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Türinspektion")),
+      appBar: AppBar(
+        title: const Text("Türinspektion"),
+        actions: const [
+          MasterPortalHomeButton(),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

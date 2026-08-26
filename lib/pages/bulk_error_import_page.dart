@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/pages/conflict_review_page.dart';
+import '../widgets/master_portal_home_button.dart';
 
 class BulkErrorImportPage extends StatefulWidget {
   const BulkErrorImportPage({super.key});
@@ -23,13 +24,14 @@ class _BulkErrorImportPageState extends State<BulkErrorImportPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Fehlerkatalog - Bulk Import'),
+        title: const Text('Fehlerkatalog - Bulk Import'),
         actions: [
           IconButton(
-            icon: Icon(Icons.help_outline),
+            icon: const Icon(Icons.help_outline),
             onPressed: _showImportHelp,
             tooltip: 'Import-Hilfe',
           ),
+          const MasterPortalHomeButton(),
         ],
       ),
       body: SafeArea(

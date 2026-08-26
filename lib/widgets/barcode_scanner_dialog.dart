@@ -101,6 +101,28 @@ class _BarcodeScannerDialogState extends State<BarcodeScannerDialog> {
                         MobileScanner(
                           controller: _controller,
                           onDetect: _onDetect,
+                          errorBuilder: (context, error, child) {
+                            return Container(
+                              color: Colors.black87,
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Kamera-Fehler (${error.errorCode}):\n${error.errorDetails?.message ?? "Kamera konnte nicht gestartet werden. Bitte Berechtigungen prüfen."}',
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         Container(
                           width: 200,

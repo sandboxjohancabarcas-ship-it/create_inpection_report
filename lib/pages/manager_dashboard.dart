@@ -5,11 +5,9 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'bulk_error_import_page.dart';
 import 'error_consolidation_page.dart';
-import 'door_conflict_review_page.dart';
-import 'conflict_review_page.dart';
 import 'package:wartungstool/pages/read_customer_data.dart';
-import 'package:wartungstool/services/excel_data_importer.dart';
 import 'package:file_picker/file_picker.dart';
+import '../widgets/batch_migration_dialog.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -119,129 +117,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     }
   }
 
-  Future<void> _pickAndImportExcel() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-    );
 
-    if (result != null && result.files.single.path != null) {
-      setState(() => isLoading = true);
-      try {
-        final excelFile = File(result.files.single.path!);
-        var importResult = await ExcelDataImporter.importFromFile(excelFile);
-
-        if (mounted) {
-          // Stage 1: Handle Catalog Conflicts if any
-          if (importResult.catalogConflicts.isNotEmpty) {
-            setState(() => isLoading = false);
-            final resolutions = await Navigator.push<List<ConflictResolution>?>(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ConflictReviewPage(conflicts: importResult.catalogConflicts),
-              ),
-            );
-
-            if (resolutions == null) {
-              // User cancelled conflict resolution, abort import
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Import abgebrochen (Katalogkonflikte nicht gelöst)'),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-              return;
-            }
-
-            // Resume import passing resolutions
-            setState(() => isLoading = true);
-            importResult = await ExcelDataImporter.importFromFile(excelFile, resolutions: resolutions);
-          }
-
-          // Stage 2: Handle Door Conflicts if any
-          if (importResult.doorConflicts.isNotEmpty) {
-            // Push to the new conflict resolution screen
-            await Navigator.push<bool>(
-              context,
-              MaterialPageRoute(
-                builder: (context) => DoorConflictReviewPage(conflicts: importResult.doorConflicts),
-              ),
-            );
-          }
-
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Excel-Import Ergebnis'),
-              content: SizedBox(
-                width: 500,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Verarbeitete Türlisten: ${importResult.sheetsProcessed}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Importierte/Aktualisierte Türen: ${importResult.doorsImported}'),
-                    Text('Zugeordnete Fehler: ${importResult.errorsLinked}'),
-                    if (importResult.warnings.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text('Warnungen (${importResult.warnings.length}):', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
-                      SizedBox(
-                        height: 80,
-                        child: ListView.builder(
-                          itemCount: importResult.warnings.length,
-                          itemBuilder: (context, idx) => Text(
-                            '- ${importResult.warnings[idx]}',
-                            style: const TextStyle(fontSize: 11, color: Colors.orange),
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (importResult.logs.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text('Migrations-Protokoll (${importResult.logs.length} Zeilen):', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Container(
-                        height: 150,
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: ListView.builder(
-                          itemCount: importResult.logs.length,
-                          itemBuilder: (context, idx) => Text(
-                            importResult.logs[idx],
-                            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.greenAccent),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-          _loadErrors();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Fehler beim Excel-Import: $e')),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() => isLoading = false);
-        }
-      }
-    }
-  }
 
 
   Future<void> _loadErrors() async {
@@ -463,6 +339,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       appBar: AppBar(
         title: Text('Manager Dashboard - Fehlerkatalog'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.drive_folder_upload),
+            onPressed: () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadErrors),
+            tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
+          ),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _loadErrors,
@@ -706,11 +587,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ),
           SizedBox(height: 16),
           FloatingActionButton(
-            heroTag: "excel_import",
-            onPressed: _pickAndImportExcel,
-            backgroundColor: Colors.green,
-            tooltip: 'Excel Import (Türlisten)',
-            child: Icon(Icons.table_chart),
+            heroTag: "batch_migration",
+            onPressed: () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadErrors),
+            backgroundColor: Colors.teal,
+            tooltip: 'Daten-Migration & Import',
+            child: const Icon(Icons.drive_folder_upload),
           ),
           SizedBox(height: 16),
           FloatingActionButton(

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/database_service.dart';
+import '../widgets/master_portal_home_button.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
@@ -820,9 +821,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         title: Text('Fehlermanagement - Tür ${widget.doorNumber}'),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
             onPressed: () => _loadData(syncWithMain: true),
           ),
+          const MasterPortalHomeButton(),
         ],
       ),
       body: isLoading

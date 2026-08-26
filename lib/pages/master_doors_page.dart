@@ -720,7 +720,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ] else ...[
             IconButton(
-              icon: const Icon(Icons.unarchive),
+              icon: const Icon(Icons.drive_folder_upload),
               tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
               onPressed: _isProcessing ? null : () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadData),
             ),

@@ -9,6 +9,7 @@ import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
+import '../widgets/master_portal_home_button.dart';
 import 'new_door_page.dart';
 
 class InspectionDoorsPage extends StatefulWidget {
@@ -372,6 +373,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               }
             },
           ),
+          const MasterPortalHomeButton(),
         ],
         leading: isSelectionMode ? IconButton(
           icon: const Icon(Icons.close),
