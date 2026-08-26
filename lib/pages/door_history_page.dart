@@ -75,9 +75,11 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
             icon: const Icon(Icons.file_download_outlined),
             tooltip: 'Tür-Akte exportieren',
             onPressed: () {
-              final door = _historyData?['door'] as Map<String, dynamic>?;
-              final alias = door?['doorAlias'] as String? ?? widget.doorAlias;
-              ExportCenterDialog.show(context, initialDoorAlias: alias);
+              final doorObj = _historyData?['door'];
+              final String? alias = (doorObj is Door)
+                  ? doorObj.doorAlias
+                  : (doorObj is Map ? doorObj['doorAlias'] as String? : widget.doorAlias);
+              ExportCenterDialog.show(context, initialDoorAlias: alias ?? widget.doorAlias);
             },
           ),
           const MasterPortalHomeButton(color: Colors.white),

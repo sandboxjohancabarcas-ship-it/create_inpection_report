@@ -1235,20 +1235,20 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     PopupMenuItem(
                       value: ErrorSortOption.mostErrors,
                       child: Row(
-                        children: [
+                        children: const [
                           Icon(Icons.arrow_downward, color: Colors.red, size: 18),
                           SizedBox(width: 8),
-                          Text('Meiste Mängel zuerst'),
+                          Expanded(child: Text('Meiste Mängel zuerst', overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ),
                     PopupMenuItem(
                       value: ErrorSortOption.leastErrors,
                       child: Row(
-                        children: [
+                        children: const [
                           Icon(Icons.arrow_upward, color: Colors.green, size: 18),
                           SizedBox(width: 8),
-                          Text('Wenigste Mängel / Mängelfrei zuerst'),
+                          Expanded(child: Text('Wenigste Mängel zuerst', overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ),

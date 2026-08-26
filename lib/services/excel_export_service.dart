@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:excel/excel.dart';
+import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class ExcelExportService {
@@ -178,21 +179,29 @@ class ExcelExportService {
 
   /// Exports lifetime history of a single door ("Tür-Akte") into an Excel workbook
   static Future<File> exportDoorHistoryReport(Map<String, dynamic> historyData, String outputPath) async {
-    final door = historyData['door'] as Map<String, dynamic>? ?? {};
-    final inspections = historyData['inspections'] as List<Map<String, dynamic>>? ?? [];
+    final doorObj = historyData['door'];
+    final Map<String, dynamic> door = (doorObj is Door)
+        ? doorObj.toMap()
+        : (doorObj is Map<String, dynamic> ? doorObj : {});
+
+    final historyItems = historyData['historyItems'] as List<dynamic>? ?? historyData['inspections'] as List<dynamic>? ?? [];
 
     final excel = Excel.createExcel();
-    final sheet = excel['Tür-Akte ${door['doorAlias']}'];
+    final String rawAlias = (door['doorAlias'] ?? 'Tür').toString();
+    final String safeSheetAlias = rawAlias.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final String sheetName = 'Tür-Akte ${safeSheetAlias.length > 20 ? safeSheetAlias.substring(0, 20) : safeSheetAlias}';
+
+    final sheet = excel[sheetName];
     if (excel.sheets.containsKey('Sheet1')) {
       excel.delete('Sheet1');
     }
 
     // Section 1: Specs
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue('STAMMDATEN TÜR-AKTE');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Tür-Alias (QR/Patienten-ID): ${door['doorAlias']}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2)).value = TextCellValue('Türnummer: ${door['doorNumber']}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3)).value = TextCellValue('Geschoss: ${door['floor']} | Raumnr: ${door['roomNumber']} | Raum: ${door['roomDesignation']}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Hersteller: ${door['manufacturer']} | Funktion: ${door['doorFunction']} | Brandschutz: ${door['fireProtection']}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Tür-Alias (QR/Patienten-ID): ${door['doorAlias'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2)).value = TextCellValue('Türnummer: ${door['doorNumber'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3)).value = TextCellValue('Geschoss: ${door['floor'] ?? ''} | Raumnr: ${door['roomNumber'] ?? ''} | Raum: ${door['roomDesignation'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Hersteller: ${door['manufacturer'] ?? ''} | Funktion: ${door['doorFunction'] ?? ''} | Brandschutz: ${door['fireProtection'] ?? ''}');
 
     // Section 2: Timeline
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 6)).value = TextCellValue('INSPEKTIONSHISTORIE & MÄNGELPROTOKOLL');
@@ -202,17 +211,25 @@ class ExcelExportService {
     }
 
     int rowIdx = 8;
-    for (final insp in inspections) {
-      final errors = insp['errors'] as List<Map<String, dynamic>>? ?? [];
-      final errorSummary = errors.map((e) => '${e['errorCode'] ?? e['code']}: ${e['errorDesc'] ?? e['description']}').join(' | ');
+    for (final item in historyItems) {
+      final insp = item is Map ? (item['inspection'] as Map<String, dynamic>? ?? item) : <String, dynamic>{};
+      final errors = item is Map ? (item['errors'] as List<dynamic>? ?? []) : [];
+      final errorSummary = errors.map((e) {
+        if (e is Map) {
+          final code = e['errorCode'] ?? e['code'] ?? '';
+          final desc = e['catalogDescription'] ?? e['description'] ?? '';
+          return '$code: $desc';
+        }
+        return '';
+      }).where((s) => s.isNotEmpty).join(' | ');
 
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(insp['date'] as String? ?? '');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(insp['clientName'] as String? ?? '');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = TextCellValue(insp['objectAddress'] as String? ?? '');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = TextCellValue(insp['jobNumber'] as String? ?? '');
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = TextCellValue(insp['status'] as String? ?? '');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue((insp['date'] ?? '').toString());
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue((insp['clientName'] ?? '').toString());
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = TextCellValue((insp['objectAddress'] ?? '').toString());
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = TextCellValue((insp['jobNumber'] ?? '').toString());
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = TextCellValue((insp['junctionStatus'] ?? insp['status'] ?? '').toString());
       sheet.cell(CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = TextCellValue(errorSummary);
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIdx)).value = TextCellValue(insp['notes'] as String? ?? '');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIdx)).value = TextCellValue((insp['junctionNotes'] ?? insp['notes'] ?? '').toString());
       rowIdx++;
     }
 

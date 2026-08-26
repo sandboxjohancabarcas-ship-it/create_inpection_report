@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/services/pdf_export_service.dart';
@@ -171,8 +172,10 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           await PdfExportService.exportDoorHistoryPdf(historyData, targetPath);
         } else if (_selectedFormat == ExportFormat.dbPackage) {
           targetPath = p.join(exportDir, 'TuerAkte_${safeAlias}_$timestamp.db');
-          final doorObj = historyData['door'] as Map<String, dynamic>?;
-          final doorId = doorObj != null ? doorObj['id'] as int? : null;
+          final doorObj = historyData['door'];
+          final doorId = (doorObj is Door)
+              ? doorObj.id
+              : (doorObj is Map ? doorObj['id'] as int? : null);
           if (doorId != null) {
             await DatabaseService.exportDoorsPackage([doorId]);
           }

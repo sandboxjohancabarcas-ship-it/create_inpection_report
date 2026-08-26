@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class PdfExportService {
@@ -96,8 +97,12 @@ class PdfExportService {
 
   /// Exports lifetime history of a single door ("Tür-Akte") into a PDF dossier
   static Future<File> exportDoorHistoryPdf(Map<String, dynamic> historyData, String outputPath) async {
-    final door = historyData['door'] as Map<String, dynamic>? ?? {};
-    final inspections = historyData['inspections'] as List<Map<String, dynamic>>? ?? [];
+    final doorObj = historyData['door'];
+    final Map<String, dynamic> door = (doorObj is Door)
+        ? doorObj.toMap()
+        : (doorObj is Map<String, dynamic> ? doorObj : {});
+
+    final historyItems = historyData['historyItems'] as List<dynamic>? ?? historyData['inspections'] as List<dynamic>? ?? [];
 
     final document = PdfDocument();
     final page = document.pages.add();
@@ -115,8 +120,8 @@ class PdfExportService {
       bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 25),
     );
 
-    final String alias = door['doorAlias'] as String? ?? '';
-    final String doorNum = door['doorNumber'] as String? ?? '';
+    final String alias = (door['doorAlias'] ?? '').toString();
+    final String doorNum = (door['doorNumber'] ?? '').toString();
 
     // Door Info Card
     final doorSpecsText = 'Tür-Alias (QR-Code): $alias\n'
@@ -154,17 +159,25 @@ class PdfExportService {
       headerRow.cells[i].style.backgroundBrush = PdfSolidBrush(PdfColor(230, 245, 233));
     }
 
-    for (final insp in inspections) {
+    for (final item in historyItems) {
       final PdfGridRow row = grid.rows.add();
-      final errors = insp['errors'] as List<Map<String, dynamic>>? ?? [];
-      final errorSummary = errors.map((e) => '${e['errorCode'] ?? e['code']}: ${e['errorDesc'] ?? e['description']}').join('\n');
+      final insp = item is Map ? (item['inspection'] as Map<String, dynamic>? ?? item) : <String, dynamic>{};
+      final errors = item is Map ? (item['errors'] as List<dynamic>? ?? []) : [];
+      final errorSummary = errors.map((e) {
+        if (e is Map) {
+          final code = e['errorCode'] ?? e['code'] ?? '';
+          final desc = e['catalogDescription'] ?? e['description'] ?? '';
+          return '$code: $desc';
+        }
+        return '';
+      }).where((s) => s.isNotEmpty).join('\n');
 
-      row.cells[0].value = insp['date'] as String? ?? '';
-      row.cells[1].value = insp['clientName'] as String? ?? '';
-      row.cells[2].value = insp['jobNumber'] as String? ?? '';
-      row.cells[3].value = insp['status'] as String? ?? '';
+      row.cells[0].value = (insp['date'] ?? '').toString();
+      row.cells[1].value = (insp['clientName'] ?? '').toString();
+      row.cells[2].value = (insp['jobNumber'] ?? '').toString();
+      row.cells[3].value = (insp['junctionStatus'] ?? insp['status'] ?? '').toString();
       row.cells[4].value = errorSummary.isEmpty ? 'Mängelfrei (Grün)' : errorSummary;
-      row.cells[5].value = insp['notes'] as String? ?? '';
+      row.cells[5].value = (insp['junctionNotes'] ?? insp['notes'] ?? '').toString();
 
       for (int i = 0; i < row.cells.count; i++) {
         row.cells[i].style.font = bodyFont;
