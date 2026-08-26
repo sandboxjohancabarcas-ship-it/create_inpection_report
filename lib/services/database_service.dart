@@ -428,6 +428,59 @@ class DatabaseService {
       logs.add('Repariert: $repairedAliasesCount fehlende Tür-Aliase neu generiert.');
     }
 
+    // 4. Reconcile mismatched door aliases and merge duplicate doors caused by historical customer misspellings
+    final allInspections = await db.query('inspections', columns: ['inspectionId', 'clientName', 'objectAddress']);
+    int mergedDoorsCount = 0;
+    int updatedAliasesCount = 0;
+
+    for (final insp in allInspections) {
+      final inspId = insp['inspectionId'] as int;
+      final clientName = insp['clientName'] as String? ?? '';
+      final objectAddress = insp['objectAddress'] as String? ?? '';
+
+      final linkedDoors = await db.rawQuery('''
+        SELECT d.* 
+        FROM doors d
+        INNER JOIN inspection_doors id ON d.id = id.doorId
+        WHERE id.inspectionId = ?
+      ''', [inspId]);
+
+      for (final doorRow in linkedDoors) {
+        final doorId = doorRow['id'] as int;
+        final doorNumber = doorRow['doorNumber'] as String? ?? '';
+        final floor = doorRow['floor'] as String? ?? '';
+        final oldAlias = doorRow['doorAlias'] as String? ?? '';
+
+        final newAlias = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+        if (newAlias.isEmpty || newAlias == oldAlias) continue;
+
+        // Check for collision with another door
+        final collision = await db.query(
+          'doors',
+          columns: ['id'],
+          where: 'doorAlias = ? AND id != ?',
+          whereArgs: [newAlias, doorId],
+          limit: 1,
+        );
+
+        if (collision.isNotEmpty) {
+          final targetId = collision.first['id'] as int;
+          await mergeDuplicateDoors(targetDoorId: targetId, duplicateDoorId: doorId);
+          mergedDoorsCount++;
+        } else {
+          await db.update('doors', {'doorAlias': newAlias}, where: 'id = ?', whereArgs: [doorId]);
+          updatedAliasesCount++;
+        }
+      }
+    }
+
+    if (mergedDoorsCount > 0) {
+      logs.add('Zusammengeführt: $mergedDoorsCount doppelte Türen durch Kundenkorrektur bereinigt.');
+    }
+    if (updatedAliasesCount > 0) {
+      logs.add('Aktualisiert: $updatedAliasesCount Tür-Aliase an neue Kundendaten angepasst.');
+    }
+
     // Counts
     final totalInspections = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
     final totalDoors = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
@@ -478,12 +531,148 @@ class DatabaseService {
     final db = await getDb();
     final id = inspectionData['inspectionId'];
     if (id == null) return;
+
+    // Fetch existing inspection data before updating to check if clientName or objectAddress changed
+    final existingRows = await db.query(
+      'inspections',
+      columns: ['clientName', 'objectAddress'],
+      where: 'inspectionId = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    final String oldClient = existingRows.isNotEmpty ? (existingRows.first['clientName'] as String? ?? '') : '';
+    final String oldAddress = existingRows.isNotEmpty ? (existingRows.first['objectAddress'] as String? ?? '') : '';
+
     await db.update(
       'inspections',
       inspectionData,
       where: 'inspectionId = ?',
       whereArgs: [id],
     );
+
+    final String newClient = inspectionData['clientName']?.toString().trim() ?? oldClient;
+    final String newAddress = inspectionData['objectAddress']?.toString().trim() ?? oldAddress;
+
+    // If customer name or object address changed, update doorAliases and merge duplicate doors
+    if (newClient != oldClient || newAddress != oldAddress) {
+      await updateDoorAliasesForInspection(
+        inspectionId: (id is int) ? id : int.parse(id.toString()),
+        newClientName: newClient,
+        newObjectAddress: newAddress,
+      );
+    }
+  }
+
+  /// Updates doorAliases for all doors linked to an inspection when customer or address changes.
+  /// If alias generation causes a collision with an existing door in the DB, it merges the duplicate doors.
+  static Future<void> updateDoorAliasesForInspection({
+    required int inspectionId,
+    required String newClientName,
+    required String newObjectAddress,
+  }) async {
+    final db = await getDb();
+
+    final List<Map<String, dynamic>> linkedDoors = await db.rawQuery('''
+      SELECT d.* 
+      FROM doors d
+      INNER JOIN inspection_doors id ON d.id = id.doorId
+      WHERE id.inspectionId = ?
+    ''', [inspectionId]);
+
+    for (final doorRow in linkedDoors) {
+      final int doorId = doorRow['id'] as int;
+      final String doorNumber = doorRow['doorNumber'] as String? ?? '';
+      final String floor = doorRow['floor'] as String? ?? '';
+
+      final String newAlias = Door.generateAlias(
+        newClientName,
+        newObjectAddress,
+        doorNumber,
+        floor: floor,
+      );
+
+      if (newAlias.isEmpty) continue;
+
+      final String oldAlias = doorRow['doorAlias'] as String? ?? '';
+      if (newAlias == oldAlias) continue;
+
+      // Check if another door already has this newAlias
+      final existingWithAlias = await db.query(
+        'doors',
+        columns: ['id'],
+        where: 'doorAlias = ? AND id != ?',
+        whereArgs: [newAlias, doorId],
+        limit: 1,
+      );
+
+      if (existingWithAlias.isNotEmpty) {
+        // ALIAS COLLISION -> Merge duplicate doorId into targetExistingDoorId
+        final int targetExistingDoorId = existingWithAlias.first['id'] as int;
+        await mergeDuplicateDoors(targetDoorId: targetExistingDoorId, duplicateDoorId: doorId);
+      } else {
+        // Simple alias update
+        await db.update(
+          'doors',
+          {'doorAlias': newAlias},
+          where: 'id = ?',
+          whereArgs: [doorId],
+        );
+      }
+    }
+  }
+
+  /// Merges a duplicate door into a target door record, reassigning all inspection junctions & defects.
+  static Future<void> mergeDuplicateDoors({
+    required int targetDoorId,
+    required int duplicateDoorId,
+  }) async {
+    if (targetDoorId == duplicateDoorId) return;
+    final db = await getDb();
+
+    final duplicateJunctions = await db.query(
+      'inspection_doors',
+      where: 'doorId = ?',
+      whereArgs: [duplicateDoorId],
+    );
+
+    for (final j in duplicateJunctions) {
+      final jId = j['id'] as int;
+      final jInspId = j['inspectionId'] as int;
+
+      // Check if target door already has a junction for this inspection
+      final existingJunctionForTarget = await db.query(
+        'inspection_doors',
+        where: 'doorId = ? AND inspectionId = ?',
+        whereArgs: [targetDoorId, jInspId],
+        limit: 1,
+      );
+
+      if (existingJunctionForTarget.isNotEmpty) {
+        final targetJunctionId = existingJunctionForTarget.first['id'] as int;
+
+        // Move errors from duplicate junction -> target junction
+        await db.rawUpdate('''
+          UPDATE inspection_door_errors 
+          SET inspectionDoorId = ? 
+          WHERE inspectionDoorId = ?
+        ''', [targetJunctionId, jId]);
+
+        // Delete duplicate junction
+        await db.delete('inspection_doors', where: 'id = ?', whereArgs: [jId]);
+      } else {
+        // Reassign junction to target door
+        await db.update(
+          'inspection_doors',
+          {'doorId': targetDoorId},
+          where: 'id = ?',
+          whereArgs: [jId],
+        );
+      }
+    }
+
+    // Delete duplicate door
+    await db.delete('doors', where: 'id = ?', whereArgs: [duplicateDoorId]);
   }
 
   /// Searches inspections by client name, job number, date, or door number.
@@ -649,6 +838,121 @@ class DatabaseService {
     return map;
   }
 
+  /// Retrieves the complete historical timeline for a door ("Tür-Akte").
+  /// Identified by either doorId or doorAlias.
+  static Future<Map<String, dynamic>?> getDoorHistoryData({int? doorId, String? doorAlias}) async {
+    final db = await getDb();
+
+    // 1. Fetch Master Door
+    List<Map<String, dynamic>> doorRows = [];
+    if (doorId != null) {
+      doorRows = await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
+    } else if (doorAlias != null && doorAlias.isNotEmpty) {
+      doorRows = await db.query('doors', where: 'doorAlias = ?', whereArgs: [doorAlias], limit: 1);
+    }
+
+    if (doorRows.isEmpty) return null;
+    final doorMap = doorRows.first;
+    final targetDoorId = doorMap['id'] as int;
+    final door = Door.fromMap(doorMap);
+
+    // 2. Fetch all inspection doors entries linked to this door, joined with inspections
+    final List<Map<String, dynamic>> inspectionRows = await db.rawQuery('''
+      SELECT 
+        id.id AS junctionId,
+        id.status AS junctionStatus,
+        id.notes AS junctionNotes,
+        id.attachments AS junctionAttachments,
+        i.inspectionId,
+        i.clientName,
+        i.objectAddress,
+        i.date,
+        i.contactPerson,
+        i.inspectorName,
+        i.jobNumber,
+        i.projectNumber
+      FROM inspection_doors id
+      INNER JOIN inspections i ON id.inspectionId = i.inspectionId
+      WHERE id.doorId = ?
+      ORDER BY i.date DESC, i.inspectionId DESC
+    ''', [targetDoorId]);
+
+    // 3. For each inspection, fetch associated defects
+    List<Map<String, dynamic>> historyItems = [];
+    int totalLifetimeErrors = 0;
+    int currentOpenErrors = 0;
+    int resolvedErrors = 0;
+
+    for (var row in inspectionRows) {
+      final junctionId = row['junctionId'] as int;
+      final errors = await db.rawQuery('''
+        SELECT 
+          ide.id AS errorInstanceId,
+          ide.errorCode,
+          ide.quantity,
+          ide.severity,
+          ide.notes,
+          ide.resolutionStatus,
+          ide.attachments,
+          ec.description AS catalogDescription,
+          ec.category AS catalogCategory,
+          ec.recommendation AS catalogRecommendation,
+          ec.normReference AS catalogNormReference
+        FROM inspection_door_errors ide
+        LEFT JOIN error_catalog ec ON (
+          ide.errorId = ec.errorId OR 
+          (ide.errorCode IS NOT NULL AND ide.errorCode != '' AND ide.errorCode = ec.code)
+        )
+        WHERE ide.inspectionDoorId = ?
+      ''', [junctionId]);
+
+      int rowErrorCount = errors.length;
+      totalLifetimeErrors += rowErrorCount;
+
+      for (var e in errors) {
+        final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+        if (status == 'resolved' || status == 'beholfen') {
+          resolvedErrors++;
+        } else {
+          currentOpenErrors++;
+        }
+      }
+
+      historyItems.add({
+        'inspection': row,
+        'errors': errors,
+        'errorCount': rowErrorCount,
+      });
+    }
+
+    // 4. Compute Health Status
+    // Green: 0 open errors
+    // Yellow: open errors with medium/low severity
+    // Red: open errors with critical/high severity
+    String healthStatus = 'green';
+    if (currentOpenErrors > 0) {
+      bool hasHighSeverity = historyItems.any((item) {
+        final errors = item['errors'] as List<Map<String, dynamic>>;
+        return errors.any((e) {
+          final sev = (e['severity']?.toString() ?? 'medium').toLowerCase();
+          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          return (sev == 'high' || sev == 'critical' || sev == 'hoch' || sev == 'kritisch') &&
+                 (status != 'resolved' && status != 'beholfen');
+        });
+      });
+      healthStatus = hasHighSeverity ? 'red' : 'yellow';
+    }
+
+    return {
+      'door': door,
+      'historyItems': historyItems,
+      'totalInspections': historyItems.length,
+      'totalLifetimeErrors': totalLifetimeErrors,
+      'currentOpenErrors': currentOpenErrors,
+      'resolvedErrors': resolvedErrors,
+      'healthStatus': healthStatus,
+    };
+  }
 
   static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
     final db = await getDb();
@@ -1387,7 +1691,10 @@ class DatabaseService {
     }
   }
 
-  static Future<ImportResult> mergeErrorCatalog(List<ErrorCatalog> errors) async {
+  static Future<ImportResult> mergeErrorCatalog(
+    List<ErrorCatalog> errors, {
+    bool autoResolve = false,
+  }) async {
     final db = await getDb();
     
     return await db.transaction<ImportResult>((txn) async {
@@ -1412,6 +1719,21 @@ class DatabaseService {
             duplicateCount++;
             continue;
           }
+          if (autoResolve) {
+            // Auto-update catalog details if code exists but has new info
+            await txn.update(
+              'error_catalog',
+              {
+                'description': error.description,
+                'category': error.category,
+                'severity': error.severity,
+              },
+              where: 'errorId = ?',
+              whereArgs: [existingForCode.errorId],
+            );
+            duplicateCount++;
+            continue;
+          }
           conflicts.add(ImportConflict(
             code: error.code,
             description: error.description,
@@ -1424,6 +1746,15 @@ class DatabaseService {
 
         final existingForDescription = existingByDescription[error.description.toLowerCase()];
         if (existingForDescription != null && existingForDescription.code != error.code) {
+          if (autoResolve) {
+            await txn.insert(
+              'error_catalog',
+              error.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+            insertedCount++;
+            continue;
+          }
           conflicts.add(ImportConflict(
             code: error.code,
             description: error.description,

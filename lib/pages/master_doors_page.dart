@@ -5,7 +5,6 @@ import '../models/door.dart';
 import '../services/database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
-import '../services/test_data_generator.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/import_report_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
@@ -13,6 +12,7 @@ import '../widgets/migration_log_dialog.dart';
 import '../services/customer_normalizer.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
+import 'door_history_page.dart';
 
 class MasterDoorsPage extends StatefulWidget {
   const MasterDoorsPage({super.key});
@@ -432,69 +432,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // SEED DATA & PURGE ALL
+  // PURGE ALL
   // ─────────────────────────────────────────────────────────────
-
-  void _showSeedDataDialog() {
-    int customers = 2;
-    int objects = 2;
-    int doors = 5;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Testdaten generieren'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Wählen Sie die Parameter für die Massenerstellung:'),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: customers,
-                decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
-                items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => customers = v!),
-              ),
-              DropdownButtonFormField<int>(
-                initialValue: objects,
-                decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
-                items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => objects = v!),
-              ),
-              DropdownButtonFormField<int>(
-                initialValue: doors,
-                decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
-                items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => doors = v!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                setState(() => _isProcessing = true);
-                try {
-                  await DatabaseService.clearDatabase();
-                  await TestDataGenerator.generate(
-                    numCustomers: customers,
-                    numObjectsPerCustomer: objects,
-                    numDoorsPerObject: doors,
-                  );
-                  await _loadData();
-                } finally {
-                  if (mounted) setState(() => _isProcessing = false);
-                }
-              },
-              child: const Text('Generieren'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _handlePurgeAll() async {
     final bool confirm = await showDialog<bool>(
@@ -729,11 +668,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               tooltip: 'Migrations-Audit & DB-Reparatur',
               onPressed: () => MigrationLogDialog.show(context),
             ),
-            IconButton(
-              icon: const Icon(Icons.science_outlined),
-              tooltip: 'Testdaten generieren',
-              onPressed: _isProcessing ? null : _showSeedDataDialog,
-            ),
+
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               tooltip: 'Alle Aufträge löschen',
@@ -1457,7 +1392,26 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             ],
                           ),
                         ),
-                        trailing: isSelectionMode ? null : const Icon(Icons.edit_note),
+                        trailing: isSelectionMode
+                            ? null
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.history_edu, color: Colors.blueGrey),
+                                    tooltip: 'Tür-Akte & Historie',
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => DoorHistoryPage(doorId: id),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  const Icon(Icons.edit_note, color: Colors.grey),
+                                ],
+                              ),
                         onTap: () async {
                           if (isSelectionMode) {
                             _toggleDoorSelection(id);

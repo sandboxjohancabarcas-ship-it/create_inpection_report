@@ -122,19 +122,12 @@ class ExcelDataImporter {
 
       // Merge error catalog
       if (resolutions == null) {
-        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors);
+        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors, autoResolve: true);
         if (mergeResult.conflicts.isNotEmpty) {
           logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} Konflikte.');
-          return ExcelImportResult(
-            sheetsProcessed: 0,
-            doorsImported: 0,
-            errorsLinked: 0,
-            warnings: [],
-            logs: logs,
-            catalogConflicts: mergeResult.conflicts,
-          );
+        } else {
+          logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge importiert, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
         }
-        logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge importiert, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
       } else {
         logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
       }

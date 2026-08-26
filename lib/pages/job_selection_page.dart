@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
-import '../services/test_data_generator.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
@@ -402,67 +401,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     await BatchMigrationDialog.show(context, onMigrationCompleted: _refreshInspections);
   }
 
-  void _showSeedDataDialog() {
-    int customers = 2;
-    int objects = 2;
-    int doors = 5;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Testdaten generieren'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Wählen Sie die Parameter für die Massenerstellung:'),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<int>(
-                initialValue: customers,
-                decoration: const InputDecoration(labelText: 'Anzahl Kunden'),
-                items: [1, 2, 5, 10].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => customers = v!),
-              ),
-              DropdownButtonFormField<int>(
-                initialValue: objects,
-                decoration: const InputDecoration(labelText: 'Objekte pro Kunde'),
-                items: [1, 2, 3].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => objects = v!),
-              ),
-              DropdownButtonFormField<int>(
-                initialValue: doors,
-                decoration: const InputDecoration(labelText: 'Türen pro Objekt'),
-                items: [5, 10, 20, 50].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
-                onChanged: (v) => setDialogState(() => doors = v!),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                setState(() => _isDownloading = true);
-                try {
-                  await DatabaseService.clearDatabase();
-                  await TestDataGenerator.generate(
-                    numCustomers: customers,
-                    numObjectsPerCustomer: objects,
-                    numDoorsPerObject: doors,
-                  );
-                  _refreshInspections();
-                } finally {
-                  setState(() => _isDownloading = false);
-                }
-              },
-              child: const Text('Generieren'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -486,11 +424,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             icon: const Icon(Icons.drive_folder_upload),
             tooltip: 'Ergebnis importieren',
             onPressed: _isImporting || _isDownloading ? null : _handleImportResultPackage,
-          ),
-          IconButton(
-            icon: const Icon(Icons.science_outlined),
-            tooltip: 'Testdaten generieren',
-            onPressed: _isDownloading ? null : _showSeedDataDialog,
           ),
         ],
       ),

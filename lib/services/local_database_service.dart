@@ -625,12 +625,135 @@ class LocalDatabaseService {
     final db = await getDb();
     final id = inspectionData['inspectionId'];
     if (id == null) return;
+
+    final existingRows = await db.query(
+      'inspections',
+      columns: ['clientName', 'objectAddress'],
+      where: 'inspectionId = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+
+    final String oldClient = existingRows.isNotEmpty ? (existingRows.first['clientName'] as String? ?? '') : '';
+    final String oldAddress = existingRows.isNotEmpty ? (existingRows.first['objectAddress'] as String? ?? '') : '';
+
     await db.update(
       'inspections',
       inspectionData,
       where: 'inspectionId = ?',
       whereArgs: [id],
     );
+
+    final String newClient = inspectionData['clientName']?.toString().trim() ?? oldClient;
+    final String newAddress = inspectionData['objectAddress']?.toString().trim() ?? oldAddress;
+
+    if (newClient != oldClient || newAddress != oldAddress) {
+      await updateDoorAliasesForInspection(
+        inspectionId: (id is int) ? id : int.parse(id.toString()),
+        newClientName: newClient,
+        newObjectAddress: newAddress,
+      );
+    }
+  }
+
+  static Future<void> updateDoorAliasesForInspection({
+    required int inspectionId,
+    required String newClientName,
+    required String newObjectAddress,
+  }) async {
+    final db = await getDb();
+
+    final List<Map<String, dynamic>> linkedDoors = await db.rawQuery('''
+      SELECT d.* 
+      FROM doors d
+      INNER JOIN inspection_doors id ON d.id = id.doorId
+      WHERE id.inspectionId = ?
+    ''', [inspectionId]);
+
+    for (final doorRow in linkedDoors) {
+      final int doorId = doorRow['id'] as int;
+      final String doorNumber = doorRow['doorNumber'] as String? ?? '';
+      final String floor = doorRow['floor'] as String? ?? '';
+
+      final String newAlias = Door.generateAlias(
+        newClientName,
+        newObjectAddress,
+        doorNumber,
+        floor: floor,
+      );
+
+      if (newAlias.isEmpty) continue;
+
+      final String oldAlias = doorRow['doorAlias'] as String? ?? '';
+      if (newAlias == oldAlias) continue;
+
+      final existingWithAlias = await db.query(
+        'doors',
+        columns: ['id'],
+        where: 'doorAlias = ? AND id != ?',
+        whereArgs: [newAlias, doorId],
+        limit: 1,
+      );
+
+      if (existingWithAlias.isNotEmpty) {
+        final int targetExistingDoorId = existingWithAlias.first['id'] as int;
+        await mergeDuplicateDoors(targetDoorId: targetExistingDoorId, duplicateDoorId: doorId);
+      } else {
+        await db.update(
+          'doors',
+          {'doorAlias': newAlias},
+          where: 'id = ?',
+          whereArgs: [doorId],
+        );
+      }
+    }
+  }
+
+  static Future<void> mergeDuplicateDoors({
+    required int targetDoorId,
+    required int duplicateDoorId,
+  }) async {
+    if (targetDoorId == duplicateDoorId) return;
+    final db = await getDb();
+
+    final duplicateJunctions = await db.query(
+      'inspection_doors',
+      where: 'doorId = ?',
+      whereArgs: [duplicateDoorId],
+    );
+
+    for (final j in duplicateJunctions) {
+      final jId = j['id'] as int;
+      final jInspId = j['inspectionId'] as int;
+
+      final existingJunctionForTarget = await db.query(
+        'inspection_doors',
+        where: 'doorId = ? AND inspectionId = ?',
+        whereArgs: [targetDoorId, jInspId],
+        limit: 1,
+      );
+
+      if (existingJunctionForTarget.isNotEmpty) {
+        final targetJunctionId = existingJunctionForTarget.first['id'] as int;
+
+        await db.rawUpdate('''
+          UPDATE inspection_door_errors 
+          SET inspectionDoorId = ? 
+          WHERE inspectionDoorId = ?
+        ''', [targetJunctionId, jId]);
+
+        await db.delete('inspection_doors', where: 'id = ?', whereArgs: [jId]);
+      } else {
+        await db.update(
+          'inspection_doors',
+          {'doorId': targetDoorId},
+          where: 'id = ?',
+          whereArgs: [jId],
+        );
+      }
+    }
+
+    await db.delete('doors', where: 'id = ?', whereArgs: [duplicateDoorId]);
   }
 
   /// Returns all distinct client names stored in the local working database

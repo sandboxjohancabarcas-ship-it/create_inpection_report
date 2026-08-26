@@ -5,6 +5,7 @@ import '../services/door_options_service.dart';
 import '../models/models.dart';
 import '../widgets/master_portal_home_button.dart';
 import 'error_management_page.dart';
+import 'door_history_page.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
@@ -388,8 +389,24 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Türinspektion"),
-        actions: const [
-          MasterPortalHomeButton(),
+        actions: [
+          if (widget.door?.id != null || widget.door?.doorAlias != null)
+            IconButton(
+              icon: const Icon(Icons.history_edu),
+              tooltip: 'Tür-Akte & Historie',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DoorHistoryPage(
+                      doorId: widget.door?.id,
+                      doorAlias: widget.door?.doorAlias,
+                    ),
+                  ),
+                );
+              },
+            ),
+          const MasterPortalHomeButton(),
         ],
       ),
       body: SingleChildScrollView(

@@ -11,6 +11,7 @@ import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
 import 'new_door_page.dart';
+import 'door_history_page.dart';
 
 class InspectionDoorsPage extends StatefulWidget {
   final int inspectionId;
@@ -468,6 +469,21 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                   : Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.history_edu, color: Colors.blueGrey, size: 20),
+                                          tooltip: 'Tür-Akte & Historie',
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => DoorHistoryPage(
+                                                  doorId: door.id,
+                                                  doorAlias: door.doorAlias,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
                                         IconButton(
                                           icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 20),
                                           tooltip: 'Barcode scannen & Alias zuweisen',
