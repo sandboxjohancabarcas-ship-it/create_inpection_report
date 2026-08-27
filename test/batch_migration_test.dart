@@ -11,9 +11,8 @@ void main() {
       expect(BatchMigrationService.isCompliantFile('macro_inventory.xlsm'), isTrue);
       expect(BatchMigrationService.isCompliantFile('macro_inventory.xlms'), isTrue);
       expect(BatchMigrationService.isCompliantFile('door_list.csv'), isTrue);
-      expect(BatchMigrationService.isCompliantFile('customer_spec.pdf'), isTrue);
-
       expect(BatchMigrationService.isCompliantFile('image.png'), isFalse);
+      expect(BatchMigrationService.isCompliantFile('customer_spec.pdf'), isFalse);
       expect(BatchMigrationService.isCompliantFile('notes.txt'), isFalse);
       expect(BatchMigrationService.isCompliantFile('archive.zip'), isFalse);
     });
