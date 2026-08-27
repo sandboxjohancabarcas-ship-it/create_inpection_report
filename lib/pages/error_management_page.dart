@@ -158,39 +158,40 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         builder: (context, setState) => AlertDialog(
           title: Text('Fehler hinzufügen'),
           content: SizedBox(
-            width: 500,
-            height: 600,
+            width: MediaQuery.of(context).size.width > 600 ? 500 : MediaQuery.of(context).size.width * 0.85,
+            height: MediaQuery.of(context).size.height * 0.7,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Toggle between catalog and provisional
-                  Row(
+                  // Toggle between catalog and provisional mode
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: RadioListTile<bool>(
-                          title: Text('Aus Katalog wählen'),
-                          value: false,
-                          groupValue: isProvisional,
-                          onChanged: (value) {
-                            setState(() => isProvisional = value!);
-                          },
-                        ),
+                      RadioListTile<bool>(
+                        title: const Text('Aus Katalog wählen'),
+                        value: false,
+                        groupValue: isProvisional,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (value) {
+                          if (value != null) setState(() => isProvisional = value);
+                        },
                       ),
-                      Expanded(
-                        child: RadioListTile<bool>(
-                          title: Text('Provisorischen Fehler erstellen'),
-                          value: true,
-                          groupValue: isProvisional,
-                          onChanged: (value) {
-                            setState(() => isProvisional = value!);
-                          },
-                        ),
+                      RadioListTile<bool>(
+                        title: const Text('Provisorischen Fehler erstellen'),
+                        value: true,
+                        groupValue: isProvisional,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (value) {
+                          if (value != null) setState(() => isProvisional = value);
+                        },
                       ),
                     ],
                   ),
-                  Divider(),
+                  const Divider(),
                   
                   if (!isProvisional) ...[
                     // Catalog error selection with search
