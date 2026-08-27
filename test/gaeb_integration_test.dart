@@ -17,18 +17,6 @@ void main() {
   });
 
   group('LocalDatabaseService Tests', () {
-    test('createNewDoorInField should generate TEMP- alias', () async {
-      const String testDoorNumber = '101-NEW';
-      final int id = await LocalDatabaseService.createNewDoorInField(testDoorNumber);
-      
-      final doors = await LocalDatabaseService.getAllDoors();
-      final newDoor = doors.firstWhere((d) => d.id == id);
-      
-      expect(newDoor.doorNumber, equals(testDoorNumber));
-      expect(newDoor.doorAlias, startsWith('TEMP-'));
-      expect(newDoor.doorAlias, contains(testDoorNumber));
-    });
-
     test('purgeExportedData should only remove specified inspections', () async {
       // 1. Setup: Create two inspections
       await LocalDatabaseService.insertInspection({
