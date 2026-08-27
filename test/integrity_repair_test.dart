@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/database_service.dart';
-import 'package:wartungstool/models/models.dart';
 
 void main() {
   setUpAll(() {
@@ -33,7 +32,7 @@ void main() {
       });
 
       // Insert valid junction
-      final validJunctionId = await db.insert('inspection_doors', {
+      await db.insert('inspection_doors', {
         'inspectionId': inspId,
         'doorId': doorId,
       });

@@ -104,20 +104,6 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   
-  // Removed external search handler – now handled directly in the dialog.
-  // Keeping the method for potential reuse elsewhere, but it no longer updates UI.
-  Future<void> _searchErrors(String query) async {
-    // This method is retained for backward compatibility but does not affect the dialog UI.
-    if (query.trim().isEmpty) {
-      // No UI update here; the dialog handles its own state.
-      return;
-    }
-    try {
-      await LocalDatabaseService.searchErrorCatalog(query);
-    } catch (e) {
-      print('Search error (unused): $e');
-    }
-  }
 
   Future<void> _addCatalogError(ErrorCatalog error, String notes) async {
     if (_inspectionDoorId == null) {

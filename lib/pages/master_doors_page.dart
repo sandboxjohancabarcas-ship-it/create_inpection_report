@@ -86,29 +86,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   // PACKAGE EXPORT (TECHNICIAN DB PACKAGES)
   // ─────────────────────────────────────────────────────────────
 
-  Future<void> _handleExportInspection(int inspectionId) async {
-    setState(() => _isProcessing = true);
-    try {
-      final exportPath = await DatabaseService.exportJobPackage([inspectionId]);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Inspektionspaket erfolgreich exportiert:\n$exportPath'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
 
   Future<void> _handleExportSelectedInspections() async {
     if (_selectedInspectionIds.isEmpty) return;
@@ -162,57 +139,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // IMPORT TECHNICIAN RESULT PACKAGE INTO MASTER DB
-  // ─────────────────────────────────────────────────────────────
-
-  Future<void> _handleImportResultPackage() async {
-    try {
-      final FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
-
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
-        if (!mounted) return;
-
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Techniker-Ergebnis importieren'),
-            content: const Text(
-              'Möchten Sie dieses Ergebnis-Paket in die Haupt-Datenbank einspielen?\n\n'
-              'Bestehende Daten werden anhand von Alias & Auftragsnummer aktualisiert, '
-              'erfasste Mängel werden in den Master integriert.',
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('In Haupt-DB integrieren'),
-              ),
-            ],
-          ),
-        );
-
-        if (confirm != true) return;
-
-        setState(() => _isProcessing = true);
-        final report = await DatabaseService.importAndMergePackage(path);
-
-        if (mounted) {
-          await _loadData();
-          await ImportReportDialog.show(context, report);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
 
   // ─────────────────────────────────────────────────────────────
   // GAEB EXPORT & CLOUD UPLOAD

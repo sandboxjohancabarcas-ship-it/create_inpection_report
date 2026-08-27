@@ -3,7 +3,6 @@ import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/models/import_report.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/excel_data_importer.dart';
-import 'package:wartungstool/pages/read_customer_data.dart';
 
 class BatchMigrationResult {
   final ImportReport aggregatedReport;
@@ -28,14 +27,12 @@ class BatchMigrationResult {
 class BatchMigrationService {
   static const Set<String> packageExtensions = {'db', 'db3', 'wartung', 'sqlite'};
   static const Set<String> excelExtensions = {'xlsx', 'xls', 'xlsm', 'xlms', 'csv'};
-  static const Set<String> pdfExtensions = {'pdf'};
 
   /// Helper to check if a file extension is supported for migration.
   static bool isCompliantFile(String filePath) {
     final ext = filePath.split('.').last.toLowerCase();
     return packageExtensions.contains(ext) ||
-        excelExtensions.contains(ext) ||
-        pdfExtensions.contains(ext);
+        excelExtensions.contains(ext);
   }
 
   /// Recursively collects all files from a directory path.
@@ -155,22 +152,6 @@ class BatchMigrationService {
           ));
           compliantProcessed++;
           processedNames.add(fileName);
-        } else if (pdfExtensions.contains(ext)) {
-          await CustomerDataImporter.importFromPdfFile(file);
-          compliantProcessed++;
-          processedNames.add(fileName);
-          final pdfDoorItem = DoorChangeItem(
-            doorAlias: 'PDF-Import: $fileName',
-            doorNumber: 'Kundendaten',
-            roomDesignation: 'PDF Stammimport',
-            changeType: 'new',
-          );
-          doorChanges.add(pdfDoorItem);
-          fileReports.add(InspectionFileReportItem(
-            fileName: fileName,
-            doorChanges: [pdfDoorItem],
-            status: 'Erfolgreich',
-          ));
         }
       } catch (e) {
         skippedCount++;

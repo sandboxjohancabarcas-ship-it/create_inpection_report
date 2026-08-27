@@ -10,8 +10,6 @@ void main() {
 
   group('Single Inspection Metadata Update Tests', () {
     test('Master DB updateInspection modifies all metadata fields at once', () async {
-      final db = await DatabaseService.getDb();
-      
       final int inspectionId = await DatabaseService.insertInspection({
         'clientName': 'Kunde Alt',
         'objectAddress': 'Adresse Alt 1',

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:wartungstool/models/door.dart';
 import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/database_service.dart';
 import '../models/models.dart';
@@ -223,7 +222,6 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
   Widget _buildDoorConflictCard(String key, List<DoorConflict> doorConflicts) {
     final firstConflict = doorConflicts.first;
     final incomingDoor = firstConflict.incomingDoor;
-    final existingDoor = firstConflict.existingDoor;
     final hasIdentity = doorConflicts.any((c) => c.type == DoorConflictType.identityCollision);
     final hasSafety = doorConflicts.any((c) => c.type == DoorConflictType.safetyFlagChange);
     final hasLogical = doorConflicts.any((c) => c.type == DoorConflictType.logicalViolation);
