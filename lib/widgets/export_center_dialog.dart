@@ -35,6 +35,8 @@ class ExportCenterDialog extends StatefulWidget {
 }
 
 class _ExportCenterDialogState extends State<ExportCenterDialog> {
+  final TextEditingController _searchController = TextEditingController();
+
   ExportScope _selectedScope = ExportScope.singleInspection;
   ExportFormat _selectedFormat = ExportFormat.excel;
 
@@ -51,10 +53,49 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
   String? _exportSuccessPath;
   String? _errorMessage;
 
+  List<Map<String, dynamic>> get _filteredInspections {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return _inspections;
+    return _inspections.where((insp) {
+      final client = (insp['clientName'] ?? '').toString().toLowerCase();
+      final job = (insp['jobNumber'] ?? '').toString().toLowerCase();
+      final address = (insp['objectAddress'] ?? '').toString().toLowerCase();
+      final date = (insp['date'] ?? '').toString().toLowerCase();
+      final id = insp['inspectionId'];
+      return client.contains(query) ||
+          job.contains(query) ||
+          address.contains(query) ||
+          date.contains(query) ||
+          (id != null && id == _selectedInspectionId);
+    }).toList();
+  }
+
+  List<String> get _filteredClients {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return _clients;
+    return _clients.where((client) {
+      return client.toLowerCase().contains(query) || client == _selectedClient;
+    }).toList();
+  }
+
+  List<String> get _filteredDoorAliases {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) return _doorAliases;
+    return _doorAliases.where((alias) {
+      return alias.toLowerCase().contains(query) || alias == _selectedDoorAlias;
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -285,6 +326,7 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                 onSelectionChanged: (set) {
                   setState(() {
                     _selectedScope = set.first;
+                    _searchController.clear();
                     _exportSuccessPath = null;
                     _errorMessage = null;
                   });
@@ -292,15 +334,43 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
               ),
               const SizedBox(height: 20),
 
+              // Search Filter Bar
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: _selectedScope == ExportScope.singleInspection
+                      ? 'Inspektionen durchsuchen (Auftrag, Kunde, Datum)...'
+                      : _selectedScope == ExportScope.clientAudit
+                          ? 'Kunden durchsuchen...'
+                          : 'Tür-Alias / Nummer / Raum durchsuchen...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+
               // Specific Target Selector Dropdown
               if (_selectedScope == ExportScope.singleInspection) ...[
-                Text('Inspektion auswählen:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Inspektion auswählen (${_filteredInspections.length} von ${_inspections.length}):', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<int>(
-                  value: _selectedInspectionId,
+                  value: _filteredInspections.any((i) => i['inspectionId'] == _selectedInspectionId)
+                      ? _selectedInspectionId
+                      : (_filteredInspections.isNotEmpty ? _filteredInspections.first['inspectionId'] as int? : null),
                   isExpanded: true,
                   decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                  items: _inspections.map((insp) {
+                  items: _filteredInspections.map((insp) {
                     final client = insp['clientName'] ?? 'Unbekannt';
                     final job = insp['jobNumber'] ?? '';
                     final date = insp['date'] ?? '';
@@ -312,13 +382,15 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                   onChanged: (val) => setState(() => _selectedInspectionId = val),
                 ),
               ] else if (_selectedScope == ExportScope.clientAudit) ...[
-                Text('Kunde für Revisions-Audit wählen:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Kunde für Revisions-Audit wählen (${_filteredClients.length} von ${_clients.length}):', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _selectedClient,
+                  value: _filteredClients.contains(_selectedClient)
+                      ? _selectedClient
+                      : (_filteredClients.isNotEmpty ? _filteredClients.first : null),
                   isExpanded: true,
                   decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                  items: _clients.map((client) {
+                  items: _filteredClients.map((client) {
                     return DropdownMenuItem<String>(
                       value: client,
                       child: Text(client),
@@ -327,13 +399,15 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                   onChanged: (val) => setState(() => _selectedClient = val),
                 ),
               ] else if (_selectedScope == ExportScope.doorHistory) ...[
-                Text('Tür-Alias für Patientenauszug wählen:', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Tür-Alias für Patientenauszug wählen (${_filteredDoorAliases.length} von ${_doorAliases.length}):', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  value: _selectedDoorAlias,
+                  value: _filteredDoorAliases.contains(_selectedDoorAlias)
+                      ? _selectedDoorAlias
+                      : (_filteredDoorAliases.isNotEmpty ? _filteredDoorAliases.first : null),
                   isExpanded: true,
                   decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-                  items: _doorAliases.map((alias) {
+                  items: _filteredDoorAliases.map((alias) {
                     return DropdownMenuItem<String>(
                       value: alias,
                       child: Text('Tür-Alias: $alias'),
