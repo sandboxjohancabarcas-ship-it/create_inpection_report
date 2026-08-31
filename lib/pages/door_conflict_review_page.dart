@@ -26,6 +26,8 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
   final Map<String, DoorResolutionAction> _doorActions = {};
   // For keepBoth action, track the new alias
   final Map<String, TextEditingController> _newAliasControllers = {};
+  // For customInput action, track custom values per field (doorKey -> fieldName -> controller)
+  final Map<String, Map<String, TextEditingController>> _customValueControllers = {};
 
   bool _isApplying = false;
 
@@ -59,6 +61,17 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
       final incomingDoor = doorConflicts.first.incomingDoor;
       final defaultNewAlias = '${incomingDoor.doorAlias ?? incomingDoor.doorNumber}_NEU';
       _newAliasControllers[key] = TextEditingController(text: defaultNewAlias);
+
+      _customValueControllers[key] = {};
+      for (final conflict in doorConflicts) {
+        if (!_customValueControllers[key]!.containsKey(conflict.fieldName)) {
+          _customValueControllers[key]![conflict.fieldName] = TextEditingController(
+            text: conflict.incomingValue.isNotEmpty && conflict.incomingValue != '(leer)'
+                ? conflict.incomingValue
+                : conflict.existingValue,
+          );
+        }
+      }
     }
   }
 
@@ -66,6 +79,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
   void dispose() {
     for (final controller in _newAliasControllers.values) {
       controller.dispose();
+    }
+    for (final fieldMap in _customValueControllers.values) {
+      for (final controller in fieldMap.values) {
+        controller.dispose();
+      }
     }
     super.dispose();
   }
@@ -222,9 +240,20 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
   Widget _buildDoorConflictCard(String key, List<DoorConflict> doorConflicts) {
     final firstConflict = doorConflicts.first;
     final incomingDoor = firstConflict.incomingDoor;
-    final hasIdentity = doorConflicts.any((c) => c.type == DoorConflictType.identityCollision);
-    final hasSafety = doorConflicts.any((c) => c.type == DoorConflictType.safetyFlagChange);
-    final hasLogical = doorConflicts.any((c) => c.type == DoorConflictType.logicalViolation);
+
+    // Deduplicate conflicts per door & field/property to ensure a single unique conflict per property
+    final Map<String, DoorConflict> uniqueConflictsMap = {};
+    for (final conflict in doorConflicts) {
+      final conflictKey = '${conflict.fieldName}_${conflict.ruleCode}_${conflict.existingValue}_${conflict.incomingValue}';
+      if (!uniqueConflictsMap.containsKey(conflictKey)) {
+        uniqueConflictsMap[conflictKey] = conflict;
+      }
+    }
+    final uniqueConflicts = uniqueConflictsMap.values.toList();
+
+    final hasIdentity = uniqueConflicts.any((c) => c.type == DoorConflictType.identityCollision);
+    final hasSafety = uniqueConflicts.any((c) => c.type == DoorConflictType.safetyFlagChange);
+    final hasLogical = uniqueConflicts.any((c) => c.type == DoorConflictType.logicalViolation);
 
     Color cardBorderColor = Colors.grey.shade300;
     Color headerBgColor = Colors.grey.shade100;
@@ -285,6 +314,13 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                         'Nummer: ${incomingDoor.doorNumber} | Geschoss: ${incomingDoor.floor} | Raum: ${incomingDoor.roomNumber} (${incomingDoor.roomDesignation})',
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                       ),
+                      if (firstConflict.sourceContext != null && firstConflict.sourceContext!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Herkunft: ${firstConflict.sourceContext}',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blueGrey.shade800),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -304,94 +340,60 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                 ),
                 const SizedBox(height: 8),
 
-                ...doorConflicts.map((conflict) {
+                ...uniqueConflicts.map((conflict) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: conflict.type.isBlocking
-                                    ? Colors.red
-                                    : conflict.type.isSafety
-                                        ? Colors.orange
-                                        : Colors.blue,
-                              ),
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: conflict.type.isBlocking
+                                  ? Colors.red
+                                  : conflict.type.isSafety
+                                      ? Colors.orange
+                                      : Colors.blue,
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${conflict.type.label} (${conflict.ruleCode}): ${conflict.fieldLabel}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                conflict.message,
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-                              ),
-                              if (conflict.type != DoorConflictType.logicalViolation) ...[
-                                const SizedBox(height: 4),
-                                RichText(
-                                  text: TextSpan(
-                                    style: const TextStyle(fontSize: 12, color: Colors.black),
-                                    children: [
-                                      const TextSpan(text: 'Bestehend (DB): ', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                                      TextSpan(text: '"${conflict.existingValue}"'),
-                                      const TextSpan(text: '  ➔  '),
-                                      const TextSpan(text: 'Import: ', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                      TextSpan(text: '"${conflict.incomingValue}"'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (conflict.compliance != null) ...[
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.orange.shade200),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Icon(Icons.info_outline, color: Colors.orange.shade800, size: 16),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: RichText(
-                                          text: TextSpan(
-                                            style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
-                                            children: [
-                                              TextSpan(
-                                                text: '[${conflict.compliance!.norm}]: ',
-                                                style: const TextStyle(fontWeight: FontWeight.bold),
-                                              ),
-                                              TextSpan(text: conflict.compliance!.riskNote),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${conflict.fieldLabel} (${conflict.ruleCode})',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                if (conflict.type != DoorConflictType.logicalViolation) ...[
+                                  const SizedBox(height: 2),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: const TextStyle(fontSize: 12, color: Colors.black),
+                                      children: [
+                                        const TextSpan(text: 'DB: ', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                                        TextSpan(text: '"${conflict.existingValue}"'),
+                                        const TextSpan(text: '  ➔  '),
+                                        const TextSpan(text: 'Import: ', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                        TextSpan(text: '"${conflict.incomingValue}"'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }),
@@ -408,7 +410,7 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                 RadioListTile<DoorResolutionAction>(
                   dense: true,
                   title: const Text('Bestehende Daten behalten'),
-                  subtitle: const Text('Importierte Daten verwerfen'),
+                  subtitle: const Text('Keine Änderung an den Stammdaten vornehmen'),
                   value: DoorResolutionAction.keepExisting,
                   groupValue: action,
                   onChanged: (val) {
@@ -422,7 +424,7 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                   RadioListTile<DoorResolutionAction>(
                     dense: true,
                     title: const Text('Importierte Daten übernehmen'),
-                    subtitle: const Text('Überschreibt die bestehenden Stammdaten'),
+                    subtitle: const Text('Stammdaten durch Daten aus der Excel-Liste ersetzen'),
                     value: DoorResolutionAction.acceptIncoming,
                     groupValue: action,
                     onChanged: (val) {
@@ -431,6 +433,38 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                       });
                     },
                   ),
+                  RadioListTile<DoorResolutionAction>(
+                    dense: true,
+                    title: const Text('Benutzerdefinierte Werte (Freitext-Eingabe)'),
+                    subtitle: const Text('Eigene Werte für Abweichungen eingeben'),
+                    value: DoorResolutionAction.customInput,
+                    groupValue: action,
+                    onChanged: (val) {
+                      setState(() {
+                        _doorActions[key] = val!;
+                      });
+                    },
+                  ),
+                  if (action == DoorResolutionAction.customInput)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32, right: 16, top: 4, bottom: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: uniqueConflicts.map((c) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TextField(
+                              controller: _customValueControllers[key]?[c.fieldName],
+                              decoration: InputDecoration(
+                                labelText: 'Eigener Wert für "${c.fieldLabel}"',
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
                 ],
 
                 if (hasIdentity) ...[
@@ -482,7 +516,7 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
   }
 
   void _applyResolutions() async {
-    // Validate custom aliases for keepBoth decisions
+    // Validate custom aliases & custom input text
     for (final key in _doorKeys) {
       if (_doorActions[key] == DoorResolutionAction.keepBoth) {
         final val = _newAliasControllers[key]!.text.trim();
@@ -501,7 +535,8 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
     // Check if there are safety-relevant changes accepted
     bool hasAcceptedSafetyChanges = false;
     for (final key in _doorKeys) {
-      if (_doorActions[key] == DoorResolutionAction.acceptIncoming) {
+      if (_doorActions[key] == DoorResolutionAction.acceptIncoming ||
+          _doorActions[key] == DoorResolutionAction.customInput) {
         final conflicts = _groupedConflicts[key]!;
         if (conflicts.any((c) => c.type == DoorConflictType.safetyFlagChange)) {
           hasAcceptedSafetyChanges = true;
@@ -531,6 +566,9 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
         for (final conflict in conflicts) {
           conflict.resolution = action;
           conflict.newAlias = newAlias;
+          if (action == DoorResolutionAction.customInput) {
+            conflict.customValue = _customValueControllers[key]?[conflict.fieldName]?.text.trim();
+          }
           flatConflicts.add(conflict);
         }
       }

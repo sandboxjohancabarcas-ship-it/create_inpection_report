@@ -122,7 +122,7 @@ class ExcelDataImporter {
 
       // Merge error catalog
       if (resolutions == null) {
-        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors, autoResolve: true);
+        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors, autoResolve: false);
         if (mergeResult.conflicts.isNotEmpty) {
           logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} Konflikte.');
         } else {
@@ -221,10 +221,16 @@ class ExcelDataImporter {
       logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
       logs.add('Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}", Projektnummer="${meta['projectNumber']}"');
 
-      // Create the Inspection record
-      final inspectionId = await DatabaseService.insertInspection(meta);
+      // Check for existing inspection to warn user on duplicate re-import
+      final existingInspId = await DatabaseService.findExistingInspectionId(meta);
+      if (existingInspId != null) {
+        logs.add('WARNUNG: Das Inspektionsdokument für Auftrag "${meta['jobNumber']}" (Kunde: "${meta['clientName']}", Objekt: "${meta['objectAddress']}", Datum: "${meta['date']}") existiert bereits im Stammdatenbestand.');
+      }
+
+      // Fetch existing inspection or create new inspection record to prevent duplication on re-import
+      final inspectionId = await DatabaseService.getOrInsertInspection(meta);
       sheetsProcessed++;
-      logs.add('Inspektion ID $inspectionId für "$sheetName" (Auftrag: ${meta['jobNumber']}) in Datenbank erstellt.');
+      logs.add('Inspektion ID $inspectionId für "$sheetName" (Auftrag: ${meta['jobNumber']}) verarbeitet.');
 
       // Analyze Column headers to build error column mappings
       int headerRowIndex = 2;
@@ -376,7 +382,7 @@ class ExcelDataImporter {
         jobNumber: meta['jobNumber'] ?? '',
         clientName: meta['clientName'] ?? '',
         objectAddress: meta['objectAddress'] ?? '',
-        sourceContext: 'Blatt: "$sheetName" (Datei: ${excelFile.path})',
+        sourceContext: 'Arbeitsblatt: "$sheetName"',
         currentInspectionDate: meta['date'] ?? '',
       );
 

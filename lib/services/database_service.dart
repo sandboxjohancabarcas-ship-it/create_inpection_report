@@ -515,6 +515,80 @@ class DatabaseService {
     );
   }
 
+  /// Checks if an inspection matching jobNumber or (clientName, objectAddress, date) already exists
+  static Future<int?> findExistingInspectionId(Map<String, dynamic> inspectionData) async {
+    final db = await getDb();
+    final jobNumber = (inspectionData['jobNumber'] ?? '').toString().trim();
+    final clientName = (inspectionData['clientName'] ?? '').toString().trim();
+    final objectAddress = (inspectionData['objectAddress'] ?? '').toString().trim();
+    final date = (inspectionData['date'] ?? '').toString().trim();
+
+    List<Map<String, dynamic>> existing = [];
+    if (jobNumber.isNotEmpty) {
+      existing = await db.query(
+        'inspections',
+        columns: ['inspectionId'],
+        where: 'jobNumber = ?',
+        whereArgs: [jobNumber],
+        limit: 1,
+      );
+    }
+    if (existing.isEmpty && clientName.isNotEmpty && objectAddress.isNotEmpty && date.isNotEmpty) {
+      existing = await db.query(
+        'inspections',
+        columns: ['inspectionId'],
+        where: 'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
+        whereArgs: [clientName, objectAddress, date],
+        limit: 1,
+      );
+    }
+
+    if (existing.isNotEmpty) {
+      return existing.first['inspectionId'] as int;
+    }
+    return null;
+  }
+
+  /// Fetches an existing inspection by jobNumber or (clientName, objectAddress, date),
+  /// or inserts a new one if none exists to prevent duplicate inspection creation.
+  static Future<int> getOrInsertInspection(Map<String, dynamic> inspectionData) async {
+    final db = await getDb();
+    final jobNumber = (inspectionData['jobNumber'] ?? '').toString().trim();
+    final clientName = (inspectionData['clientName'] ?? '').toString().trim();
+    final objectAddress = (inspectionData['objectAddress'] ?? '').toString().trim();
+    final date = (inspectionData['date'] ?? '').toString().trim();
+
+    List<Map<String, dynamic>> existing = [];
+    if (jobNumber.isNotEmpty) {
+      existing = await db.query(
+        'inspections',
+        columns: ['inspectionId'],
+        where: 'jobNumber = ?',
+        whereArgs: [jobNumber],
+        limit: 1,
+      );
+    }
+    if (existing.isEmpty && clientName.isNotEmpty && objectAddress.isNotEmpty && date.isNotEmpty) {
+      existing = await db.query(
+        'inspections',
+        columns: ['inspectionId'],
+        where: 'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
+        whereArgs: [clientName, objectAddress, date],
+        limit: 1,
+      );
+    }
+
+    if (existing.isNotEmpty) {
+      final existingId = existing.first['inspectionId'] as int;
+      final updateData = Map<String, dynamic>.from(inspectionData);
+      updateData['inspectionId'] = existingId;
+      await updateInspection(updateData);
+      return existingId;
+    }
+
+    return await insertInspection(inspectionData);
+  }
+
   static Future<Map<String, dynamic>?> getInspectionById(int inspectionId) async {
     final db = await getDb();
     final maps = await db.query(
@@ -956,6 +1030,31 @@ class DatabaseService {
 
   static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
     final db = await getDb();
+    final inspectionId = data['inspectionId'];
+    final doorId = data['doorId'];
+
+    if (inspectionId != null && doorId != null) {
+      final existing = await db.query(
+        'inspection_doors',
+        columns: ['id'],
+        where: 'inspectionId = ? AND doorId = ?',
+        whereArgs: [inspectionId, doorId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        final updateData = Map<String, dynamic>.from(data);
+        updateData['id'] = existingId;
+        await db.update(
+          'inspection_doors',
+          updateData,
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
+
     return await db.insert(
       'inspection_doors',
       data,
@@ -1148,6 +1247,13 @@ class DatabaseService {
           FROM inspection_door_errors ide
           INNER JOIN inspection_doors id2 ON ide.inspectionDoorId = id2.id
           WHERE id2.doorId = d.id
+            AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'beholfen', 'gelöst')
+        ) AS openErrorCount,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_door_errors ide
+          INNER JOIN inspection_doors id2 ON ide.inspectionDoorId = id2.id
+          WHERE id2.doorId = d.id
         ) AS totalErrorCount
       FROM doors d
       LEFT JOIN inspection_doors id ON d.id = id.doorId
@@ -1246,6 +1352,39 @@ class DatabaseService {
   static Future<int> insertInspectionDoorError(
       InspectionDoorError error) async {
     final db = await getDb();
+
+    if (error.id == null && error.inspectionDoorId > 0) {
+      List<Map<String, dynamic>> existing = [];
+      if (error.errorId != null) {
+        existing = await db.query(
+          'inspection_door_errors',
+          columns: ['id'],
+          where: 'inspectionDoorId = ? AND errorId = ?',
+          whereArgs: [error.inspectionDoorId, error.errorId],
+          limit: 1,
+        );
+      } else if (error.errorCode.isNotEmpty) {
+        existing = await db.query(
+          'inspection_door_errors',
+          columns: ['id'],
+          where: 'inspectionDoorId = ? AND errorCode = ?',
+          whereArgs: [error.inspectionDoorId, error.errorCode],
+          limit: 1,
+        );
+      }
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        final updateError = error.copyWith(id: existingId);
+        await db.update(
+          'inspection_door_errors',
+          updateError.toMap(),
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
+
     return await db.insert(
       'inspection_door_errors',
       error.toMap(),
@@ -2238,6 +2377,7 @@ class DatabaseService {
                 'bereits Türnummer "${incoming.doorNumber}" (Alias: ${collidingExisting.doorAlias}). '
                 'Bitte prüfen, ob dies dieselbe physische Tür ist.',
             resolution: DoorResolutionAction.keepExisting,
+            sourceContext: sourceContext,
           ));
           cleanDoors.add(incoming.copyWith(id: collidingExisting.id));
           continue;
@@ -2250,6 +2390,7 @@ class DatabaseService {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
         cleanDoors.add(incoming.copyWith(id: id));
+        logs.add('[ERSTMALIGER IMPORT] Tür "$alias" aus $sourceContext erfolgreich im Stammdatenbestand angelegt.');
         continue;
       }
 
@@ -2354,14 +2495,41 @@ class DatabaseService {
                     incomingValue: conflict.incomingValue,
                     ruleCode: conflict.ruleCode,
                     message: '${conflict.message}$details',
+                    sourceContext: sourceContext,
                     compliance: conflict.compliance,
                     resolution: conflict.resolution,
                   ));
                 } else {
-                  processedConflicts.add(conflict);
+                  processedConflicts.add(DoorConflict(
+                    existingDoor: conflict.existingDoor,
+                    incomingDoor: conflict.incomingDoor,
+                    type: conflict.type,
+                    fieldName: conflict.fieldName,
+                    fieldLabel: conflict.fieldLabel,
+                    existingValue: conflict.existingValue,
+                    incomingValue: conflict.incomingValue,
+                    ruleCode: conflict.ruleCode,
+                    message: conflict.message,
+                    sourceContext: sourceContext,
+                    compliance: conflict.compliance,
+                    resolution: conflict.resolution,
+                  ));
                 }
               } else {
-                processedConflicts.add(conflict);
+                processedConflicts.add(DoorConflict(
+                  existingDoor: conflict.existingDoor,
+                  incomingDoor: conflict.incomingDoor,
+                  type: conflict.type,
+                  fieldName: conflict.fieldName,
+                  fieldLabel: conflict.fieldLabel,
+                  existingValue: conflict.existingValue,
+                  incomingValue: conflict.incomingValue,
+                  ruleCode: conflict.ruleCode,
+                  message: conflict.message,
+                  sourceContext: sourceContext,
+                  compliance: conflict.compliance,
+                  resolution: conflict.resolution,
+                ));
               }
             }
             conflicts.addAll(processedConflicts);
@@ -2416,6 +2584,22 @@ class DatabaseService {
                 'doors',
                 newDoorMap,
                 conflictAlgorithm: ConflictAlgorithm.ignore,
+              );
+            }
+            break;
+
+          case DoorResolutionAction.customInput:
+            if (conflict.type == DoorConflictType.logicalViolation) break;
+            final alias = conflict.incomingDoor.doorAlias?.trim();
+            final fieldName = conflict.fieldName;
+            final customVal = conflict.customValue?.trim();
+
+            if (alias != null && alias.isNotEmpty && fieldName.isNotEmpty && customVal != null) {
+              await txn.update(
+                'doors',
+                {fieldName: customVal},
+                where: 'doorAlias = ?',
+                whereArgs: [alias],
               );
             }
             break;

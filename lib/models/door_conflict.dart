@@ -60,6 +60,9 @@ enum DoorResolutionAction {
   /// For identity collisions: save incoming door under a new alias.
   keepBoth,
 
+  /// Manager enters a custom free-text value for the conflicting property.
+  customInput,
+
   /// Do not write anything for this door — skip entirely.
   skip,
 }
@@ -101,6 +104,9 @@ class DoorConflict {
   /// Human-readable explanation of the conflict.
   final String message;
 
+  /// Source context describing file name and worksheet name (e.g. Blatt: "Türlisten 1.OG").
+  final String? sourceContext;
+
   /// Compliance information — only set for [DoorConflictType.safetyFlagChange].
   final ComplianceInfo? compliance;
 
@@ -110,6 +116,10 @@ class DoorConflict {
   /// Only used when [resolution] == [DoorResolutionAction.keepBoth].
   /// The Manager-provided new alias for the incoming door.
   String? newAlias;
+
+  /// Only used when [resolution] == [DoorResolutionAction.customInput].
+  /// The Manager-provided custom free-text value.
+  String? customValue;
 
   DoorConflict({
     this.existingDoor,
@@ -121,9 +131,11 @@ class DoorConflict {
     this.incomingValue = '',
     required this.ruleCode,
     required this.message,
+    this.sourceContext,
     this.compliance,
     this.resolution = DoorResolutionAction.keepExisting,
     this.newAlias,
+    this.customValue,
   });
 
   /// Display title combining the door alias and field label.

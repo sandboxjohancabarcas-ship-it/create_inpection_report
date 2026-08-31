@@ -1039,12 +1039,12 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     List<Map<String, dynamic>> displayDoors = List.from(_masterDoors);
     if (_errorFilter == ErrorFilterOption.withErrors) {
       displayDoors = displayDoors.where((d) {
-        final count = (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final count = (d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0;
         return count > 0;
       }).toList();
     } else if (_errorFilter == ErrorFilterOption.errorFree) {
       displayDoors = displayDoors.where((d) {
-        final count = (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final count = (d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0;
         return count == 0;
       }).toList();
     }
@@ -1052,15 +1052,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     // Apply Error Status Sorting
     if (_errorSort == ErrorSortOption.mostErrors) {
       displayDoors.sort((a, b) {
-        final countA = (a['totalErrorCount'] as num?)?.toInt() ?? 0;
-        final countB = (b['totalErrorCount'] as num?)?.toInt() ?? 0;
-        return countB.compareTo(countA); // Descending: Most errors first
+        final countA = (a['openErrorCount'] as num?)?.toInt() ?? (a['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final countB = (b['openErrorCount'] as num?)?.toInt() ?? (b['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return countB.compareTo(countA); // Descending: Most open errors first
       });
     } else if (_errorSort == ErrorSortOption.leastErrors) {
       displayDoors.sort((a, b) {
-        final countA = (a['totalErrorCount'] as num?)?.toInt() ?? 0;
-        final countB = (b['totalErrorCount'] as num?)?.toInt() ?? 0;
-        return countA.compareTo(countB); // Ascending: Least errors / error-free first
+        final countA = (a['openErrorCount'] as num?)?.toInt() ?? (a['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final countB = (b['openErrorCount'] as num?)?.toInt() ?? (b['totalErrorCount'] as num?)?.toInt() ?? 0;
+        return countA.compareTo(countB); // Ascending: Least open errors / error-free first
       });
     } else {
       // Default: Hierarchical sort by Floor -> Room -> Door Number
@@ -1216,7 +1216,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     final id = doorMap['id'] as int;
                     final door = Door.fromMap(doorMap);
                     final isSelected = _selectedDoorIds.contains(id);
-                    final int errorCount = (doorMap['totalErrorCount'] as num?)?.toInt() ?? 0;
+                    final int errorCount = (doorMap['openErrorCount'] as num?)?.toInt() ?? (doorMap['totalErrorCount'] as num?)?.toInt() ?? 0;
                     final String clientName = doorMap['clientName'] ?? 'Ohne Zuordnung';
                     final String jobNumber = doorMap['jobNumber'] ?? '';
                     final int? inspectionId = doorMap['inspectionId'] as int?;
