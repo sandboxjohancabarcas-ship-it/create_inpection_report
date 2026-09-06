@@ -5,6 +5,17 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class PdfExportService {
+  static String _boolToStr(dynamic val) {
+    if (val == null) return 'Nein';
+    if (val is bool) return val ? 'Ja' : 'Nein';
+    if (val is num) return val == 1 ? 'Ja' : 'Nein';
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      return (lower == '1' || lower == 'true' || lower == 'ja') ? 'Ja' : 'Nein';
+    }
+    return 'Nein';
+  }
+
   /// Exports a single inspection report to a formatted PDF document
   static Future<File> exportSingleInspectionPdf(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
@@ -19,47 +30,72 @@ class PdfExportService {
     document.pageSettings.orientation = PdfPageOrientation.landscape;
     final page = document.pages.add();
 
-    final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 16, style: PdfFontStyle.bold);
-    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
-    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 9);
+    final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 14, style: PdfFontStyle.bold);
+    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
+    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 5);
 
     // Title
     page.graphics.drawString(
       'INSPEKTIONSBERICHT',
       titleFont,
       brush: PdfSolidBrush(PdfColor(13, 71, 161)),
-      bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 25),
+      bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 20),
     );
 
     // Metadata Block
-    final metaText = 'Kunde: ${insp['clientName'] ?? ''}\n'
-        'Objektadresse: ${insp['objectAddress'] ?? ''}\n'
+    final metaText = 'Kunde: ${insp['clientName'] ?? ''}  |  Objektadresse: ${insp['objectAddress'] ?? ''}\n'
         'Datum: ${insp['date'] ?? ''}  |  Auftragsnr.: ${insp['jobNumber'] ?? ''}  |  Projekt: ${insp['projectNumber'] ?? ''}';
 
     page.graphics.drawString(
       metaText,
-      bodyFont,
-      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 45),
+      PdfStandardFont(PdfFontFamily.helvetica, 8),
+      bounds: Rect.fromLTWH(0, 22, page.getClientSize().width, 25),
     );
 
-    // Table
+    // Table with individual column headers for each door property
+    final headers = [
+      'Pos',
+      'Tür-Alias',
+      'Tür-Nr.',
+      'Geschoss',
+      'Raumnr.',
+      'Raumbezeichnung',
+      'Türart',
+      'Flügel',
+      'Material',
+      'Hersteller',
+      'DIN',
+      'Schließer',
+      'Schließfolge',
+      'Schlossmaß',
+      'Bandseite',
+      'Bandgegenseite',
+      'Sturz<1m',
+      'Fluchttürst.',
+      'Zutritt',
+      'Fluchtwegsit.',
+      'Beschilderung',
+      'Blindzyl.',
+      'PZ-Zyl.',
+      'Beschlag',
+      'Panikfkt',
+      'Fluchtricht.OK',
+      'VollpanikStand',
+      'FunktionOK',
+      'Status',
+      'Notizen',
+      'Erfasste Mängel',
+    ];
+
     final PdfGrid grid = PdfGrid();
-    grid.columns.add(count: 8);
+    grid.columns.add(count: headers.length);
     grid.headers.add(1);
 
     final PdfGridRow headerRow = grid.headers[0];
-    headerRow.cells[0].value = 'Pos';
-    headerRow.cells[1].value = 'Tür-Nr.';
-    headerRow.cells[2].value = 'Geschoss';
-    headerRow.cells[3].value = 'Raum';
-    headerRow.cells[4].value = 'Hersteller';
-    headerRow.cells[5].value = 'Status';
-    headerRow.cells[6].value = 'Erfasste Mängel';
-    headerRow.cells[7].value = 'Notizen';
-
-    for (int i = 0; i < headerRow.cells.count; i++) {
-      headerRow.cells[i].style.font = headerFont;
-      headerRow.cells[i].style.backgroundBrush = PdfSolidBrush(PdfColor(220, 230, 242));
+    for (int col = 0; col < headers.length; col++) {
+      headerRow.cells[col].value = headers[col];
+      headerRow.cells[col].style.font = headerFont;
+      headerRow.cells[col].style.backgroundBrush = PdfSolidBrush(PdfColor(220, 230, 242));
     }
 
     int posCounter = 1;
@@ -68,24 +104,50 @@ class PdfExportService {
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       final errorSummary = errors.map((e) => '${e['errorCode'] ?? e['code']}').join(', ');
 
-      row.cells[0].value = '$posCounter';
-      row.cells[1].value = d['doorNumber'] as String? ?? '';
-      row.cells[2].value = d['floor'] as String? ?? '';
-      row.cells[3].value = d['roomDesignation'] as String? ?? '';
-      row.cells[4].value = d['manufacturer'] as String? ?? '';
-      row.cells[5].value = d['junctionStatus'] as String? ?? 'InProgress';
-      row.cells[6].value = errorSummary.isEmpty ? 'Mängelfrei' : errorSummary;
-      row.cells[7].value = d['junctionNotes'] as String? ?? '';
+      final rowValues = [
+        '${d['pos'] ?? posCounter}',
+        d['doorAlias'] as String? ?? '',
+        d['doorNumber'] as String? ?? '',
+        d['floor'] as String? ?? '',
+        d['roomNumber'] as String? ?? '',
+        d['roomDesignation'] as String? ?? '',
+        d['doorType'] as String? ?? '',
+        '${d['wingCount'] ?? 1}',
+        d['material'] as String? ?? '',
+        d['manufacturer'] as String? ?? '',
+        d['dinConfiguration'] as String? ?? '',
+        d['closerType'] as String? ?? '',
+        d['closingSequenceSystem'] as String? ?? '',
+        d['lockDimensions'] as String? ?? '',
+        _boolToStr(d['closerOnHingeSide']),
+        _boolToStr(d['closerOnOppositeSide']),
+        _boolToStr(d['lintelHeightUnder1m']),
+        _boolToStr(d['escapeDoorControl']),
+        d['accessControl'] as String? ?? '',
+        _boolToStr(d['escapeRouteSituation']),
+        _boolToStr(d['escapeRouteSignage']),
+        _boolToStr(d['blindCylinder']),
+        _boolToStr(d['pzCylinder']),
+        d['fittingType'] as String? ?? '',
+        d['panicFunction'] as String? ?? '',
+        _boolToStr(d['escapeDirectionRespected']),
+        _boolToStr(d['fullPanicStandWing']),
+        _boolToStr(d['doorFunctionOK']),
+        d['junctionStatus'] as String? ?? 'InProgress',
+        d['junctionNotes'] as String? ?? '',
+        errorSummary.isEmpty ? 'Mängelfrei' : errorSummary,
+      ];
 
-      for (int i = 0; i < row.cells.count; i++) {
-        row.cells[i].style.font = bodyFont;
+      for (int c = 0; c < rowValues.length; c++) {
+        row.cells[c].value = rowValues[c];
+        row.cells[c].style.font = bodyFont;
       }
       posCounter++;
     }
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 80, page.getClientSize().width, page.getClientSize().height - 90),
+      bounds: Rect.fromLTWH(0, 50, page.getClientSize().width, page.getClientSize().height - 55),
     );
 
     final file = File(outputPath);
@@ -110,7 +172,7 @@ class PdfExportService {
     final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 16, style: PdfFontStyle.bold);
     final PdfFont subTitleFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
     final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
-    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 9);
+    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 8);
 
     // Title
     page.graphics.drawString(
@@ -123,23 +185,28 @@ class PdfExportService {
     final String alias = (door['doorAlias'] ?? '').toString();
     final String doorNum = (door['doorNumber'] ?? '').toString();
 
-    // Door Info Card
-    final doorSpecsText = 'Tür-Alias (QR-Code): $alias\n'
-        'Türnummer: $doorNum  |  Geschoss: ${door['floor'] ?? ''}  |  Raum: ${door['roomDesignation'] ?? ''}\n'
-        'Hersteller: ${door['manufacturer'] ?? ''}  |  Funktion: ${door['doorFunction'] ?? ''}  |  Brandschutz: ${door['fireProtection'] ?? ''}\n'
-        'Breite: ${door['width'] ?? ''} mm  |  Höhe: ${door['height'] ?? ''} mm  |  Baujahr: ${door['constructionYear'] ?? ''}';
+    // Door Info Card with All 28 Door Properties
+    final doorSpecsText = 'Tür-Alias (QR-Code): $alias  |  Türnummer: $doorNum  |  Pos: ${door['pos'] ?? 0}\n'
+        'Geschoss: ${door['floor'] ?? ''}  |  Raumnr.: ${door['roomNumber'] ?? ''}  |  Raum: ${door['roomDesignation'] ?? ''}\n'
+        'Türart: ${door['doorType'] ?? ''}  |  Flügelanzahl: ${door['wingCount'] ?? 1}  |  Material: ${door['material'] ?? ''}  |  Hersteller: ${door['manufacturer'] ?? ''}\n'
+        'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
+        'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
+        'Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe < 1m: ${_boolToStr(door['lintelHeightUnder1m'])}\n'
+        'Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
+        'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
+        'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';
 
     page.graphics.drawString(
       doorSpecsText,
       bodyFont,
-      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 60),
+      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 95),
     );
 
     page.graphics.drawString(
       'INSPEKTIONSHISTORIE & VERLAUF',
       subTitleFont,
       brush: PdfSolidBrush(PdfColor(27, 94, 32)),
-      bounds: Rect.fromLTWH(0, 100, page.getClientSize().width, 20),
+      bounds: Rect.fromLTWH(0, 130, page.getClientSize().width, 20),
     );
 
     final PdfGrid grid = PdfGrid();
@@ -186,7 +253,7 @@ class PdfExportService {
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 125, page.getClientSize().width, page.getClientSize().height - 135),
+      bounds: Rect.fromLTWH(0, 155, page.getClientSize().width, page.getClientSize().height - 165),
     );
 
     final file = File(outputPath);
@@ -196,3 +263,4 @@ class PdfExportService {
     return file;
   }
 }
+
