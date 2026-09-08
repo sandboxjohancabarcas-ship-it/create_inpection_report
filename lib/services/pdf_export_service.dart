@@ -64,6 +64,10 @@ class PdfExportService {
       'Flügel',
       'Material',
       'Hersteller',
+      'Zulassungs-Nr.',
+      'Hersteller-Nr.',
+      'DoP-Nr.',
+      'Baujahr',
       'DIN',
       'Schließer',
       'Schließfolge',
@@ -71,6 +75,8 @@ class PdfExportService {
       'Bandseite',
       'Bandgegenseite',
       'Sturz<1m',
+      'Sturz>1m',
+      'Sturzhöhe(m)',
       'Fluchttürst.',
       'Zutritt',
       'Fluchtwegsit.',
@@ -115,6 +121,10 @@ class PdfExportService {
         '${d['wingCount'] ?? 1}',
         d['material'] as String? ?? '',
         d['manufacturer'] as String? ?? '',
+        d['approvalNumber'] as String? ?? '',
+        d['manufacturerNumber'] as String? ?? '',
+        d['dopNumber'] as String? ?? '',
+        d['manufactureYear'] as String? ?? '',
         d['dinConfiguration'] as String? ?? '',
         d['closerType'] as String? ?? '',
         d['closingSequenceSystem'] as String? ?? '',
@@ -122,6 +132,8 @@ class PdfExportService {
         _boolToStr(d['closerOnHingeSide']),
         _boolToStr(d['closerOnOppositeSide']),
         _boolToStr(d['lintelHeightUnder1m']),
+        _boolToStr(d['lintelHeightOver1m']),
+        d['lintelHeightValue'] != null ? '${d['lintelHeightValue']} m' : '',
         _boolToStr(d['escapeDoorControl']),
         d['accessControl'] as String? ?? '',
         _boolToStr(d['escapeRouteSituation']),
@@ -185,13 +197,14 @@ class PdfExportService {
     final String alias = (door['doorAlias'] ?? '').toString();
     final String doorNum = (door['doorNumber'] ?? '').toString();
 
-    // Door Info Card with All 28 Door Properties
+    // Door Info Card with All Door Properties
     final doorSpecsText = 'Tür-Alias (QR-Code): $alias  |  Türnummer: $doorNum  |  Pos: ${door['pos'] ?? 0}\n'
         'Geschoss: ${door['floor'] ?? ''}  |  Raumnr.: ${door['roomNumber'] ?? ''}  |  Raum: ${door['roomDesignation'] ?? ''}\n'
         'Türart: ${door['doorType'] ?? ''}  |  Flügelanzahl: ${door['wingCount'] ?? 1}  |  Material: ${door['material'] ?? ''}  |  Hersteller: ${door['manufacturer'] ?? ''}\n'
+        'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
         'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
-        'Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe < 1m: ${_boolToStr(door['lintelHeightUnder1m'])}\n'
+        'Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe < 1m: ${_boolToStr(door['lintelHeightUnder1m'])}  |  Sturzhöhe > 1m: ${_boolToStr(door['lintelHeightOver1m'])}  |  Sturzhöhe (m): ${door['lintelHeightValue'] != null ? '${door['lintelHeightValue']} m' : ''}\n'
         'Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
         'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
         'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';
@@ -199,14 +212,14 @@ class PdfExportService {
     page.graphics.drawString(
       doorSpecsText,
       bodyFont,
-      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 95),
+      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 115),
     );
 
     page.graphics.drawString(
       'INSPEKTIONSHISTORIE & VERLAUF',
       subTitleFont,
       brush: PdfSolidBrush(PdfColor(27, 94, 32)),
-      bounds: Rect.fromLTWH(0, 130, page.getClientSize().width, 20),
+      bounds: Rect.fromLTWH(0, 150, page.getClientSize().width, 20),
     );
 
     final PdfGrid grid = PdfGrid();
@@ -253,7 +266,7 @@ class PdfExportService {
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 155, page.getClientSize().width, page.getClientSize().height - 165),
+      bounds: Rect.fromLTWH(0, 175, page.getClientSize().width, page.getClientSize().height - 185),
     );
 
     final file = File(outputPath);

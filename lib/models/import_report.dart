@@ -1,3 +1,5 @@
+import 'door_conflict.dart';
+
 class DoorChangeItem {
   final String doorAlias;
   final String doorNumber;
@@ -58,6 +60,7 @@ class ImportReport {
   final List<DoorChangeItem> doorChanges;
   final List<String> newCatalogProposals;
   final List<InspectionFileReportItem> fileReports;
+  final List<DoorConflict> doorConflicts;
 
   ImportReport({
     required this.packageName,
@@ -71,6 +74,7 @@ class ImportReport {
     required this.doorChanges,
     required this.newCatalogProposals,
     this.fileReports = const [],
+    this.doorConflicts = const [],
   });
 
   int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;

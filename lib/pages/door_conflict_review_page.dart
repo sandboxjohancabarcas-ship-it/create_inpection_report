@@ -55,8 +55,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
 
     for (final key in _doorKeys) {
       final doorConflicts = _groupedConflicts[key]!;
-      // Default to keepExisting
-      _doorActions[key] = DoorResolutionAction.keepExisting;
+      final hasDropdownOpt = doorConflicts.any((c) => c.type == DoorConflictType.newDropdownOption);
+      // Default to addToMasterOptions if new dropdown option introduced, else keepExisting
+      _doorActions[key] = hasDropdownOpt
+          ? DoorResolutionAction.addToMasterOptions
+          : DoorResolutionAction.keepExisting;
 
       final incomingDoor = doorConflicts.first.incomingDoor;
       final defaultNewAlias = '${incomingDoor.doorAlias ?? incomingDoor.doorNumber}_NEU';
@@ -254,6 +257,7 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
     final hasIdentity = uniqueConflicts.any((c) => c.type == DoorConflictType.identityCollision);
     final hasSafety = uniqueConflicts.any((c) => c.type == DoorConflictType.safetyFlagChange);
     final hasLogical = uniqueConflicts.any((c) => c.type == DoorConflictType.logicalViolation);
+    final hasDropdownOption = uniqueConflicts.any((c) => c.type == DoorConflictType.newDropdownOption);
 
     Color cardBorderColor = Colors.grey.shade300;
     Color headerBgColor = Colors.grey.shade100;
@@ -275,6 +279,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
       headerBgColor = Colors.purple.shade50;
       headerIcon = Icons.rule_folder_rounded;
       headerIconColor = Colors.purple;
+    } else if (hasDropdownOption) {
+      cardBorderColor = Colors.blue.shade300;
+      headerBgColor = Colors.blue.shade50;
+      headerIcon = Icons.playlist_add_check_rounded;
+      headerIconColor = Colors.blue.shade800;
     }
 
     final action = _doorActions[key]!;
@@ -419,6 +428,21 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                     });
                   },
                 ),
+
+                if (hasDropdownOption) ...[
+                  RadioListTile<DoorResolutionAction>(
+                    dense: true,
+                    title: const Text('In Stamm-Menü aufnehmen & für Tür übernehmen'),
+                    subtitle: const Text('Fügt den neuen Wert dauerhaft zum Haupt-Dropdown-Menü in door_options.json hinzu'),
+                    value: DoorResolutionAction.addToMasterOptions,
+                    groupValue: action,
+                    onChanged: (val) {
+                      setState(() {
+                        _doorActions[key] = val!;
+                      });
+                    },
+                  ),
+                ],
 
                 if (!hasLogical) ...[
                   RadioListTile<DoorResolutionAction>(

@@ -26,6 +26,9 @@ enum DoorConflictType {
   /// A field-level logical rule (V01–V13) is violated within the door itself.
   /// No existing DB record involved — just the incoming data is internally inconsistent.
   logicalViolation,
+
+  /// A dropdown property contains a new value introduced by Inspector not in master options.
+  newDropdownOption,
 }
 
 /// Severity label for display in the UI.
@@ -42,6 +45,8 @@ extension DoorConflictTypeLabel on DoorConflictType {
         return 'Auftragsdaten';
       case DoorConflictType.logicalViolation:
         return 'Logischer Fehler';
+      case DoorConflictType.newDropdownOption:
+        return 'Neuer Menüeintrag';
     }
   }
 
@@ -65,6 +70,9 @@ enum DoorResolutionAction {
 
   /// Do not write anything for this door — skip entirely.
   skip,
+
+  /// Add new value to default/master dropdown options in door_options.json.
+  addToMasterOptions,
 }
 
 /// German compliance norm reference for safety boolean fields.

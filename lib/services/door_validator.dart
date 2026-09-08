@@ -1,5 +1,6 @@
 import 'package:wartungstool/models/door.dart';
 import 'package:wartungstool/models/door_conflict.dart';
+import 'package:wartungstool/services/door_options_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOOR VALIDATOR
@@ -320,12 +321,22 @@ class DoorValidator {
     checkSafety('fullPanicStandWing', 'Panik Standflügel vollständig',
         incoming.fullPanicStandWing, existing.fullPanicStandWing);
 
+    bool isEquivalentEmpty(String val) {
+      final v = val.trim().toLowerCase();
+      return v.isEmpty || v == '?' || v == '(leer)' || v == 'null';
+    }
+
     // ── Technical mismatch fields ────────────────────────────────
     void checkTech(String field, String label, String inVal, String exVal) {
-      if (inVal.trim() == exVal.trim()) return;
-      if (inVal.trim().isEmpty) return; // Don't flag empty incoming as mismatch
-      final cleanInVal = inVal.isEmpty ? '(leer)' : inVal.trim();
-      final cleanExVal = exVal.isEmpty ? '(leer)' : exVal.trim();
+      final cleanIn = inVal.trim();
+      final cleanEx = exVal.trim();
+      if (cleanIn == cleanEx) return;
+      if (cleanIn.toLowerCase() == cleanEx.toLowerCase()) return;
+      if (isEquivalentEmpty(cleanIn) && isEquivalentEmpty(cleanEx)) return;
+      if (cleanIn.isEmpty) return; // Don't flag empty incoming as mismatch
+
+      final cleanInVal = cleanIn.isEmpty ? '(leer)' : cleanIn;
+      final cleanExVal = cleanEx.isEmpty ? '(leer)' : cleanEx;
       conflicts.add(DoorConflict(
         existingDoor: existing,
         incomingDoor: incoming,
@@ -361,6 +372,100 @@ class DoorValidator {
     checkTech('panicFunction', 'Panikfunktion', incoming.panicFunction, existing.panicFunction);
     checkTech('accessControl', 'Zutrittskontrolle',
         incoming.accessControl, existing.accessControl);
+
+    return conflicts;
+  }
+
+  /// Checks whether any dropdown properties in [incoming] contain a value that is NOT
+  /// currently in [DoorOptionsService]'s master options for that key.
+  /// If [existing] is provided, only properties that actually changed between Master DB
+  /// and incoming inspection are evaluated to avoid false conflict prompts.
+  /// Returns a list of [DoorConflict] with type [DoorConflictType.newDropdownOption].
+  static List<DoorConflict> detectDropdownOptionConflicts(Door incoming, {Door? existing}) {
+    final conflicts = <DoorConflict>[];
+
+    final Map<String, String> dropdownPropertyMap = {
+      'approvalNumber': 'Zulassungsnummer',
+      'manufacturerNumber': 'Herstellernummer',
+      'dopNumber': 'DoP-Nummer (Leistungserklärung)',
+      'doorType': 'Türart',
+      'material': 'Material',
+      'manufacturer': 'Hersteller',
+      'dinConfiguration': 'DIN-Konfiguration',
+      'closingSequenceSystem': 'Schließfolgesystem',
+      'lockDimensions': 'Schlossabmessungen',
+      'accessControl': 'Zutrittskontrolle',
+      'fittingType': 'Beschlagstyp',
+      'panicFunction': 'Panikfunktion',
+    };
+
+    final Map<String, String> doorValues = {
+      'approvalNumber': incoming.approvalNumber,
+      'manufacturerNumber': incoming.manufacturerNumber,
+      'dopNumber': incoming.dopNumber,
+      'doorType': incoming.doorType,
+      'material': incoming.material,
+      'manufacturer': incoming.manufacturer,
+      'dinConfiguration': incoming.dinConfiguration,
+      'closingSequenceSystem': incoming.closingSequenceSystem,
+      'lockDimensions': incoming.lockDimensions,
+      'accessControl': incoming.accessControl,
+      'fittingType': incoming.fittingType,
+      'panicFunction': incoming.panicFunction,
+    };
+
+    final Map<String, String> existingValues = existing != null ? {
+      'approvalNumber': existing.approvalNumber,
+      'manufacturerNumber': existing.manufacturerNumber,
+      'dopNumber': existing.dopNumber,
+      'doorType': existing.doorType,
+      'material': existing.material,
+      'manufacturer': existing.manufacturer,
+      'dinConfiguration': existing.dinConfiguration,
+      'closingSequenceSystem': existing.closingSequenceSystem,
+      'lockDimensions': existing.lockDimensions,
+      'accessControl': existing.accessControl,
+      'fittingType': existing.fittingType,
+      'panicFunction': existing.panicFunction,
+    } : {};
+
+    bool isEquivalentEmpty(String val) {
+      final v = val.trim().toLowerCase();
+      return v.isEmpty || v == '?' || v == '(leer)' || v == 'null';
+    }
+
+    for (final entry in dropdownPropertyMap.entries) {
+      final key = entry.key;
+      final label = entry.value;
+      final val = doorValues[key]?.trim() ?? '';
+
+      if (val.isEmpty || val == '?' || val.toLowerCase() == 'nein') continue;
+
+      // If existing door in Master DB is known and this property did NOT change, skip!
+      if (existing != null) {
+        final exVal = existingValues[key]?.trim() ?? '';
+        if (val.toLowerCase() == exVal.toLowerCase()) continue;
+        if (isEquivalentEmpty(val) && isEquivalentEmpty(exVal)) continue;
+      }
+
+      final existingOptions = DoorOptionsService.getStringOptions(key);
+      final exists = existingOptions.any((opt) => opt.trim().toLowerCase() == val.toLowerCase());
+
+      if (!exists) {
+        conflicts.add(DoorConflict(
+          existingDoor: existing,
+          incomingDoor: incoming,
+          type: DoorConflictType.newDropdownOption,
+          fieldName: key,
+          fieldLabel: label,
+          existingValue: existing != null ? (existingValues[key] ?? '(Nicht in Stammdaten)') : '(Nicht in Stammdaten)',
+          incomingValue: val,
+          ruleCode: 'DROPDOWN_OPTION',
+          message: 'Neuer Menüeintrag "$val" für "$label" erfasst. Soll dieser Wert in das Haupt-Dropdown-Menü übernommen werden?',
+          resolution: DoorResolutionAction.addToMasterOptions,
+        ));
+      }
+    }
 
     return conflicts;
   }

@@ -10,6 +10,7 @@ import '../widgets/inspection_summary_card.dart';
 import '../widgets/import_report_dialog.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
+import 'door_conflict_review_page.dart';
 
 class DoorListPage extends StatefulWidget {
   const DoorListPage({super.key});
@@ -151,9 +152,9 @@ class _DoorListPageState extends State<DoorListPage> {
             _isSearching = false;
           });
           await loadInspections();
-          if (report != null) {
+          if (report != null && mounted) {
             await ImportReportDialog.show(context, report);
-          } else {
+          } else if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Paket erfolgreich importiert.'), backgroundColor: Colors.green),
             );

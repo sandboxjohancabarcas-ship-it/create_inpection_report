@@ -107,6 +107,9 @@ class BatchMigrationService {
           totalAttachmentsImported += report.totalAttachmentsImported;
           doorChanges.addAll(report.doorChanges);
           newCatalogProposals.addAll(report.newCatalogProposals);
+          if (report.doorConflicts.isNotEmpty) {
+            doorConflicts.addAll(report.doorConflicts);
+          }
           fileReports.addAll(report.fileReports.isNotEmpty
               ? report.fileReports
               : [

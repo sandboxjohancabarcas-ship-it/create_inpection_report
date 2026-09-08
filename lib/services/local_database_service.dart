@@ -3,6 +3,7 @@
 
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'dart:io';
@@ -36,7 +37,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 9,  // v9: Added projectNumber to inspections table
+      version: 10,  // v10: Added new door properties (approvalNumber, manufacturerNumber, dopNumber, lintelHeightOver1m, lintelHeightValue, manufactureYear)
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -69,7 +70,13 @@ class LocalDatabaseService {
             panicFunction TEXT,
             escapeDirectionRespected INTEGER,
             fullPanicStandWing INTEGER,
-            doorFunctionOK INTEGER
+            doorFunctionOK INTEGER,
+            approvalNumber TEXT DEFAULT '?',
+            manufacturerNumber TEXT DEFAULT '?',
+            dopNumber TEXT DEFAULT '?',
+            lintelHeightOver1m INTEGER DEFAULT 0,
+            lintelHeightValue INTEGER,
+            manufactureYear TEXT DEFAULT '?'
           );
         ''');
 
@@ -228,6 +235,20 @@ class LocalDatabaseService {
             print('Local Database upgraded to version 9: projectNumber column added.');
           } catch (e) {
             print('Local DB migration warning (projectNumber): $e');
+          }
+        }
+
+        if (oldVersion < 10) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN approvalNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN manufacturerNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN dopNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOver1m INTEGER DEFAULT 0");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightValue INTEGER");
+            await db.execute("ALTER TABLE doors ADD COLUMN manufactureYear TEXT DEFAULT '?'");
+            print('Local Database upgraded to version 10: new door properties added.');
+          } catch (e) {
+            print('Local DB migration warning (v10 columns): $e');
           }
         }
       },
@@ -1285,6 +1306,8 @@ class LocalDatabaseService {
     final List<DoorChangeItem> doorChanges = [];
     final List<String> newCatalogProposals = [];
 
+    final List<DoorConflict> packageDoorConflicts = [];
+
     try {
       // Validate structure
       final tables = await packageDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
@@ -1386,6 +1409,7 @@ class LocalDatabaseService {
         totalAttachmentsImported: totalAttachmentsImported,
         doorChanges: doorChanges,
         newCatalogProposals: newCatalogProposals,
+        doorConflicts: packageDoorConflicts,
       );
     } finally {
       await packageDb.close();

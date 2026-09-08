@@ -4,6 +4,7 @@ import '../services/database_service.dart';
 import '../services/door_options_service.dart';
 import '../models/models.dart';
 import '../widgets/master_portal_home_button.dart';
+import '../widgets/editable_dropdown_field.dart';
 import 'error_management_page.dart';
 import 'door_history_page.dart';
 
@@ -37,10 +38,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController roomDesignationController;
   late TextEditingController floorController;
   late TextEditingController roomNumberController;
-  late TextEditingController manufacturerController;
   late TextEditingController lockDimensionsController;
   late TextEditingController doorAliasController;
   bool isAliasManuallyEdited = false;
+
+  // Additional free-text dropdown property states
+  String approvalNumber = '?';
+  String manufacturer = '?';
+  String manufacturerNumber = '?';
+  String dopNumber = '?';
+  String manufactureYear = '?';
 
   // Boolean states
   bool escapeSignage = false;
@@ -51,6 +58,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   bool closerOnHingeSide = false;
   bool closerOnOppositeSide = false;
   bool lintelHeightUnder1m = false;
+  bool lintelHeightOver1m = false;
+  int? lintelHeightValue;
   bool escapeRouteSituation = false;
   bool escapeDirectionRespected = false;
   bool fullPanicStandWing = false;
@@ -98,7 +107,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     roomDesignationController = TextEditingController(text: d?.roomDesignation ?? '');
     floorController = TextEditingController(text: d?.floor ?? '');
     roomNumberController = TextEditingController(text: d?.roomNumber ?? '');
-    manufacturerController = TextEditingController(text: d?.manufacturer ?? '');
     lockDimensionsController = TextEditingController(text: d?.lockDimensions ?? '');
     doorAliasController = TextEditingController(text: d?.doorAlias ?? '');
 
@@ -144,9 +152,18 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     closerOnHingeSide = d?.closerOnHingeSide ?? false;
     closerOnOppositeSide = d?.closerOnOppositeSide ?? false;
     lintelHeightUnder1m = d?.lintelHeightUnder1m ?? false;
+    lintelHeightOver1m = d?.lintelHeightOver1m ?? false;
+    lintelHeightValue = d?.lintelHeightValue;
     escapeRouteSituation = d?.escapeRouteSituation ?? false;
     escapeDirectionRespected = d?.escapeDirectionRespected ?? false;
     fullPanicStandWing = d?.fullPanicStandWing ?? false;
+
+    // Initialize free-text dropdown fields & year
+    approvalNumber = d?.approvalNumber ?? '?';
+    manufacturer = d?.manufacturer ?? DoorOptionsService.getDefault('manufacturer') ?? '?';
+    manufacturerNumber = d?.manufacturerNumber ?? '?';
+    dopNumber = d?.dopNumber ?? '?';
+    manufactureYear = d?.manufactureYear ?? '?';
 
     // Initialize dropdowns (use defaults from config file if creating a new door)
     accessControl = d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
@@ -256,7 +273,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       doorType: doorType ?? DoorOptionsService.getDefault('doorType') ?? 'T30',
       wingCount: wingCount,
       material: material ?? DoorOptionsService.getDefault('material') ?? 'Stahl',
-      manufacturer: manufacturerController.text,
+      manufacturer: manufacturer,
       dinConfiguration: dinConfiguration ?? DoorOptionsService.getDefault('dinConfiguration') ?? 'DIN L',
       closerType: closerType ?? DoorOptionsService.getDefault('closerType') ?? 'TS93',
       closingSequenceSystem: closingSequenceSystem ?? DoorOptionsService.getDefault('closingSequenceSystem') ?? 'None',
@@ -275,6 +292,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       escapeDirectionRespected: escapeDirectionRespected,
       fullPanicStandWing: fullPanicStandWing,
       doorFunctionOK: properFunction,
+      approvalNumber: approvalNumber,
+      manufacturerNumber: manufacturerNumber,
+      dopNumber: dopNumber,
+      lintelHeightOver1m: lintelHeightOver1m,
+      lintelHeightValue: lintelHeightValue,
+      manufactureYear: manufactureYear,
     );
   }
 
@@ -330,6 +353,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       }
     }
 
+    if (widget.isManagerMode) {
+      DoorOptionsService.syncFromDoor(door);
+      await DoorOptionsService.saveOptions();
+    }
+
     if (mounted) Navigator.pop(context);
   }
 
@@ -374,6 +402,43 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     final list = _getMapDropdownItems(key, currentValue);
     final hasValue = list.any((e) => e['value'] == currentValue);
     return hasValue ? currentValue : null;
+  }
+
+  Future<String?> _showYearOnlyPickerDialog(BuildContext context, String currentYearStr) async {
+    final DateTime now = DateTime.now();
+    final int currentYearInt = int.tryParse(currentYearStr) ?? now.year;
+    int selectedYear = currentYearInt;
+
+    return showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text("Baujahr auswählen"),
+          content: SizedBox(
+            width: 300,
+            height: 300,
+            child: YearPicker(
+              firstDate: DateTime(1900),
+              lastDate: DateTime(now.year + 2),
+              selectedDate: DateTime(selectedYear),
+              onChanged: (DateTime dateTime) {
+                Navigator.pop(dialogContext, dateTime.year.toString());
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, '?'),
+              child: const Text('? (Unbekannt)'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, null),
+              child: const Text('Abbrechen'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -564,6 +629,63 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Raumbezeichnung"),
             ),
 
+            // Zulassungsnummer (Approval number)
+            EditableDropdownField(
+              label: "Zulassungsnummer",
+              currentValue: approvalNumber,
+              options: DoorOptionsService.getStringOptions('approvalNumber'),
+              onChanged: (val) => setState(() => approvalNumber = val),
+            ),
+
+            // Hersteller (Manufacturer - Custom drop-down)
+            EditableDropdownField(
+              label: "Hersteller",
+              currentValue: manufacturer,
+              options: DoorOptionsService.getStringOptions('manufacturer'),
+              onChanged: (val) => setState(() => manufacturer = val),
+            ),
+
+            // Herstellernummer (Manufacturer number - Placed directly below Hersteller)
+            EditableDropdownField(
+              label: "Herstellernummer",
+              currentValue: manufacturerNumber,
+              options: DoorOptionsService.getStringOptions('manufacturerNumber'),
+              onChanged: (val) => setState(() => manufacturerNumber = val),
+            ),
+
+            // DoP-Nummer (Leistungserklärung)
+            EditableDropdownField(
+              label: "DoP-Nummer (Leistungserklärung)",
+              currentValue: dopNumber,
+              options: DoorOptionsService.getStringOptions('dopNumber'),
+              onChanged: (val) => setState(() => dopNumber = val),
+            ),
+
+            // Baujahr (Year-only picker dialog)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text("Baujahr: $manufactureYear"),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    tooltip: 'Jahr auswählen',
+                    onPressed: () async {
+                      final year = await _showYearOnlyPickerDialog(context, manufactureYear);
+                      if (year != null) {
+                        setState(() => manufactureYear = year);
+                      }
+                    },
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => manufactureYear = '?'),
+                    child: const Text('? (Unbekannt)'),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 20),
 
             // Door Specifications Section
@@ -598,12 +720,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => material = val),
-            ),
-
-            // Manufacturer
-            TextField(
-              controller: manufacturerController,
-              decoration: const InputDecoration(labelText: "Hersteller"),
             ),
 
             // DIN configuration
@@ -664,10 +780,53 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
             // Lintel height under 1m
             SwitchListTile(
-              title: const Text("Sturzhöhe unter 1m"),
+              title: const Text("Stürzhöhe unter 1m"),
               value: lintelHeightUnder1m,
-              onChanged: (val) => setState(() => lintelHeightUnder1m = val),
+              onChanged: (val) => setState(() {
+                lintelHeightUnder1m = val;
+                if (val) {
+                  lintelHeightOver1m = false;
+                  lintelHeightValue = null;
+                }
+              }),
             ),
+
+            // Lintel height over 1m
+            SwitchListTile(
+              title: const Text("Stürzhöhe über 1m"),
+              value: lintelHeightOver1m,
+              onChanged: (val) => setState(() {
+                lintelHeightOver1m = val;
+                if (val) {
+                  lintelHeightUnder1m = false;
+                  if (lintelHeightValue == null) lintelHeightValue = 1;
+                } else {
+                  lintelHeightValue = null;
+                }
+              }),
+            ),
+
+            // Dropdown menu for 1 to 5 meters (visible only when lintelHeightOver1m is true)
+            if (lintelHeightOver1m)
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+                child: DropdownButtonFormField<int>(
+                  decoration: const InputDecoration(
+                    labelText: "Stürzhöhe in Metern (1-5m)",
+                    border: OutlineInputBorder(),
+                  ),
+                  value: (lintelHeightValue != null && lintelHeightValue! >= 1 && lintelHeightValue! <= 5)
+                      ? lintelHeightValue
+                      : 1,
+                  items: [1, 2, 3, 4, 5]
+                      .map((m) => DropdownMenuItem<int>(
+                            value: m,
+                            child: Text('$m m'),
+                          ))
+                      .toList(),
+                  onChanged: (val) => setState(() => lintelHeightValue = val),
+                ),
+              ),
 
             const SizedBox(height: 20),
 

@@ -29,6 +29,12 @@ class Door {
   final bool escapeDirectionRespected;
   final bool fullPanicStandWing;
   final bool doorFunctionOK;
+  final String approvalNumber;
+  final String manufacturerNumber;
+  final String dopNumber;
+  final bool lintelHeightOver1m;
+  final int? lintelHeightValue;
+  final String manufactureYear;
 
   Door({
     required this.id,
@@ -60,6 +66,12 @@ class Door {
     required this.escapeDirectionRespected,
     required this.fullPanicStandWing,
     required this.doorFunctionOK,
+    this.approvalNumber = '?',
+    this.manufacturerNumber = '?',
+    this.dopNumber = '?',
+    this.lintelHeightOver1m = false,
+    this.lintelHeightValue,
+    this.manufactureYear = '?',
   });
 
   // ---------------------------------------------------------
@@ -96,6 +108,12 @@ class Door {
     bool? escapeDirectionRespected,
     bool? fullPanicStandWing,
     bool? doorFunctionOK,
+    String? approvalNumber,
+    String? manufacturerNumber,
+    String? dopNumber,
+    bool? lintelHeightOver1m,
+    int? lintelHeightValue,
+    String? manufactureYear,
   }) {
     return Door(
       id: id ?? this.id,
@@ -134,6 +152,12 @@ class Door {
       fullPanicStandWing:
           fullPanicStandWing ?? this.fullPanicStandWing,
       doorFunctionOK: doorFunctionOK ?? this.doorFunctionOK,
+      approvalNumber: approvalNumber ?? this.approvalNumber,
+      manufacturerNumber: manufacturerNumber ?? this.manufacturerNumber,
+      dopNumber: dopNumber ?? this.dopNumber,
+      lintelHeightOver1m: lintelHeightOver1m ?? this.lintelHeightOver1m,
+      lintelHeightValue: lintelHeightValue ?? this.lintelHeightValue,
+      manufactureYear: manufactureYear ?? this.manufactureYear,
     );
   }
 
@@ -170,6 +194,12 @@ class Door {
             escapeDirectionRespected ? 1 : 0,
         'fullPanicStandWing': fullPanicStandWing ? 1 : 0,
         'doorFunctionOK': doorFunctionOK ? 1 : 0,
+        'approvalNumber': approvalNumber,
+        'manufacturerNumber': manufacturerNumber,
+        'dopNumber': dopNumber,
+        'lintelHeightOver1m': lintelHeightOver1m ? 1 : 0,
+        'lintelHeightValue': lintelHeightValue,
+        'manufactureYear': manufactureYear,
       };
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
@@ -205,6 +235,14 @@ class Door {
         fullPanicStandWing:
             map['fullPanicStandWing'] == 1,
         doorFunctionOK: map['doorFunctionOK'] == 1,
+        approvalNumber: map['approvalNumber'] ?? '?',
+        manufacturerNumber: map['manufacturerNumber'] ?? '?',
+        dopNumber: map['dopNumber'] ?? '?',
+        lintelHeightOver1m: map['lintelHeightOver1m'] == 1,
+        lintelHeightValue: map['lintelHeightValue'] is int
+            ? map['lintelHeightValue']
+            : int.tryParse(map['lintelHeightValue']?.toString() ?? ''),
+        manufactureYear: map['manufactureYear'] ?? '?',
       );
 
   /// Generates an intelligent, human-readable, structured business alias.

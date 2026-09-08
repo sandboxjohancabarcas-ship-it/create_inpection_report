@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/door_validator.dart';
+import 'package:wartungstool/services/door_options_service.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -24,7 +25,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 19, // v19: Added projectNumber to inspections table
+      version: 20, // v20: Added approvalNumber, manufacturerNumber, dopNumber, lintelHeightOver1m, lintelHeightValue, manufactureYear
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -58,7 +59,13 @@ class DatabaseService {
             panicFunction TEXT,
             escapeDirectionRespected INTEGER,
             fullPanicStandWing INTEGER,
-            doorFunctionOK INTEGER
+            doorFunctionOK INTEGER,
+            approvalNumber TEXT DEFAULT '?',
+            manufacturerNumber TEXT DEFAULT '?',
+            dopNumber TEXT DEFAULT '?',
+            lintelHeightOver1m INTEGER DEFAULT 0,
+            lintelHeightValue INTEGER,
+            manufactureYear TEXT DEFAULT '?'
           );
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
@@ -222,6 +229,20 @@ class DatabaseService {
             print('[DatabaseService] Main DB upgraded to v19: projectNumber column added.');
           } catch (e) {
             print('Main DB migration warning (projectNumber): $e');
+          }
+        }
+
+        if (oldVersion < 20) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN approvalNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN manufacturerNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN dopNumber TEXT DEFAULT '?'");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOver1m INTEGER DEFAULT 0");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightValue INTEGER");
+            await db.execute("ALTER TABLE doors ADD COLUMN manufactureYear TEXT DEFAULT '?'");
+            print('[DatabaseService] Main DB upgraded to v20: new door properties added.');
+          } catch (e) {
+            print('Main DB migration warning (v20 columns): $e');
           }
         }
       },
@@ -1540,6 +1561,7 @@ class DatabaseService {
     final List<DoorChangeItem> doorChanges = [];
     final List<String> newCatalogProposals = [];
     final List<InspectionFileReportItem> fileReports = [];
+    final List<DoorConflict> packageDoorConflicts = [];
 
     try {
       await masterDb.transaction((txn) async {
@@ -1629,19 +1651,27 @@ class DatabaseService {
         for (var row in pDoors) {
           final alias = row['doorAlias'] as String;
           final packageId = row['id'] as int;
+          final incomingDoor = Door.fromMap(row);
 
           // Check if door exists in Master by Alias
           final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+          final Door? existingDoor = existing.isNotEmpty ? Door.fromMap(existing.first) : null;
+
+          // Detect new custom dropdown options introduced by Inspector
+          final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(incomingDoor, existing: existingDoor);
+          if (dropdownConflicts.isNotEmpty) {
+            packageDoorConflicts.addAll(dropdownConflicts);
+          }
           
           int masterId;
-          final data = Map<String, dynamic>.from(row);
+          final data = Map<String, dynamic>.from(row)..remove('id');
           
           if (existing.isNotEmpty) {
             masterId = existing.first['id'] as int;
             await txn.update('doors', data, where: 'id = ?', whereArgs: [masterId]);
             updatedDoorsCount++;
           } else {
-            masterId = await txn.insert('doors', data..remove('id'));
+            masterId = await txn.insert('doors', data);
             newDoorsCount++;
           }
           doorIdMap[packageId] = masterId;
@@ -1656,14 +1686,14 @@ class DatabaseService {
           final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
           
           int masterId;
-          final data = Map<String, dynamic>.from(row);
+          final data = Map<String, dynamic>.from(row)..remove('inspectionId');
 
           if (existing.isNotEmpty) {
             masterId = existing.first['inspectionId'] as int;
             await txn.update('inspections', data, where: 'inspectionId = ?', whereArgs: [masterId]);
             updatedInspectionsCount++;
           } else {
-            masterId = await txn.insert('inspections', data..remove('inspectionId'));
+            masterId = await txn.insert('inspections', data);
             newInspectionsCount++;
           }
           inspectionIdMap[packageId] = masterId;
@@ -1824,6 +1854,7 @@ class DatabaseService {
         doorChanges: doorChanges,
         newCatalogProposals: newCatalogProposals,
         fileReports: fileReports,
+        doorConflicts: packageDoorConflicts,
       );
     } finally {
       await packageDb.close();
@@ -2299,6 +2330,27 @@ class DatabaseService {
     final cleanAddress = objectAddress.trim();
 
     for (final incoming in incomingDoors) {
+      final alias = incoming.doorAlias?.trim();
+      Door? existingDoor;
+      if (alias != null && alias.isNotEmpty) {
+        final existingRows = await db.query(
+          'doors',
+          where: 'doorAlias = ?',
+          whereArgs: [alias],
+          limit: 1,
+        );
+        if (existingRows.isNotEmpty) {
+          existingDoor = Door.fromMap(existingRows.first);
+        }
+      }
+
+      // Check for new dropdown options introduced in incoming data
+      final dropdownOptionConflicts = DoorValidator.detectDropdownOptionConflicts(incoming, existing: existingDoor);
+      if (dropdownOptionConflicts.isNotEmpty) {
+        conflicts.addAll(dropdownOptionConflicts);
+        continue;
+      }
+
       // Step 1 — Internal logical validation (V01–V13), zero DB calls
       if (validateLogic) {
         final issues = DoorValidator.validateDoor(incoming);
@@ -2317,7 +2369,6 @@ class DatabaseService {
       }
 
       // Step 2 — Check for existing record by doorAlias (the "Patient ID")
-      final alias = incoming.doorAlias?.trim();
       if (alias == null || alias.isEmpty) {
         // No alias → treat as new door, write directly
         final id = await db.insert(
@@ -2329,14 +2380,7 @@ class DatabaseService {
         continue;
       }
 
-      final existingRows = await db.query(
-        'doors',
-        where: 'doorAlias = ?',
-        whereArgs: [alias],
-        limit: 1,
-      );
-
-      if (existingRows.isEmpty) {
+      if (existingDoor == null) {
         // Check if a door already exists for the SAME customer & building/object address
         // matching doorNumber and floor (to prevent creating a duplicate door for the same building/customer).
         List<Map<String, dynamic>> sameBuildingCollision = [];
@@ -2395,8 +2439,7 @@ class DatabaseService {
       }
 
       // Step 3 — Record exists: compare field by field
-      final existingDoor = Door.fromMap(existingRows.first);
-      final fieldConflicts = DoorValidator.detectConflicts(incoming, existingDoor);
+      final fieldConflicts = DoorValidator.detectConflicts(incoming, existingDoor!);
 
       if (fieldConflicts.isEmpty) {
         // Identical or trivially different — update without review
@@ -2571,6 +2614,10 @@ class DatabaseService {
                 whereArgs: [alias],
               );
             }
+            final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(conflict.incomingDoor);
+            for (final dc in dropdownConflicts) {
+              DoorOptionsService.addOption(dc.fieldName, dc.incomingValue);
+            }
             break;
 
           case DoorResolutionAction.keepBoth:
@@ -2601,11 +2648,40 @@ class DatabaseService {
                 where: 'doorAlias = ?',
                 whereArgs: [alias],
               );
+              DoorOptionsService.addOption(fieldName, customVal);
+            }
+            break;
+
+          case DoorResolutionAction.addToMasterOptions:
+            DoorOptionsService.addOption(conflict.fieldName, conflict.incomingValue);
+            final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(conflict.incomingDoor);
+            for (final dc in dropdownConflicts) {
+              DoorOptionsService.addOption(dc.fieldName, dc.incomingValue);
+            }
+            final alias = conflict.incomingDoor.doorAlias?.trim();
+            if (alias != null && alias.isNotEmpty) {
+              final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+              if (existing.isNotEmpty) {
+                await txn.update(
+                  'doors',
+                  conflict.incomingDoor.toMap()..remove('id'),
+                  where: 'doorAlias = ?',
+                  whereArgs: [alias],
+                );
+              } else {
+                await txn.insert(
+                  'doors',
+                  conflict.incomingDoor.toMap()..remove('id'),
+                  conflictAlgorithm: ConflictAlgorithm.replace,
+                );
+              }
             }
             break;
         }
       }
     });
+
+    await DoorOptionsService.saveOptions();
   }
 
   /// Returns all inspections in the master database

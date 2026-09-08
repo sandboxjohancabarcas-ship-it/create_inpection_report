@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' show join, dirname;
 import 'package:sqflite/sqflite.dart' show getDatabasesPath;
+import 'package:wartungstool/models/door.dart';
 
 /// Service to load and manage door options and defaults from a JSON file.
 class DoorOptionsService {
@@ -79,6 +80,18 @@ class DoorOptionsService {
     "panicFunction": {
       "options": ["Nein", "B", "E", "D", "C", "SVP2000", "M-SVP2200", "M-SVP2000", "SVP5000", "SVP6000"],
       "default": "Nein"
+    },
+    "approvalNumber": {
+      "options": ["?"],
+      "default": "?"
+    },
+    "manufacturerNumber": {
+      "options": ["?"],
+      "default": "?"
+    },
+    "dopNumber": {
+      "options": ["?"],
+      "default": "?"
     }
   };
 
@@ -101,6 +114,15 @@ class DoorOptionsService {
         _loaded = true;
         return;
       }
+
+      final projectFile = File(join(Directory.current.path, 'door_options.json'));
+      if (await projectFile.exists()) {
+        print('[DoorOptions] Found project JSON at ${projectFile.path}. Loading...');
+        final content = await projectFile.readAsString();
+        _options = json.decode(content) as Map<String, dynamic>;
+        _loaded = true;
+        return;
+      }
     } catch (e) {
       print('[DoorOptions] Error loading external options: $e');
     }
@@ -116,7 +138,7 @@ class DoorOptionsService {
     }
 
     print('[DoorOptions] Using hardcoded fallback options.');
-    _options = _defaultFallbackOptions;
+    _options = Map<String, dynamic>.from(_defaultFallbackOptions);
     _loaded = true;
   }
 
@@ -130,6 +152,58 @@ class DoorOptionsService {
   static void setMockOptions(Map<String, dynamic> mockData) {
     _options = mockData;
     _loaded = true;
+  }
+
+  /// Adds a new option value to the list for a given property key if it doesn't already exist.
+  static void addOption(String key, String value) {
+    final val = value.trim();
+    if (val.isEmpty || val == '?') return;
+
+    if (!_loaded || _options.isEmpty) {
+      _options = Map<String, dynamic>.from(_defaultFallbackOptions);
+      _loaded = true;
+    }
+
+    if (!_options.containsKey(key)) {
+      _options[key] = {
+        "options": ["?", val],
+        "default": "?"
+      };
+      return;
+    }
+
+    final List<dynamic> currentList = List.from(_options[key]['options'] ?? []);
+    final exists = currentList.any((e) => e.toString().trim().toLowerCase() == val.toLowerCase());
+    if (!exists) {
+      currentList.add(val);
+      _options[key]['options'] = currentList;
+    }
+  }
+
+  /// Saves current options to external JSON file on disk.
+  static Future<bool> saveOptions() async {
+    try {
+      final dbPath = await getDatabasesPath();
+      final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
+      if (!await externalDir.exists()) {
+        await externalDir.create(recursive: true);
+      }
+      final externalFile = File(join(externalDir.path, 'door_options.json'));
+      final encoder = const JsonEncoder.withIndent('  ');
+      final content = encoder.convert(_options);
+      await externalFile.writeAsString(content);
+      print('[DoorOptions] Saved options to ${externalFile.path}');
+
+      final projectFile = File(join(Directory.current.path, 'door_options.json'));
+      if (await projectFile.exists()) {
+        await projectFile.writeAsString(content);
+        print('[DoorOptions] Saved options to project root ${projectFile.path}');
+      }
+      return true;
+    } catch (e) {
+      print('[DoorOptions] Error saving options to file: $e');
+      return false;
+    }
   }
 
   /// Gets raw options for a given key.
@@ -178,5 +252,44 @@ class DoorOptionsService {
         'label': e.toString(),
       };
     }).toList();
+  }
+
+  /// Syncs any custom non-empty property values from a [Door] into master dropdown options.
+  static void syncFromDoor(Door door) {
+    final Map<String, String> dropdownValues = {
+      'approvalNumber': door.approvalNumber,
+      'manufacturerNumber': door.manufacturerNumber,
+      'dopNumber': door.dopNumber,
+      'manufacturer': door.manufacturer,
+      'doorType': door.doorType,
+      'material': door.material,
+      'dinConfiguration': door.dinConfiguration,
+      'closingSequenceSystem': door.closingSequenceSystem,
+      'lockDimensions': door.lockDimensions,
+      'accessControl': door.accessControl,
+      'fittingType': door.fittingType,
+      'panicFunction': door.panicFunction,
+    };
+
+    for (final entry in dropdownValues.entries) {
+      final val = entry.value.trim();
+      if (val.isNotEmpty && val != '?' && val.toLowerCase() != 'nein' && val != '(leer)') {
+        addOption(entry.key, val);
+      }
+    }
+  }
+
+  /// Scans all doors stored in [db] and registers any unlisted custom dropdown options.
+  static Future<void> syncFromDatabase(dynamic db) async {
+    try {
+      final List<Map<String, dynamic>> rows = await db.query('doors');
+      for (final row in rows) {
+        final door = Door.fromMap(row);
+        syncFromDoor(door);
+      }
+      await saveOptions();
+    } catch (e) {
+      print('[DoorOptions] Error syncing options from database: $e');
+    }
   }
 }
