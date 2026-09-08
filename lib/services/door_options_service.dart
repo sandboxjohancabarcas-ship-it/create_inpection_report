@@ -88,10 +88,6 @@ class DoorOptionsService {
     "manufacturerNumber": {
       "options": ["?"],
       "default": "?"
-    },
-    "dopNumber": {
-      "options": ["?"],
-      "default": "?"
     }
   };
 
@@ -103,6 +99,7 @@ class DoorOptionsService {
 
   /// Loads options from the external JSON file or falls back to the asset bundle.
   static Future<void> load() async {
+    if (_isTestMode) return;
     try {
       final dbPath = await getDatabasesPath();
       final externalFile = File(join(dirname(dbPath), 'WartungsTool', 'door_options.json'));
@@ -142,16 +139,20 @@ class DoorOptionsService {
     _loaded = true;
   }
 
+  static bool _isTestMode = false;
+
   /// Resets the load status (useful for unit tests).
   static void reset() {
     _options = {};
     _loaded = false;
+    _isTestMode = false;
   }
 
   /// Sets custom mock options (useful for unit tests).
   static void setMockOptions(Map<String, dynamic> mockData) {
     _options = mockData;
     _loaded = true;
+    _isTestMode = true;
   }
 
   /// Adds a new option value to the list for a given property key if it doesn't already exist.
@@ -180,6 +181,67 @@ class DoorOptionsService {
     }
   }
 
+  /// Updates/renames an existing option value for a given property key.
+  static bool updateOption(String key, String oldValue, String newValue) {
+    final oldVal = oldValue.trim();
+    final newVal = newValue.trim();
+    if (newVal.isEmpty || !_options.containsKey(key)) return false;
+
+    final List<dynamic> currentList = List.from(_options[key]['options'] ?? []);
+    int index = -1;
+    for (int i = 0; i < currentList.length; i++) {
+      final item = currentList[i];
+      if (item is Map) {
+        if (item['value']?.toString().trim().toLowerCase() == oldVal.toLowerCase()) {
+          index = i;
+          break;
+        }
+      } else {
+        if (item.toString().trim().toLowerCase() == oldVal.toLowerCase()) {
+          index = i;
+          break;
+        }
+      }
+    }
+
+    if (index != -1) {
+      final existingItem = currentList[index];
+      if (existingItem is Map) {
+        currentList[index] = {
+          'value': newVal,
+          'label': newVal,
+        };
+      } else {
+        currentList[index] = newVal;
+      }
+      _options[key]['options'] = currentList;
+      return true;
+    }
+    return false;
+  }
+
+  /// Removes an option value from a given property key.
+  static bool removeOption(String key, String value) {
+    final val = value.trim();
+    if (val.isEmpty || !_options.containsKey(key)) return false;
+
+    final List<dynamic> currentList = List.from(_options[key]['options'] ?? []);
+    final initialLength = currentList.length;
+    
+    currentList.removeWhere((item) {
+      if (item is Map) {
+        return item['value']?.toString().trim().toLowerCase() == val.toLowerCase();
+      }
+      return item.toString().trim().toLowerCase() == val.toLowerCase();
+    });
+
+    if (currentList.length < initialLength) {
+      _options[key]['options'] = currentList;
+      return true;
+    }
+    return false;
+  }
+
   /// Saves current options to external JSON file on disk.
   static Future<bool> saveOptions() async {
     try {
@@ -194,10 +256,12 @@ class DoorOptionsService {
       await externalFile.writeAsString(content);
       print('[DoorOptions] Saved options to ${externalFile.path}');
 
-      final projectFile = File(join(Directory.current.path, 'door_options.json'));
-      if (await projectFile.exists()) {
-        await projectFile.writeAsString(content);
-        print('[DoorOptions] Saved options to project root ${projectFile.path}');
+      if (!_isTestMode) {
+        final projectFile = File(join(Directory.current.path, 'door_options.json'));
+        if (await projectFile.exists()) {
+          await projectFile.writeAsString(content);
+          print('[DoorOptions] Saved options to project root ${projectFile.path}');
+        }
       }
       return true;
     } catch (e) {
@@ -259,7 +323,6 @@ class DoorOptionsService {
     final Map<String, String> dropdownValues = {
       'approvalNumber': door.approvalNumber,
       'manufacturerNumber': door.manufacturerNumber,
-      'dopNumber': door.dopNumber,
       'manufacturer': door.manufacturer,
       'doorType': door.doorType,
       'material': door.material,
@@ -281,6 +344,7 @@ class DoorOptionsService {
 
   /// Scans all doors stored in [db] and registers any unlisted custom dropdown options.
   static Future<void> syncFromDatabase(dynamic db) async {
+    if (_isTestMode) return;
     try {
       final List<Map<String, dynamic>> rows = await db.query('doors');
       for (final row in rows) {

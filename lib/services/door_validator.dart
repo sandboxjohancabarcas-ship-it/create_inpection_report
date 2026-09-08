@@ -387,7 +387,6 @@ class DoorValidator {
     final Map<String, String> dropdownPropertyMap = {
       'approvalNumber': 'Zulassungsnummer',
       'manufacturerNumber': 'Herstellernummer',
-      'dopNumber': 'DoP-Nummer (Leistungserklärung)',
       'doorType': 'Türart',
       'material': 'Material',
       'manufacturer': 'Hersteller',
@@ -402,7 +401,6 @@ class DoorValidator {
     final Map<String, String> doorValues = {
       'approvalNumber': incoming.approvalNumber,
       'manufacturerNumber': incoming.manufacturerNumber,
-      'dopNumber': incoming.dopNumber,
       'doorType': incoming.doorType,
       'material': incoming.material,
       'manufacturer': incoming.manufacturer,
@@ -417,7 +415,6 @@ class DoorValidator {
     final Map<String, String> existingValues = existing != null ? {
       'approvalNumber': existing.approvalNumber,
       'manufacturerNumber': existing.manufacturerNumber,
-      'dopNumber': existing.dopNumber,
       'doorType': existing.doorType,
       'material': existing.material,
       'manufacturer': existing.manufacturer,

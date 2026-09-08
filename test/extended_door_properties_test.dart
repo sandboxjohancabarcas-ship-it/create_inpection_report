@@ -157,8 +157,8 @@ void main() {
 
       final conflicts = DoorValidator.detectDropdownOptionConflicts(incoming);
 
-      expect(conflicts.length, 3);
-      expect(conflicts.map((c) => c.fieldName), containsAll(['approvalNumber', 'manufacturerNumber', 'dopNumber']));
+      expect(conflicts.length, 2);
+      expect(conflicts.map((c) => c.fieldName), containsAll(['approvalNumber', 'manufacturerNumber']));
       expect(conflicts.every((c) => c.type == DoorConflictType.newDropdownOption), isTrue);
       expect(conflicts.every((c) => c.resolution == DoorResolutionAction.addToMasterOptions), isTrue);
     });

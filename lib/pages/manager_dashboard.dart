@@ -3,6 +3,7 @@ import 'package:wartungstool/models/error_catalog.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
 import 'error_consolidation_page.dart';
+import 'door_options_manager_page.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 
@@ -266,6 +267,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             icon: Icon(Icons.refresh),
             onPressed: _loadErrors,
             tooltip: 'Aktualisieren',
+          ),
+          IconButton(
+            icon: const Icon(Icons.tune),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DoorOptionsManagerPage()),
+              );
+            },
+            tooltip: 'Stammdaten-Optionen verwalten',
           ),
           IconButton(
             icon: Icon(Icons.storage),

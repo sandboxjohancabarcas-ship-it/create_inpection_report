@@ -40,13 +40,13 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController roomNumberController;
   late TextEditingController lockDimensionsController;
   late TextEditingController doorAliasController;
+  late TextEditingController dopNumberController;
   bool isAliasManuallyEdited = false;
 
   // Additional free-text dropdown property states
   String approvalNumber = '?';
   String manufacturer = '?';
   String manufacturerNumber = '?';
-  String dopNumber = '?';
   String manufactureYear = '?';
 
   // Boolean states
@@ -109,6 +109,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     roomNumberController = TextEditingController(text: d?.roomNumber ?? '');
     lockDimensionsController = TextEditingController(text: d?.lockDimensions ?? '');
     doorAliasController = TextEditingController(text: d?.doorAlias ?? '');
+    dopNumberController = TextEditingController(text: d?.dopNumber ?? '');
 
     if (d?.doorAlias != null && d!.doorAlias!.isNotEmpty) {
       isAliasManuallyEdited = true;
@@ -162,7 +163,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     approvalNumber = d?.approvalNumber ?? '?';
     manufacturer = d?.manufacturer ?? DoorOptionsService.getDefault('manufacturer') ?? '?';
     manufacturerNumber = d?.manufacturerNumber ?? '?';
-    dopNumber = d?.dopNumber ?? '?';
     manufactureYear = d?.manufactureYear ?? '?';
 
     // Initialize dropdowns (use defaults from config file if creating a new door)
@@ -194,6 +194,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   void dispose() {
     doorAliasController.dispose();
     projectNumberController.dispose();
+    dopNumberController.dispose();
     super.dispose();
   }
 
@@ -294,7 +295,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       doorFunctionOK: properFunction,
       approvalNumber: approvalNumber,
       manufacturerNumber: manufacturerNumber,
-      dopNumber: dopNumber,
+      dopNumber: dopNumberController.text,
       lintelHeightOver1m: lintelHeightOver1m,
       lintelHeightValue: lintelHeightValue,
       manufactureYear: manufactureYear,
@@ -653,12 +654,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               onChanged: (val) => setState(() => manufacturerNumber = val),
             ),
 
-            // DoP-Nummer (Leistungserklärung)
-            EditableDropdownField(
-              label: "DoP-Nummer (Leistungserklärung)",
-              currentValue: dopNumber,
-              options: DoorOptionsService.getStringOptions('dopNumber'),
-              onChanged: (val) => setState(() => dopNumber = val),
+            // DoP-Nummer (Leistungserklärung) - Free alphanumeric field
+            TextField(
+              controller: dopNumberController,
+              decoration: const InputDecoration(labelText: "DoP-Nummer (Leistungserklärung)"),
             ),
 
             // Baujahr (Year-only picker dialog)

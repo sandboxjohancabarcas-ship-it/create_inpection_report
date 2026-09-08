@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' show join, dirname;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
@@ -21,12 +22,22 @@ void main() {
       final tempDir = await Directory.systemTemp.createTemp('proof_test_');
       tempDbPath = '${tempDir.path}/inspector_package.db';
 
+      try {
+        final dbPath = await getDatabasesPath();
+        final externalFile = File(join(dirname(dbPath), 'WartungsTool', 'door_options.json'));
+        if (await externalFile.exists()) {
+          await externalFile.delete();
+        }
+
+        final masterDb = await DatabaseService.getDb();
+        await masterDb.delete('doors', where: 'doorAlias = ?', whereArgs: ['PROOF-ALIAS-001']);
+      } catch (_) {}
+
       // Reset options with baseline master dropdown values
       DoorOptionsService.reset();
       DoorOptionsService.setMockOptions({
         'approvalNumber': {'options': ['?'], 'default': '?'},
         'manufacturerNumber': {'options': ['?'], 'default': '?'},
-        'dopNumber': {'options': ['?'], 'default': '?'},
         'manufacturer': {'options': ['?', 'Hörmann', 'Schüco'], 'default': '?'},
         'doorType': {'options': ['?', 'T30-1'], 'default': '?'},
       });
@@ -182,9 +193,9 @@ void main() {
           .where((c) => c.type == DoorConflictType.newDropdownOption)
           .toList();
 
-      expect(customConflicts.length, greaterThanOrEqualTo(4));
+      expect(customConflicts.length, greaterThanOrEqualTo(3));
       final flaggedFields = customConflicts.map((c) => c.fieldName).toList();
-      expect(flaggedFields, containsAll(['approvalNumber', 'manufacturerNumber', 'dopNumber', 'manufacturer']));
+      expect(flaggedFields, containsAll(['approvalNumber', 'manufacturerNumber', 'manufacturer']));
 
       // Verify the UI prompt message shown to Manager
       final approvalConflict = customConflicts.firstWhere((c) => c.fieldName == 'approvalNumber');
@@ -201,7 +212,6 @@ void main() {
       // PROOF ASSERTION 2: Master options now contain the Inspector's custom entries!
       expect(DoorOptionsService.getStringOptions('approvalNumber'), contains('Z-999-PROOF-APPROVAL'));
       expect(DoorOptionsService.getStringOptions('manufacturerNumber'), contains('H-88-PROOF'));
-      expect(DoorOptionsService.getStringOptions('dopNumber'), contains('DoP-77-PROOF'));
       expect(DoorOptionsService.getStringOptions('manufacturer'), contains('SuperDoor-GmbH'));
     });
   });

@@ -19,7 +19,10 @@
       "FB-1",
       "FB-2",
       "FB-3",
-      "FB-4"
+      "FB-4",
+      "FH",
+      "H70",
+      "FH-1"
     ],
     "default": "?"
   },
@@ -40,7 +43,9 @@
       "Holz/Glas",
       "Stahlblech",
       "Stahlblech/Glas",
-      "Kunststoff"
+      "Kunststoff",
+      "St",
+      "Holz"
     ],
     "default": "?"
   },
@@ -64,8 +69,18 @@
       "Specht-Holz",
       "Schwarze-Stahl",
       "Hoba-Holz",
-      "Neuform",
+      "Federband",
+      "DO TS 73",
+      "TS ( alt )",
+      "DO TS 83",
+      "GE TS 4000",
+      "GE TS 5000",
       "Hörmann",
+      "Zargen Hagen WEST",
+      "Celler Eisenbau",
+      "Isselwerk",
+      "Schörghuber",
+      "Teckentrup",
       "Türmacher"
     ],
     "default": "?"
@@ -83,7 +98,8 @@
       "DIN R aus St-Flg. Ver.",
       "DIN L ein St-Flg. Ver.",
       "DIN R ein St-Flg. Ver.",
-      "DIN R auswärts Standflg. Ver."
+      "DIN R auswärts Standflg. Ver.",
+      "DIN L auswärts Standflg. Ver."
     ],
     "default": "?"
   },
@@ -197,12 +213,8 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "R",
-      "Antrrieb+RMZ+2RM",
-      "GSR-EMF-2+RMZ",
-      "L-E ISM+RMZ",
-      "R-ISM",
-      "SR mech."
+      "GSR - ISM",
+      "SR Hebel"
     ],
     "default": "?"
   },
@@ -229,12 +241,15 @@
       "MfV-35/92/10-24 U",
       "SVP",
       "Motorschloss",
-      "65/72/9x24/235/FR",
+      "65/72/9/20x235/FR",
       "65/72/9/24x235/FR",
-      "35/92/9/28x270/F",
-      "65/72/9/24/FR",
-      "35/92/9/28/F",
-      "35/92/9/24x235/F"
+      "Nemef/65/72/8-24/235/FR",
+      "55/72/8/20x235/FR",
+      "Nemef/65/72/9/24x235/FR",
+      "65/72/8/20x235/FR",
+      "Nemef/65/72/8-24/235 F",
+      "50/72/8/20-235 FR",
+      "60/72/8-20/230 F"
     ],
     "default": "?"
   },
@@ -290,29 +305,63 @@
   "approvalNumber": {
     "options": [
       "?",
-      "1030",
-      "880802"
+      "88080"
     ],
     "default": "?"
   },
   "manufacturerNumber": {
     "options": [
-      "?",
-      "macher-123"
+      "?"
     ],
     "default": "?"
   },
-  "dopNumber": {
+  "escapeDirectionRespected": {
     "options": [
-      "?"
+      "?",
+      "Nein ✗"
+    ],
+    "default": "?"
+  },
+  "closerOnHingeSide": {
+    "options": [
+      "?",
+      "Nein ✗"
+    ],
+    "default": "?"
+  },
+  "pzCylinder": {
+    "options": [
+      "?",
+      "Nein ✗"
     ],
     "default": "?"
   },
   "roomDesignation": {
     "options": [
       "?",
-      "Bauarbeiten Leermietung",
-      "Dremchip-Flur"
+      "Mtg. Riedel",
+      "Luum",
+      "TH Rechts",
+      "Atelier",
+      "TH Links",
+      "Rüdiger Knop",
+      "Wolf-Design",
+      "Elektrischer  Betriebsraum",
+      "-"
+    ],
+    "default": "?"
+  },
+  "escapeRouteSituation": {
+    "options": [
+      "?",
+      "Nein ✗"
+    ],
+    "default": "?"
+  },
+  "escapeRouteSignage": {
+    "options": [
+      "?",
+      "Nein ✗"
     ],
     "default": "?"
   }
