@@ -74,9 +74,11 @@ class PdfExportService {
       'Schlossmaß',
       'Bandseite',
       'Bandgegenseite',
-      'Sturz<1m',
-      'Sturz>1m',
-      'Sturzhöhe(m)',
+      'Abnahme FSA/Antrieb',
+      'Sturz in >1m',
+      'Sturz in (m)',
+      'Sturz aus >1m',
+      'Sturz aus (m)',
       'Fluchttürst.',
       'Zutritt',
       'Fluchtwegsit.',
@@ -131,9 +133,11 @@ class PdfExportService {
         d['lockDimensions'] as String? ?? '',
         _boolToStr(d['closerOnHingeSide']),
         _boolToStr(d['closerOnOppositeSide']),
-        _boolToStr(d['lintelHeightUnder1m']),
-        _boolToStr(d['lintelHeightOver1m']),
-        d['lintelHeightValue'] != null ? '${d['lintelHeightValue']} m' : '',
+        d['fsaDriveAcceptanceDate'] as String? ?? '',
+        _boolToStr(d['lintelHeightInsideOver1m']),
+        d['lintelHeightInsideValue'] as String? ?? '',
+        _boolToStr(d['lintelHeightOutsideOver1m']),
+        d['lintelHeightOutsideValue'] as String? ?? '',
         _boolToStr(d['escapeDoorControl']),
         d['accessControl'] as String? ?? '',
         _boolToStr(d['escapeRouteSituation']),
@@ -204,7 +208,7 @@ class PdfExportService {
         'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
         'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
-        'Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe < 1m: ${_boolToStr(door['lintelHeightUnder1m'])}  |  Sturzhöhe > 1m: ${_boolToStr(door['lintelHeightOver1m'])}  |  Sturzhöhe (m): ${door['lintelHeightValue'] != null ? '${door['lintelHeightValue']} m' : ''}\n'
+        'Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''})  |  Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})\n'
         'Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
         'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
         'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';

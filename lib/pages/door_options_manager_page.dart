@@ -23,6 +23,8 @@ class _DoorOptionsManagerPageState extends State<DoorOptionsManagerPage> {
     'panicFunction': 'Panikfunktion',
     'approvalNumber': 'Zulassungsnummer',
     'manufacturerNumber': 'Herstellernummer',
+    'lintelHeightInsideValue': 'Sturzhöhe innen (Meter)',
+    'lintelHeightOutsideValue': 'Sturzhöhe außen (Meter)',
     'roomDesignation': 'Raumbezeichnung',
   };
 

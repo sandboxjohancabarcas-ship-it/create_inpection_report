@@ -77,9 +77,11 @@ class ExcelExportService {
       'Zutrittskontrolle',
       'Schließer Bandseite',
       'Schließer Bandgegenseite',
-      'Sturzhöhe < 1m',
-      'Sturzhöhe > 1m',
-      'Sturzhöhe (m)',
+      'Abnahme FSA / Antrieb',
+      'Sturzhöhe innen > 1m',
+      'Sturzhöhe innen (m)',
+      'Sturzhöhe außen > 1m',
+      'Sturzhöhe außen (m)',
       'Fluchttürsteuerung',
       'Fluchtwegsituation',
       'Fluchtwegbeschilderung',
@@ -129,9 +131,11 @@ class ExcelExportService {
         TextCellValue(d['accessControl'] as String? ?? ''),
         TextCellValue(_boolToStr(d['closerOnHingeSide'])),
         TextCellValue(_boolToStr(d['closerOnOppositeSide'])),
-        TextCellValue(_boolToStr(d['lintelHeightUnder1m'])),
-        TextCellValue(_boolToStr(d['lintelHeightOver1m'])),
-        TextCellValue(d['lintelHeightValue'] != null ? '${d['lintelHeightValue']} m' : ''),
+        TextCellValue(d['fsaDriveAcceptanceDate'] as String? ?? ''),
+        TextCellValue(_boolToStr(d['lintelHeightInsideOver1m'])),
+        TextCellValue(d['lintelHeightInsideValue'] as String? ?? ''),
+        TextCellValue(_boolToStr(d['lintelHeightOutsideOver1m'])),
+        TextCellValue(d['lintelHeightOutsideValue'] as String? ?? ''),
         TextCellValue(_boolToStr(d['escapeDoorControl'])),
         TextCellValue(_boolToStr(d['escapeRouteSituation'])),
         TextCellValue(_boolToStr(d['escapeRouteSignage'])),
@@ -232,8 +236,8 @@ class ExcelExportService {
             d['dinConfiguration'] ?? '', d['closerType'] ?? '', d['closingSequenceSystem'] ?? '',
             d['lockDimensions'] ?? '', d['fittingType'] ?? '', d['panicFunction'] ?? '', d['accessControl'] ?? '',
             _boolToStr(d['closerOnHingeSide']), _boolToStr(d['closerOnOppositeSide']),
-            _boolToStr(d['lintelHeightUnder1m']), _boolToStr(d['lintelHeightOver1m']),
-            d['lintelHeightValue'] != null ? '${d['lintelHeightValue']} m' : '',
+            _boolToStr(d['lintelHeightInsideOver1m']), d['lintelHeightInsideValue'] as String? ?? '',
+            _boolToStr(d['lintelHeightOutsideOver1m']), d['lintelHeightOutsideValue'] as String? ?? '',
             _boolToStr(d['escapeDoorControl']),
             _boolToStr(d['escapeRouteSituation']), _boolToStr(d['escapeRouteSignage']),
             _boolToStr(d['blindCylinder']), _boolToStr(d['pzCylinder']),
@@ -288,7 +292,7 @@ class ExcelExportService {
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Türart: ${door['doorType'] ?? ''} | Flügelanzahl: ${door['wingCount'] ?? 1} | Material: ${door['material'] ?? ''} | Hersteller: ${door['manufacturer'] ?? ''} | Zulassungs-Nr.: ${door['approvalNumber'] ?? ''} | Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 5)).value = TextCellValue('DoP-Nr.: ${door['dopNumber'] ?? ''} | Baujahr: ${door['manufactureYear'] ?? ''} | DIN-Richtung: ${door['dinConfiguration'] ?? ''} | Schließertyp: ${door['closerType'] ?? ''} | Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 6)).value = TextCellValue('Schlossmaße: ${door['lockDimensions'] ?? ''} | Beschlagart: ${door['fittingType'] ?? ''} | Panikfunktion: ${door['panicFunction'] ?? ''} | Zutrittskontrolle: ${door['accessControl'] ?? ''}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])} | Schließer Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])} | Sturzhöhe < 1m: ${_boolToStr(door['lintelHeightUnder1m'])} | Sturzhöhe > 1m: ${_boolToStr(door['lintelHeightOver1m'])} | Sturzhöhe (m): ${door['lintelHeightValue'] != null ? '${door['lintelHeightValue']} m' : ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])} | Schließer Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])} | Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''}) | Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 8)).value = TextCellValue('Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])} | Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])} | Fluchtwegbeschilderung: ${_boolToStr(door['escapeRouteSignage'])}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 9)).value = TextCellValue('Blindzylinder: ${_boolToStr(door['blindCylinder'])} | PZ-Zylinder: ${_boolToStr(door['pzCylinder'])} | Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])} | Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])} | Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}');
 

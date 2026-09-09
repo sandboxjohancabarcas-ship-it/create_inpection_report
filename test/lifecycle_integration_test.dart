@@ -27,12 +27,28 @@ void main() {
       await DatabaseService.closeDb();
       await LocalDatabaseService.closeDb();
 
-      if (await File(masterPath).exists()) await File(masterPath).delete();
-      if (await File(localPath).exists()) await File(localPath).delete();
-      if (await File(exportPath).exists()) await File(exportPath).delete();
+      try {
+        if (await File(masterPath).exists()) await File(masterPath).delete();
+      } catch (_) {}
+      try {
+        if (await File(localPath).exists()) await File(localPath).delete();
+      } catch (_) {}
+      try {
+        if (await File(exportPath).exists()) await File(exportPath).delete();
+      } catch (_) {}
 
-      // Initialize Master DB
-      await DatabaseService.getDb();
+      // Initialize Master DB & Local DB, and wipe tables to ensure clean slate
+      final masterDb = await DatabaseService.getDb();
+      await masterDb.delete('inspection_door_errors');
+      await masterDb.delete('inspection_doors');
+      await masterDb.delete('inspections');
+      await masterDb.delete('doors');
+
+      final localDb = await LocalDatabaseService.getDb();
+      await localDb.delete('inspection_door_errors');
+      await localDb.delete('inspection_doors');
+      await localDb.delete('inspections');
+      await localDb.delete('doors');
     });
 
     tearDown(() async {
@@ -75,7 +91,7 @@ void main() {
         lockDimensions: '72/8',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
+        lintelHeightInsideOver1m: false,
         escapeDoorControl: false,
         accessControl: 'None',
         escapeRouteSituation: true,

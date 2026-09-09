@@ -88,6 +88,18 @@ class DoorOptionsService {
     "manufacturerNumber": {
       "options": ["?"],
       "default": "?"
+    },
+    "lintelHeightValue": {
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "default": "?"
+    },
+    "lintelHeightInsideValue": {
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "default": "?"
+    },
+    "lintelHeightOutsideValue": {
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "default": "?"
     }
   };
 

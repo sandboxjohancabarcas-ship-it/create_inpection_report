@@ -69,7 +69,7 @@ void main() {
             lockDimensions TEXT,
             closerOnHingeSide INTEGER,
             closerOnOppositeSide INTEGER,
-            lintelHeightUnder1m INTEGER,
+            lintelHeightInsideOver1m INTEGER DEFAULT 0,
             escapeDoorControl INTEGER,
             accessControl TEXT,
             escapeRouteSituation INTEGER,
@@ -84,9 +84,12 @@ void main() {
             approvalNumber TEXT,
             manufacturerNumber TEXT,
             dopNumber TEXT,
-            lintelHeightOver1m INTEGER,
-            lintelHeightValue INTEGER,
-            manufactureYear TEXT
+            lintelHeightOutsideOver1m INTEGER DEFAULT 0,
+            lintelHeightValue TEXT,
+            lintelHeightInsideValue TEXT,
+            lintelHeightOutsideValue TEXT,
+            manufactureYear TEXT,
+            fsaDriveAcceptanceDate TEXT
           )
         ''');
         await db.execute('''
@@ -149,7 +152,6 @@ void main() {
         lockDimensions: '35/92/9',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
         escapeDoorControl: false,
         accessControl: 'Nein',
         escapeRouteSituation: false,

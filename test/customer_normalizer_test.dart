@@ -39,7 +39,6 @@ void main() {
         lockDimensions: '55/72',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
         escapeDoorControl: false,
         accessControl: '',
         escapeRouteSituation: false,
@@ -56,7 +55,7 @@ void main() {
       final doorEG = doorUG.copyWith(id: 2, floor: 'EG');
       final doorOG = doorUG.copyWith(id: 3, floor: '1.OG');
 
-      final doors = [doorOG, doorUG, doorEG];
+      final List<Door> doors = [doorOG, doorUG, doorEG];
       doors.sort(CustomerNormalizer.compareDoors);
 
       expect(doors[0].floor, equals('UG1'));

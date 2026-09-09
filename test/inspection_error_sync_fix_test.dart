@@ -20,8 +20,12 @@ void main() {
     final masterPath = p.join(dbPath, 'door_inspection.db');
     final localPath = p.join(dbPath, 'working.db');
 
-    if (await File(masterPath).exists()) await File(masterPath).delete();
-    if (await File(localPath).exists()) await File(localPath).delete();
+    try {
+      if (await File(masterPath).exists()) await File(masterPath).delete();
+    } catch (_) {}
+    try {
+      if (await File(localPath).exists()) await File(localPath).delete();
+    } catch (_) {}
   });
 
   tearDown(() async {
@@ -68,7 +72,7 @@ void main() {
         lockDimensions: '',
         closerOnHingeSide: false,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
+        lintelHeightInsideOver1m: false,
         escapeDoorControl: false,
         accessControl: '',
         escapeRouteSituation: false,

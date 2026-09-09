@@ -70,7 +70,7 @@ void main() {
           lockDimensions: '55/72/9',
           closerOnHingeSide: true,
           closerOnOppositeSide: false,
-          lintelHeightUnder1m: false,
+          lintelHeightInsideOver1m: false,
           escapeDoorControl: true,
           accessControl: 'RFID',
           escapeRouteSituation: true,
@@ -135,7 +135,7 @@ void main() {
           lockDimensions: '65/72/9',
           closerOnHingeSide: true,
           closerOnOppositeSide: false,
-          lintelHeightUnder1m: false,
+          lintelHeightInsideOver1m: false,
           escapeDoorControl: false,
           accessControl: '',
           escapeRouteSituation: true,
@@ -178,7 +178,7 @@ void main() {
           packagePath,
           version: 18,
           onCreate: (db, v) async {
-            await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT UNIQUE, doorNumber TEXT, floor TEXT, roomNumber TEXT, roomDesignation TEXT, doorType TEXT, wingCount INTEGER, material TEXT, manufacturer TEXT, dinConfiguration TEXT, closerType TEXT, closingSequenceSystem TEXT, lockDimensions TEXT, closerOnHingeSide INTEGER, closerOnOppositeSide INTEGER, lintelHeightUnder1m INTEGER, escapeDoorControl INTEGER, accessControl TEXT, escapeRouteSituation INTEGER, escapeRouteSignage INTEGER, blindCylinder INTEGER, pzCylinder INTEGER, fittingType TEXT, panicFunction TEXT, escapeDirectionRespected INTEGER, fullPanicStandWing INTEGER, doorFunctionOK INTEGER)');
+            await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT UNIQUE, doorNumber TEXT, floor TEXT, roomNumber TEXT, roomDesignation TEXT, doorType TEXT, wingCount INTEGER, material TEXT, manufacturer TEXT, dinConfiguration TEXT, closerType TEXT, closingSequenceSystem TEXT, lockDimensions TEXT, closerOnHingeSide INTEGER, closerOnOppositeSide INTEGER, lintelHeightInsideOver1m INTEGER DEFAULT 0, escapeDoorControl INTEGER, accessControl TEXT, escapeRouteSituation INTEGER, escapeRouteSignage INTEGER, blindCylinder INTEGER, pzCylinder INTEGER, fittingType TEXT, panicFunction TEXT, escapeDirectionRespected INTEGER, fullPanicStandWing INTEGER, doorFunctionOK INTEGER)');
             await db.execute('CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, clientName TEXT, objectAddress TEXT, date TEXT, contactPerson TEXT, inspectorName TEXT, jobNumber TEXT)');
             await db.execute('CREATE TABLE inspection_doors (id INTEGER PRIMARY KEY, inspectionId INTEGER, doorId INTEGER, status TEXT, notes TEXT)');
             await db.execute('CREATE TABLE inspection_door_errors (id INTEGER PRIMARY KEY, inspectionDoorId INTEGER, errorId INTEGER, errorCode TEXT, quantity INTEGER, severity TEXT, notes TEXT, attachments TEXT)');
@@ -340,7 +340,7 @@ void main() {
           lockDimensions: '',
           closerOnHingeSide: true,
           closerOnOppositeSide: false,
-          lintelHeightUnder1m: false,
+          lintelHeightInsideOver1m: false,
           escapeDoorControl: false,
           accessControl: '',
           escapeRouteSituation: true,
@@ -451,7 +451,7 @@ void main() {
             pkgPath,
             version: 18,
             onCreate: (db, v) async {
-              await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT UNIQUE, doorNumber TEXT, floor TEXT, roomNumber TEXT, roomDesignation TEXT, doorType TEXT, wingCount INTEGER, material TEXT, manufacturer TEXT, dinConfiguration TEXT, closerType TEXT, closingSequenceSystem TEXT, lockDimensions TEXT, closerOnHingeSide INTEGER, closerOnOppositeSide INTEGER, lintelHeightUnder1m INTEGER, escapeDoorControl INTEGER, accessControl TEXT, escapeRouteSituation INTEGER, escapeRouteSignage INTEGER, blindCylinder INTEGER, pzCylinder INTEGER, fittingType TEXT, panicFunction TEXT, escapeDirectionRespected INTEGER, fullPanicStandWing INTEGER, doorFunctionOK INTEGER)');
+              await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorAlias TEXT UNIQUE, doorNumber TEXT, floor TEXT, roomNumber TEXT, roomDesignation TEXT, doorType TEXT, wingCount INTEGER, material TEXT, manufacturer TEXT, dinConfiguration TEXT, closerType TEXT, closingSequenceSystem TEXT, lockDimensions TEXT, closerOnHingeSide INTEGER, closerOnOppositeSide INTEGER, lintelHeightInsideOver1m INTEGER DEFAULT 0, escapeDoorControl INTEGER, accessControl TEXT, escapeRouteSituation INTEGER, escapeRouteSignage INTEGER, blindCylinder INTEGER, pzCylinder INTEGER, fittingType TEXT, panicFunction TEXT, escapeDirectionRespected INTEGER, fullPanicStandWing INTEGER, doorFunctionOK INTEGER)');
               await db.execute('CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, clientName TEXT, objectAddress TEXT, date TEXT, contactPerson TEXT, inspectorName TEXT, jobNumber TEXT)');
               await db.execute('CREATE TABLE inspection_doors (id INTEGER PRIMARY KEY, inspectionId INTEGER, doorId INTEGER, status TEXT, notes TEXT)');
               await db.execute('CREATE TABLE inspection_door_errors (id INTEGER PRIMARY KEY, inspectionDoorId INTEGER, errorId INTEGER, errorCode TEXT, quantity INTEGER, severity TEXT, notes TEXT, attachments TEXT)');

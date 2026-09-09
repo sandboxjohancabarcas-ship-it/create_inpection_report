@@ -47,7 +47,7 @@ void main() {
         lockDimensions: 'PZ 92',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
+        lintelHeightInsideOver1m: false,
         escapeDoorControl: true,
         accessControl: 'RFID',
         escapeRouteSituation: true,

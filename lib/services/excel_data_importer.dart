@@ -324,7 +324,7 @@ class ExcelDataImporter {
         
         final closerHinge = _toBool(_cell(row, 13));
         final closerOpposite = _toBool(_cell(row, 14));
-        final lintelUnder1m = _toBool(_cell(row, 15));
+        final lintelInsideOver1m = _toBool(_cell(row, 15));
         final escapeDoorControl = _toBool(_cell(row, 16));
         final accessControl = _toStr(_cell(row, 17));
         final escapeRouteSituation = _toBool(_cell(row, 18));
@@ -358,7 +358,7 @@ class ExcelDataImporter {
           lockDimensions: lockDim,
           closerOnHingeSide: closerHinge,
           closerOnOppositeSide: closerOpposite,
-          lintelHeightUnder1m: lintelUnder1m,
+          lintelHeightInsideOver1m: lintelInsideOver1m,
           escapeDoorControl: escapeDoorControl,
           accessControl: accessControl,
           escapeRouteSituation: escapeRouteSituation,

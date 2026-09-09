@@ -17,7 +17,8 @@ class Door {
   final String lockDimensions;
   final bool closerOnHingeSide;
   final bool closerOnOppositeSide;
-  final bool lintelHeightUnder1m;
+  final bool lintelHeightInsideOver1m;
+  final bool lintelHeightOutsideOver1m;
   final bool escapeDoorControl;
   final String accessControl;
   final bool escapeRouteSituation;
@@ -32,9 +33,10 @@ class Door {
   final String approvalNumber;
   final String manufacturerNumber;
   final String dopNumber;
-  final bool lintelHeightOver1m;
-  final int? lintelHeightValue;
+  final String? lintelHeightInsideValue;
+  final String? lintelHeightOutsideValue;
   final String manufactureYear;
+  final String? fsaDriveAcceptanceDate;
 
   Door({
     required this.id,
@@ -54,7 +56,8 @@ class Door {
     required this.lockDimensions,
     required this.closerOnHingeSide,
     required this.closerOnOppositeSide,
-    required this.lintelHeightUnder1m,
+    this.lintelHeightInsideOver1m = false,
+    this.lintelHeightOutsideOver1m = false,
     required this.escapeDoorControl,
     required this.accessControl,
     required this.escapeRouteSituation,
@@ -69,9 +72,10 @@ class Door {
     this.approvalNumber = '?',
     this.manufacturerNumber = '?',
     this.dopNumber = '?',
-    this.lintelHeightOver1m = false,
-    this.lintelHeightValue,
+    this.lintelHeightInsideValue,
+    this.lintelHeightOutsideValue,
     this.manufactureYear = '?',
+    this.fsaDriveAcceptanceDate,
   });
 
   // ---------------------------------------------------------
@@ -96,7 +100,8 @@ class Door {
     String? lockDimensions,
     bool? closerOnHingeSide,
     bool? closerOnOppositeSide,
-    bool? lintelHeightUnder1m,
+    bool? lintelHeightInsideOver1m,
+    bool? lintelHeightOutsideOver1m,
     bool? escapeDoorControl,
     String? accessControl,
     bool? escapeRouteSituation,
@@ -111,9 +116,10 @@ class Door {
     String? approvalNumber,
     String? manufacturerNumber,
     String? dopNumber,
-    bool? lintelHeightOver1m,
-    int? lintelHeightValue,
+    String? lintelHeightInsideValue,
+    String? lintelHeightOutsideValue,
     String? manufactureYear,
+    String? fsaDriveAcceptanceDate,
   }) {
     return Door(
       id: id ?? this.id,
@@ -135,8 +141,10 @@ class Door {
       closerOnHingeSide: closerOnHingeSide ?? this.closerOnHingeSide,
       closerOnOppositeSide:
           closerOnOppositeSide ?? this.closerOnOppositeSide,
-      lintelHeightUnder1m:
-          lintelHeightUnder1m ?? this.lintelHeightUnder1m,
+      lintelHeightInsideOver1m:
+          lintelHeightInsideOver1m ?? this.lintelHeightInsideOver1m,
+      lintelHeightOutsideOver1m:
+          lintelHeightOutsideOver1m ?? this.lintelHeightOutsideOver1m,
       escapeDoorControl: escapeDoorControl ?? this.escapeDoorControl,
       accessControl: accessControl ?? this.accessControl,
       escapeRouteSituation:
@@ -155,14 +163,14 @@ class Door {
       approvalNumber: approvalNumber ?? this.approvalNumber,
       manufacturerNumber: manufacturerNumber ?? this.manufacturerNumber,
       dopNumber: dopNumber ?? this.dopNumber,
-      lintelHeightOver1m: lintelHeightOver1m ?? this.lintelHeightOver1m,
-      lintelHeightValue: lintelHeightValue ?? this.lintelHeightValue,
+      lintelHeightInsideValue: lintelHeightInsideValue ?? this.lintelHeightInsideValue,
+      lintelHeightOutsideValue: lintelHeightOutsideValue ?? this.lintelHeightOutsideValue,
       manufactureYear: manufactureYear ?? this.manufactureYear,
+      fsaDriveAcceptanceDate: fsaDriveAcceptanceDate ?? this.fsaDriveAcceptanceDate,
     );
   }
 
   Map<String, dynamic> toMap() => {
-        
         // Door specifications
         'id': id,
         'pos': pos,
@@ -181,7 +189,8 @@ class Door {
         'lockDimensions': lockDimensions,
         'closerOnHingeSide': closerOnHingeSide ? 1 : 0,
         'closerOnOppositeSide': closerOnOppositeSide ? 1 : 0,
-        'lintelHeightUnder1m': lintelHeightUnder1m ? 1 : 0,
+        'lintelHeightInsideOver1m': lintelHeightInsideOver1m ? 1 : 0,
+        'lintelHeightOutsideOver1m': lintelHeightOutsideOver1m ? 1 : 0,
         'escapeDoorControl': escapeDoorControl ? 1 : 0,
         'accessControl': accessControl,
         'escapeRouteSituation': escapeRouteSituation ? 1 : 0,
@@ -197,9 +206,10 @@ class Door {
         'approvalNumber': approvalNumber,
         'manufacturerNumber': manufacturerNumber,
         'dopNumber': dopNumber,
-        'lintelHeightOver1m': lintelHeightOver1m ? 1 : 0,
-        'lintelHeightValue': lintelHeightValue,
+        'lintelHeightInsideValue': lintelHeightInsideValue,
+        'lintelHeightOutsideValue': lintelHeightOutsideValue,
         'manufactureYear': manufactureYear,
+        'fsaDriveAcceptanceDate': fsaDriveAcceptanceDate,
       };
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
@@ -221,7 +231,8 @@ class Door {
         lockDimensions: map['lockDimensions'] ?? '',
         closerOnHingeSide: map['closerOnHingeSide'] == 1,
         closerOnOppositeSide: map['closerOnOppositeSide'] == 1,
-        lintelHeightUnder1m: map['lintelHeightUnder1m'] == 1,
+        lintelHeightInsideOver1m: map['lintelHeightInsideOver1m'] == 1,
+        lintelHeightOutsideOver1m: map['lintelHeightOutsideOver1m'] == 1 || map['lintelHeightOver1m'] == 1,
         escapeDoorControl: map['escapeDoorControl'] == 1,
         accessControl: map['accessControl'] ?? '',
         escapeRouteSituation: map['escapeRouteSituation'] == 1,
@@ -238,11 +249,14 @@ class Door {
         approvalNumber: map['approvalNumber'] ?? '?',
         manufacturerNumber: map['manufacturerNumber'] ?? '?',
         dopNumber: map['dopNumber'] ?? '?',
-        lintelHeightOver1m: map['lintelHeightOver1m'] == 1,
-        lintelHeightValue: map['lintelHeightValue'] is int
-            ? map['lintelHeightValue']
-            : int.tryParse(map['lintelHeightValue']?.toString() ?? ''),
+        lintelHeightInsideValue: map['lintelHeightInsideValue'] is int
+            ? '${map['lintelHeightInsideValue']}m'
+            : map['lintelHeightInsideValue']?.toString() ?? (map['lintelHeightValue'] is int ? '${map['lintelHeightValue']}m' : map['lintelHeightValue']?.toString()),
+        lintelHeightOutsideValue: map['lintelHeightOutsideValue'] is int
+            ? '${map['lintelHeightOutsideValue']}m'
+            : map['lintelHeightOutsideValue']?.toString(),
         manufactureYear: map['manufactureYear'] ?? '?',
+        fsaDriveAcceptanceDate: map['fsaDriveAcceptanceDate'],
       );
 
   /// Generates an intelligent, human-readable, structured business alias.

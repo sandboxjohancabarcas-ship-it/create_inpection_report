@@ -25,7 +25,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 20, // v20: Added approvalNumber, manufacturerNumber, dopNumber, lintelHeightOver1m, lintelHeightValue, manufactureYear
+      version: 23, // v23: Added separate lintelHeightInsideValue and lintelHeightOutsideValue
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -48,7 +48,7 @@ class DatabaseService {
             lockDimensions TEXT,
             closerOnHingeSide INTEGER,
             closerOnOppositeSide INTEGER,
-            lintelHeightUnder1m INTEGER,
+            lintelHeightInsideOver1m INTEGER DEFAULT 0,
             escapeDoorControl INTEGER,
             accessControl TEXT,
             escapeRouteSituation INTEGER,
@@ -63,9 +63,12 @@ class DatabaseService {
             approvalNumber TEXT DEFAULT '?',
             manufacturerNumber TEXT DEFAULT '?',
             dopNumber TEXT DEFAULT '?',
-            lintelHeightOver1m INTEGER DEFAULT 0,
-            lintelHeightValue INTEGER,
-            manufactureYear TEXT DEFAULT '?'
+            lintelHeightOutsideOver1m INTEGER DEFAULT 0,
+            lintelHeightValue TEXT,
+            lintelHeightInsideValue TEXT,
+            lintelHeightOutsideValue TEXT,
+            manufactureYear TEXT DEFAULT '?',
+            fsaDriveAcceptanceDate TEXT
           );
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
@@ -243,6 +246,42 @@ class DatabaseService {
             print('[DatabaseService] Main DB upgraded to v20: new door properties added.');
           } catch (e) {
             print('Main DB migration warning (v20 columns): $e');
+          }
+        }
+
+        if (oldVersion < 21) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN fsaDriveAcceptanceDate TEXT");
+            print('[DatabaseService] Main DB upgraded to v21: fsaDriveAcceptanceDate column added.');
+          } catch (e) {
+            print('Main DB migration warning (v21 column): $e');
+          }
+        }
+
+        if (oldVersion < 22) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightInsideOver1m INTEGER DEFAULT 0");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOutsideOver1m INTEGER DEFAULT 0");
+            try {
+              await db.execute("UPDATE doors SET lintelHeightOutsideOver1m = lintelHeightOver1m WHERE lintelHeightOver1m = 1");
+            } catch (_) {}
+            print('[DatabaseService] Main DB upgraded to v22: lintel height properties updated.');
+          } catch (e) {
+            print('Main DB migration warning (v22 columns): $e');
+          }
+        }
+
+        if (oldVersion < 23) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightInsideValue TEXT");
+            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOutsideValue TEXT");
+            try {
+              await db.execute("UPDATE doors SET lintelHeightInsideValue = lintelHeightValue WHERE lintelHeightInsideOver1m = 1 AND (lintelHeightInsideValue IS NULL OR lintelHeightInsideValue = '')");
+              await db.execute("UPDATE doors SET lintelHeightOutsideValue = lintelHeightValue WHERE lintelHeightOutsideOver1m = 1 AND (lintelHeightOutsideValue IS NULL OR lintelHeightOutsideValue = '')");
+            } catch (_) {}
+            print('[DatabaseService] Main DB upgraded to v23: lintelHeightInsideValue and lintelHeightOutsideValue added.');
+          } catch (e) {
+            print('Main DB migration warning (v23 columns): $e');
           }
         }
       },

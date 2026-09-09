@@ -46,7 +46,7 @@ void main() {
       lockDimensions: '72/8',
       closerOnHingeSide: true,
       closerOnOppositeSide: false,
-      lintelHeightUnder1m: false,
+      lintelHeightInsideOver1m: false,
       escapeDoorControl: false,
       accessControl: 'None',
       escapeRouteSituation: true,

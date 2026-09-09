@@ -92,7 +92,7 @@ void main() {
         lockDimensions: '',
         closerOnHingeSide: false,
         closerOnOppositeSide: false,
-        lintelHeightUnder1m: false,
+        lintelHeightInsideOver1m: false,
         escapeDoorControl: false,
         accessControl: '',
         escapeRouteSituation: false,

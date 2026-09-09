@@ -19,10 +19,7 @@
       "FB-1",
       "FB-2",
       "FB-3",
-      "FB-4",
-      "FH",
-      "H70",
-      "FH-1"
+      "FB-4"
     ],
     "default": "?"
   },
@@ -43,9 +40,7 @@
       "Holz/Glas",
       "Stahlblech",
       "Stahlblech/Glas",
-      "Kunststoff",
-      "St",
-      "Holz"
+      "Kunststoff"
     ],
     "default": "?"
   },
@@ -69,19 +64,7 @@
       "Specht-Holz",
       "Schwarze-Stahl",
       "Hoba-Holz",
-      "Federband",
-      "DO TS 73",
-      "TS ( alt )",
-      "DO TS 83",
-      "GE TS 4000",
-      "GE TS 5000",
-      "Hörmann",
-      "Zargen Hagen WEST",
-      "Celler Eisenbau",
-      "Isselwerk",
-      "Schörghuber",
-      "Teckentrup",
-      "Türmacher"
+      "Hörmann"
     ],
     "default": "?"
   },
@@ -97,9 +80,7 @@
       "DIN L aus St-Flg. Ver.",
       "DIN R aus St-Flg. Ver.",
       "DIN L ein St-Flg. Ver.",
-      "DIN R ein St-Flg. Ver.",
-      "DIN R auswärts Standflg. Ver.",
-      "DIN L auswärts Standflg. Ver."
+      "DIN R ein St-Flg. Ver."
     ],
     "default": "?"
   },
@@ -213,8 +194,7 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "GSR - ISM",
-      "SR Hebel"
+      "SR mech."
     ],
     "default": "?"
   },
@@ -241,15 +221,8 @@
       "MfV-35/92/10-24 U",
       "SVP",
       "Motorschloss",
-      "65/72/9/20x235/FR",
-      "65/72/9/24x235/FR",
-      "Nemef/65/72/8-24/235/FR",
-      "55/72/8/20x235/FR",
-      "Nemef/65/72/9/24x235/FR",
-      "65/72/8/20x235/FR",
-      "Nemef/65/72/8-24/235 F",
-      "50/72/8/20-235 FR",
-      "60/72/8-20/230 F"
+      "35/92/9/24x235/F",
+      "65/72/9/24x235/FR"
     ],
     "default": "?"
   },
@@ -304,8 +277,7 @@
   },
   "approvalNumber": {
     "options": [
-      "?",
-      "88080"
+      "?"
     ],
     "default": "?"
   },
@@ -315,53 +287,39 @@
     ],
     "default": "?"
   },
-  "escapeDirectionRespected": {
+  "lintelHeightValue": {
     "options": [
       "?",
-      "Nein ✗"
+      "1m",
+      "2m",
+      "3m",
+      "4m",
+      "5m",
+      ">5m"
     ],
     "default": "?"
   },
-  "closerOnHingeSide": {
+  "lintelHeightInsideValue": {
     "options": [
       "?",
-      "Nein ✗"
+      "1m",
+      "2m",
+      "3m",
+      "4m",
+      "5m",
+      ">5m"
     ],
     "default": "?"
   },
-  "pzCylinder": {
+  "lintelHeightOutsideValue": {
     "options": [
       "?",
-      "Nein ✗"
-    ],
-    "default": "?"
-  },
-  "roomDesignation": {
-    "options": [
-      "?",
-      "Mtg. Riedel",
-      "Luum",
-      "TH Rechts",
-      "Atelier",
-      "TH Links",
-      "Rüdiger Knop",
-      "Wolf-Design",
-      "Elektrischer  Betriebsraum",
-      "-"
-    ],
-    "default": "?"
-  },
-  "escapeRouteSituation": {
-    "options": [
-      "?",
-      "Nein ✗"
-    ],
-    "default": "?"
-  },
-  "escapeRouteSignage": {
-    "options": [
-      "?",
-      "Nein ✗"
+      "1m",
+      "2m",
+      "3m",
+      "4m",
+      "5m",
+      ">5m"
     ],
     "default": "?"
   }

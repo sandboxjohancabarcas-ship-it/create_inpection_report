@@ -62,10 +62,15 @@ class DoorValidator {
       riskNote:
           'Änderung der Fluchtrichtung: Türen müssen in Fluchtrichtung öffnen (LBO §35).',
     ),
-    'lintelHeightUnder1m': ComplianceInfo(
+    'lintelHeightInsideOver1m': ComplianceInfo(
       norm: 'DIN 18650-1',
       riskNote:
-          'Änderung der Sturzhöhe: Beeinflusst zulässige Türschließer-Montagepositionen nach DIN 18650.',
+          'Änderung der Sturzhöhe innen: Beeinflusst zulässige Türschließer-Montagepositionen nach DIN 18650.',
+    ),
+    'lintelHeightOutsideOver1m': ComplianceInfo(
+      norm: 'DIN 18650-1',
+      riskNote:
+          'Änderung der Sturzhöhe außen: Beeinflusst zulässige Türschließer-Montagepositionen nach DIN 18650.',
     ),
     'closerOnHingeSide': ComplianceInfo(
       norm: 'DIN EN 1154',
@@ -308,8 +313,10 @@ class DoorValidator {
         incoming.escapeRouteSignage, existing.escapeRouteSignage);
     checkSafety('escapeDirectionRespected', 'Fluchtrichtung eingehalten',
         incoming.escapeDirectionRespected, existing.escapeDirectionRespected);
-    checkSafety('lintelHeightUnder1m', 'Sturzhöhe < 1 m',
-        incoming.lintelHeightUnder1m, existing.lintelHeightUnder1m);
+    checkSafety('lintelHeightInsideOver1m', 'Sturzhöhe innen > 1m',
+        incoming.lintelHeightInsideOver1m, existing.lintelHeightInsideOver1m);
+    checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 1m',
+        incoming.lintelHeightOutsideOver1m, existing.lintelHeightOutsideOver1m);
     checkSafety('closerOnHingeSide', 'Schließer Bandseite',
         incoming.closerOnHingeSide, existing.closerOnHingeSide);
     checkSafety('closerOnOppositeSide', 'Schließer Bandgegenseite',
@@ -387,6 +394,8 @@ class DoorValidator {
     final Map<String, String> dropdownPropertyMap = {
       'approvalNumber': 'Zulassungsnummer',
       'manufacturerNumber': 'Herstellernummer',
+      'lintelHeightInsideValue': 'Sturzhöhe innen (Meter)',
+      'lintelHeightOutsideValue': 'Sturzhöhe außen (Meter)',
       'doorType': 'Türart',
       'material': 'Material',
       'manufacturer': 'Hersteller',
@@ -401,6 +410,8 @@ class DoorValidator {
     final Map<String, String> doorValues = {
       'approvalNumber': incoming.approvalNumber,
       'manufacturerNumber': incoming.manufacturerNumber,
+      'lintelHeightInsideValue': incoming.lintelHeightInsideValue ?? '',
+      'lintelHeightOutsideValue': incoming.lintelHeightOutsideValue ?? '',
       'doorType': incoming.doorType,
       'material': incoming.material,
       'manufacturer': incoming.manufacturer,
@@ -415,6 +426,8 @@ class DoorValidator {
     final Map<String, String> existingValues = existing != null ? {
       'approvalNumber': existing.approvalNumber,
       'manufacturerNumber': existing.manufacturerNumber,
+      'lintelHeightInsideValue': existing.lintelHeightInsideValue ?? '',
+      'lintelHeightOutsideValue': existing.lintelHeightOutsideValue ?? '',
       'doorType': existing.doorType,
       'material': existing.material,
       'manufacturer': existing.manufacturer,

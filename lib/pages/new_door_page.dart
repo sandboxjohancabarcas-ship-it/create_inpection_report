@@ -48,6 +48,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   String manufacturer = '?';
   String manufacturerNumber = '?';
   String manufactureYear = '?';
+  String? fsaDriveAcceptanceDate;
 
   // Boolean states
   bool escapeSignage = false;
@@ -57,9 +58,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   bool pzCylinder = false;
   bool closerOnHingeSide = false;
   bool closerOnOppositeSide = false;
-  bool lintelHeightUnder1m = false;
-  bool lintelHeightOver1m = false;
-  int? lintelHeightValue;
+  bool lintelHeightInsideOver1m = false;
+  bool lintelHeightOutsideOver1m = false;
+  String? lintelHeightInsideValue;
+  String? lintelHeightOutsideValue;
   bool escapeRouteSituation = false;
   bool escapeDirectionRespected = false;
   bool fullPanicStandWing = false;
@@ -152,9 +154,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     pzCylinder = d?.pzCylinder ?? false;
     closerOnHingeSide = d?.closerOnHingeSide ?? false;
     closerOnOppositeSide = d?.closerOnOppositeSide ?? false;
-    lintelHeightUnder1m = d?.lintelHeightUnder1m ?? false;
-    lintelHeightOver1m = d?.lintelHeightOver1m ?? false;
-    lintelHeightValue = d?.lintelHeightValue;
+    lintelHeightInsideOver1m = d?.lintelHeightInsideOver1m ?? false;
+    lintelHeightOutsideOver1m = d?.lintelHeightOutsideOver1m ?? false;
+    lintelHeightInsideValue = d?.lintelHeightInsideValue;
+    lintelHeightOutsideValue = d?.lintelHeightOutsideValue;
     escapeRouteSituation = d?.escapeRouteSituation ?? false;
     escapeDirectionRespected = d?.escapeDirectionRespected ?? false;
     fullPanicStandWing = d?.fullPanicStandWing ?? false;
@@ -164,6 +167,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     manufacturer = d?.manufacturer ?? DoorOptionsService.getDefault('manufacturer') ?? '?';
     manufacturerNumber = d?.manufacturerNumber ?? '?';
     manufactureYear = d?.manufactureYear ?? '?';
+    fsaDriveAcceptanceDate = d?.fsaDriveAcceptanceDate;
 
     // Initialize dropdowns (use defaults from config file if creating a new door)
     accessControl = d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
@@ -281,7 +285,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       lockDimensions: lockDimensionsController.text,
       closerOnHingeSide: closerOnHingeSide,
       closerOnOppositeSide: closerOnOppositeSide,
-      lintelHeightUnder1m: lintelHeightUnder1m,
+      lintelHeightInsideOver1m: lintelHeightInsideOver1m,
       escapeDoorControl: escapeDoorControl,
       accessControl: accessControl ?? DoorOptionsService.getDefault('accessControl') ?? 'Nein',
       escapeRouteSituation: escapeRouteSituation,
@@ -296,9 +300,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       approvalNumber: approvalNumber,
       manufacturerNumber: manufacturerNumber,
       dopNumber: dopNumberController.text,
-      lintelHeightOver1m: lintelHeightOver1m,
-      lintelHeightValue: lintelHeightValue,
+      lintelHeightOutsideOver1m: lintelHeightOutsideOver1m,
+      lintelHeightInsideValue: lintelHeightInsideOver1m ? lintelHeightInsideValue : null,
+      lintelHeightOutsideValue: lintelHeightOutsideOver1m ? lintelHeightOutsideValue : null,
       manufactureYear: manufactureYear,
+      fsaDriveAcceptanceDate: fsaDriveAcceptanceDate,
     );
   }
 
@@ -763,6 +769,42 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const Text("Installation", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
+            // Abnahme FSA / Antrieb (Datetime)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                "Abnahme FSA / Antrieb: ${fsaDriveAcceptanceDate != null && fsaDriveAcceptanceDate!.isNotEmpty ? fsaDriveAcceptanceDate : '? (Keine Abnahme)'}",
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    tooltip: 'Datum auswählen',
+                    onPressed: () async {
+                      final initial = DateTime.tryParse(fsaDriveAcceptanceDate ?? '') ?? DateTime.now();
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: initial,
+                        firstDate: DateTime(1970),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        final formatted = "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                        setState(() => fsaDriveAcceptanceDate = formatted);
+                      }
+                    },
+                  ),
+                  if (fsaDriveAcceptanceDate != null && fsaDriveAcceptanceDate!.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Datum zurücksetzen',
+                      onPressed: () => setState(() => fsaDriveAcceptanceDate = null),
+                    ),
+                ],
+              ),
+            ),
+
             // Closer on hinge side
             SwitchListTile(
               title: const Text("Schließer auf Bandseite"),
@@ -777,53 +819,71 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               onChanged: (val) => setState(() => closerOnOppositeSide = val),
             ),
 
-            // Lintel height under 1m
+            // Lintel height inside over 1m
             SwitchListTile(
-              title: const Text("Stürzhöhe unter 1m"),
-              value: lintelHeightUnder1m,
+              title: const Text("Sturzhöhe innen über 1m"),
+              value: lintelHeightInsideOver1m,
               onChanged: (val) => setState(() {
-                lintelHeightUnder1m = val;
-                if (val) {
-                  lintelHeightOver1m = false;
-                  lintelHeightValue = null;
+                lintelHeightInsideOver1m = val;
+                if (!val) {
+                  lintelHeightInsideValue = null;
+                } else if (lintelHeightInsideValue == null) {
+                  lintelHeightInsideValue = '1m';
                 }
               }),
             ),
 
-            // Lintel height over 1m
-            SwitchListTile(
-              title: const Text("Stürzhöhe über 1m"),
-              value: lintelHeightOver1m,
-              onChanged: (val) => setState(() {
-                lintelHeightOver1m = val;
-                if (val) {
-                  lintelHeightUnder1m = false;
-                  if (lintelHeightValue == null) lintelHeightValue = 1;
-                } else {
-                  lintelHeightValue = null;
-                }
-              }),
-            ),
-
-            // Dropdown menu for 1 to 5 meters (visible only when lintelHeightOver1m is true)
-            if (lintelHeightOver1m)
+            // Dropdown menu for inside lintel height (visible only when lintelHeightInsideOver1m is true)
+            if (lintelHeightInsideOver1m)
               Padding(
                 padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
-                child: DropdownButtonFormField<int>(
+                child: DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
-                    labelText: "Stürzhöhe in Metern (1-5m)",
+                    labelText: "Sturzhöhe innen (Meter)",
                     border: OutlineInputBorder(),
                   ),
-                  value: (lintelHeightValue != null && lintelHeightValue! >= 1 && lintelHeightValue! <= 5)
-                      ? lintelHeightValue
-                      : 1,
-                  items: [1, 2, 3, 4, 5]
-                      .map((m) => DropdownMenuItem<int>(
-                            value: m,
-                            child: Text('$m m'),
+                  value: _getDropdownValue('lintelHeightInsideValue', lintelHeightInsideValue),
+                  items: _getDropdownItems('lintelHeightInsideValue', lintelHeightInsideValue)
+                      .map((val) => DropdownMenuItem<String>(
+                            value: val,
+                            child: Text(val),
                           ))
                       .toList(),
-                  onChanged: (val) => setState(() => lintelHeightValue = val),
+                  onChanged: (val) => setState(() => lintelHeightInsideValue = val),
+                ),
+              ),
+
+            // Lintel height outside over 1m
+            SwitchListTile(
+              title: const Text("Sturzhöhe außen über 1m"),
+              value: lintelHeightOutsideOver1m,
+              onChanged: (val) => setState(() {
+                lintelHeightOutsideOver1m = val;
+                if (!val) {
+                  lintelHeightOutsideValue = null;
+                } else if (lintelHeightOutsideValue == null) {
+                  lintelHeightOutsideValue = '1m';
+                }
+              }),
+            ),
+
+            // Dropdown menu for outside lintel height (visible only when lintelHeightOutsideOver1m is true)
+            if (lintelHeightOutsideOver1m)
+              Padding(
+                padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+                child: DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(
+                    labelText: "Sturzhöhe außen (Meter)",
+                    border: OutlineInputBorder(),
+                  ),
+                  value: _getDropdownValue('lintelHeightOutsideValue', lintelHeightOutsideValue),
+                  items: _getDropdownItems('lintelHeightOutsideValue', lintelHeightOutsideValue)
+                      .map((val) => DropdownMenuItem<String>(
+                            value: val,
+                            child: Text(val),
+                          ))
+                      .toList(),
+                  onChanged: (val) => setState(() => lintelHeightOutsideValue = val),
                 ),
               ),
 
