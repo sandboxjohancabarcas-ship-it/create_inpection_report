@@ -5,6 +5,7 @@ import '../services/door_options_service.dart';
 import '../models/models.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../widgets/editable_dropdown_field.dart';
+import '../widgets/barcode_scanner_dialog.dart';
 import 'error_management_page.dart';
 import 'door_history_page.dart';
 
@@ -40,6 +41,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController roomNumberController;
   late TextEditingController lockDimensionsController;
   late TextEditingController doorAliasController;
+  late TextEditingController provisionalAliasController;
   late TextEditingController dopNumberController;
   bool isAliasManuallyEdited = false;
 
@@ -111,6 +113,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     roomNumberController = TextEditingController(text: d?.roomNumber ?? '');
     lockDimensionsController = TextEditingController(text: d?.lockDimensions ?? '');
     doorAliasController = TextEditingController(text: d?.doorAlias ?? '');
+    provisionalAliasController = TextEditingController(text: d?.provisionalAlias ?? d?.doorAlias ?? '');
     dopNumberController = TextEditingController(text: d?.dopNumber ?? '');
 
     if (d?.doorAlias != null && d!.doorAlias!.isNotEmpty) {
@@ -120,26 +123,31 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     if (d == null) {
       void updateAlias() {
         if (!isAliasManuallyEdited) {
-          doorAliasController.text = Door.generateAlias(
-            customerNameController.text,
-            customerAddressController.text,
-            doorNumberController.text,
+          final gen = Door.generateAlias(
+            projectNumber: projectNumberController.text,
+            pos: pos,
             floor: floorController.text,
+            doorNumber: doorNumberController.text,
           );
+          provisionalAliasController.text = gen;
+          if (doorAliasController.text.isEmpty || doorAliasController.text == provisionalAliasController.text) {
+            doorAliasController.text = gen;
+          }
         }
       }
       customerNameController.addListener(updateAlias);
       customerAddressController.addListener(updateAlias);
       doorNumberController.addListener(updateAlias);
       floorController.addListener(updateAlias);
+      projectNumberController.addListener(updateAlias);
     }
 
     doorAliasController.addListener(() {
       final expected = Door.generateAlias(
-        customerNameController.text,
-        customerAddressController.text,
-        doorNumberController.text,
+        projectNumber: projectNumberController.text,
+        pos: pos,
         floor: floorController.text,
+        doorNumber: doorNumberController.text,
       );
       if (doorAliasController.text != expected && doorAliasController.text.isNotEmpty) {
         isAliasManuallyEdited = true;
@@ -197,6 +205,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   @override
   void dispose() {
     doorAliasController.dispose();
+    provisionalAliasController.dispose();
     projectNumberController.dispose();
     dopNumberController.dispose();
     super.dispose();
@@ -258,19 +267,26 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   // Build a Door object from form fields
   Door buildDoor() {
+    String prov = provisionalAliasController.text.trim();
     String alias = doorAliasController.text.trim();
-    if (alias.isEmpty) {
-      alias = Door.generateAlias(
-        customerNameController.text,
-        customerAddressController.text,
-        doorNumberController.text,
+    if (prov.isEmpty && alias.isNotEmpty) {
+      prov = alias;
+    } else if (prov.isEmpty) {
+      prov = Door.generateAlias(
+        projectNumber: projectNumberController.text,
+        pos: pos,
         floor: floorController.text,
+        doorNumber: doorNumberController.text,
       );
+    }
+    if (alias.isEmpty) {
+      alias = prov;
     }
     return Door(
       id: widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
       pos: pos,
       doorAlias: alias,
+      provisionalAlias: prov,
       doorNumber: doorNumberController.text,
       floor: floorController.text,
       roomNumber: roomNumberController.text,
@@ -606,15 +622,44 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Türnummer"),
             ),
 
-            // Door Alias (Barcode / Unique ID)
+            // Alias (Generated/Provisional Alias)
+            TextField(
+              controller: provisionalAliasController,
+              enabled: widget.isManagerMode, // Read-only for Inspector, editable for Manager
+              decoration: InputDecoration(
+                labelText: "Alias",
+                helperText: widget.isManagerMode 
+                    ? "Automatisch erzeugter Alias (vom Manager bearbeitbar)"
+                    : "Automatisch erzeugter Alias (schreibgeschützt für Inspektor)",
+                prefixIcon: const Icon(Icons.pin, color: Colors.grey),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Barcode (Physical Barcode / QR)
             TextField(
               controller: doorAliasController,
-              enabled: true, // Editable by Inspector (first physical inspection barcode scan) and Manager
-              maxLength: 24,
-              decoration: const InputDecoration(
-                labelText: "Tür-Identität (Alias / Barcode)",
-                helperText: "Dauerhafte, eindeutige ID (z.B. Barcode bei Erstprüfung)",
-                suffixIcon: Icon(Icons.qr_code_scanner),
+              enabled: true, // Editable at all times for inspector and manager
+              maxLength: 32,
+              decoration: InputDecoration(
+                labelText: "Barcode",
+                helperText: "Physischer Barcode / QR-Code der Tür (jederzeit bearbeitbar)",
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
+                  tooltip: "Barcode / QR-Code scannen",
+                  onPressed: () async {
+                    final scanned = await BarcodeScannerDialog.show(
+                      context,
+                      title: 'Tür-Barcode scannen',
+                    );
+                    if (scanned != null && scanned.isNotEmpty) {
+                      setState(() {
+                        doorAliasController.text = scanned;
+                        isAliasManuallyEdited = true;
+                      });
+                    }
+                  },
+                ),
               ),
             ),
             
@@ -805,16 +850,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               ),
             ),
 
-            // Closer on hinge side
+            // Lintel height / Closer position on hinge side
             SwitchListTile(
-              title: const Text("Schließer auf Bandseite"),
+              title: const Text("Sturzhöhe auf Bandseite"),
               value: closerOnHingeSide,
               onChanged: (val) => setState(() => closerOnHingeSide = val),
             ),
 
-            // Closer on opposite side
+            // Lintel height / Closer position on opposite side
             SwitchListTile(
-              title: const Text("Schließer auf Gegenseite"),
+              title: const Text("Sturzhöhe auf Gegenseite"),
               value: closerOnOppositeSide,
               onChanged: (val) => setState(() => closerOnOppositeSide = val),
             ),

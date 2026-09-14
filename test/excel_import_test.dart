@@ -34,19 +34,19 @@ void main() {
     });
 
     test('Door.generateAlias generates distinct aliases when floor differs for same doorNumber', () {
-      final egAlias = Door.generateAlias('Stadt Geesthacht', 'Regenbogen', '1', floor: 'EG');
-      final ogAlias = Door.generateAlias('Stadt Geesthacht', 'Regenbogen', '1', floor: '1.OG');
+      final egAlias = Door.generateAlias(projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1');
+      final ogAlias = Door.generateAlias(projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1');
 
       expect(egAlias, isNot(equals(ogAlias)));
       expect(egAlias, contains('EG'));
-      expect(ogAlias, contains('OG1'));
+      expect(ogAlias, contains('1.OG'));
     });
 
     test('Inserting doors with same doorNumber on different floors preserves both records', () async {
       final egDoor = Door(
         id: null,
         pos: 1,
-        doorAlias: Door.generateAlias('Client', 'Address', '1', floor: 'EG'),
+        doorAlias: Door.generateAlias(projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1'),
         doorNumber: '1',
         floor: 'EG',
         roomNumber: '101',
@@ -78,7 +78,7 @@ void main() {
       final ogDoor = Door(
         id: null,
         pos: 2,
-        doorAlias: Door.generateAlias('Client', 'Address', '1', floor: '1.OG'),
+        doorAlias: Door.generateAlias(projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1'),
         doorNumber: '1',
         floor: '1.OG',
         roomNumber: '201',

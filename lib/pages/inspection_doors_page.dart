@@ -136,7 +136,9 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     if (scanned == null || scanned.isEmpty || !mounted) return;
 
     final matchingDoor = _doors.firstWhereOrNull(
-      (d) => (d.doorAlias?.toLowerCase() == scanned.toLowerCase()) || (d.doorNumber.toLowerCase() == scanned.toLowerCase()),
+      (d) => (d.doorAlias?.toLowerCase() == scanned.toLowerCase()) ||
+             (d.provisionalAlias?.toLowerCase() == scanned.toLowerCase()) ||
+             (d.doorNumber.toLowerCase() == scanned.toLowerCase()),
     );
 
     if (matchingDoor != null) {

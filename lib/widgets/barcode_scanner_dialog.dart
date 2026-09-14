@@ -186,7 +186,7 @@ class _BarcodeScannerDialogState extends State<BarcodeScannerDialog> {
               TextField(
                 controller: _manualController,
                 decoration: InputDecoration(
-                  labelText: 'Barcode / Alias manuell eingeben',
+                  labelText: 'Barcode manuell eingeben',
                   hintText: 'z.B. BAR-2026-9941',
                   prefixIcon: const Icon(Icons.keyboard),
                   suffixIcon: IconButton(

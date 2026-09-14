@@ -317,9 +317,9 @@ class DoorValidator {
         incoming.lintelHeightInsideOver1m, existing.lintelHeightInsideOver1m);
     checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 1m',
         incoming.lintelHeightOutsideOver1m, existing.lintelHeightOutsideOver1m);
-    checkSafety('closerOnHingeSide', 'Schließer Bandseite',
+    checkSafety('closerOnHingeSide', 'Sturzhöhe auf Bandseite',
         incoming.closerOnHingeSide, existing.closerOnHingeSide);
-    checkSafety('closerOnOppositeSide', 'Schließer Bandgegenseite',
+    checkSafety('closerOnOppositeSide', 'Sturzhöhe auf Gegenseite',
         incoming.closerOnOppositeSide, existing.closerOnOppositeSide);
     checkSafety('blindCylinder', 'Blindzylinder',
         incoming.blindCylinder, existing.blindCylinder);

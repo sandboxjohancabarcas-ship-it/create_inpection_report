@@ -37,7 +37,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 13,  // v13: Added separate lintelHeightInsideValue and lintelHeightOutsideValue
+      version: 14,  // v14: Added provisionalAlias column
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -45,6 +45,7 @@ class LocalDatabaseService {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pos INTEGER,
             doorAlias TEXT UNIQUE,
+            provisionalAlias TEXT,
             doorNumber TEXT,
             floor TEXT,
             roomNumber TEXT,
@@ -150,6 +151,7 @@ class LocalDatabaseService {
         // Add indices for optimized searching
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
         await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_local_doors_alias ON doors (doorAlias)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_provisional_alias ON doors (provisionalAlias)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -290,6 +292,17 @@ class LocalDatabaseService {
             print('Local DB migration warning (v13 columns): $e');
           }
         }
+
+        if (oldVersion < 14) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN provisionalAlias TEXT");
+            await db.execute("UPDATE doors SET provisionalAlias = doorAlias WHERE provisionalAlias IS NULL OR provisionalAlias = ''");
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_local_doors_provisional_alias ON doors (provisionalAlias)");
+            print('Local Database upgraded to version 14: provisionalAlias column added and backfilled.');
+          } catch (e) {
+            print('Local DB migration warning (v14 column): $e');
+          }
+        }
       },
     );
 
@@ -300,7 +313,7 @@ class LocalDatabaseService {
 
   static Future<void> _populateMissingAliases(Database db) async {
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
-      SELECT d.id, d.doorNumber, d.floor, i.clientName, i.objectAddress
+      SELECT d.id, d.doorNumber, d.floor, d.pos, i.projectNumber
       FROM doors d
       LEFT JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
@@ -313,10 +326,10 @@ class LocalDatabaseService {
       final id = row['id'] as int;
       final doorNumber = row['doorNumber'] as String? ?? '0';
       final floor = row['floor'] as String? ?? '';
-      final clientName = row['clientName'] as String? ?? '';
-      final objectAddress = row['objectAddress'] as String? ?? '';
+      final projectNumber = row['projectNumber'] as String? ?? '';
+      final pos = row['pos'] ?? 0;
       
-      String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+      String generated = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
       if (generated.isEmpty) {
         generated = 'DOOR-$id';
       }
@@ -342,7 +355,10 @@ class LocalDatabaseService {
       
       await db.update(
         'doors',
-        {'doorAlias': uniqueAlias},
+        {
+          'doorAlias': uniqueAlias,
+          'provisionalAlias': uniqueAlias,
+        },
         where: 'id = ?',
         whereArgs: [id],
       );
@@ -350,9 +366,26 @@ class LocalDatabaseService {
   }
 
   /// Updates the doorAlias for a door ID in local working.db.
+  /// Preserves existing alias in provisionalAlias if not already set.
   static Future<int> updateDoorAlias(int doorId, String newAlias) async {
     final db = await getDb();
     final cleanAlias = newAlias.trim();
+    final maps = await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
+    if (maps.isNotEmpty) {
+      final currentDoor = Door.fromMap(maps.first);
+      final provisional = (currentDoor.provisionalAlias != null && currentDoor.provisionalAlias!.isNotEmpty)
+          ? currentDoor.provisionalAlias
+          : (currentDoor.doorAlias ?? cleanAlias);
+      return await db.update(
+        'doors',
+        {
+          'doorAlias': cleanAlias,
+          'provisionalAlias': provisional,
+        },
+        where: 'id = ?',
+        whereArgs: [doorId],
+      );
+    }
     return await db.update(
       'doors',
       {'doorAlias': cleanAlias},
@@ -724,6 +757,9 @@ class LocalDatabaseService {
   }) async {
     final db = await getDb();
 
+    final inspRows = await db.query('inspections', columns: ['projectNumber'], where: 'inspectionId = ?', whereArgs: [inspectionId]);
+    final projectNumber = inspRows.isNotEmpty ? (inspRows.first['projectNumber'] as String? ?? '') : '';
+
     final List<Map<String, dynamic>> linkedDoors = await db.rawQuery('''
       SELECT d.* 
       FROM doors d
@@ -737,10 +773,10 @@ class LocalDatabaseService {
       final String floor = doorRow['floor'] as String? ?? '';
 
       final String newAlias = Door.generateAlias(
-        newClientName,
-        newObjectAddress,
-        doorNumber,
+        projectNumber: projectNumber,
+        pos: doorRow['pos'] ?? 0,
         floor: floor,
+        doorNumber: doorNumber,
       );
 
       if (newAlias.isEmpty) continue;

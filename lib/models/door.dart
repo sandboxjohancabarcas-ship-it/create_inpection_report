@@ -3,6 +3,7 @@ class Door {
   final int? id;
   final int pos;
   final String? doorAlias; // Business ID: Customer-Address-Building
+  final String? provisionalAlias; // Auto-generated provisional business alias
   final String doorNumber;
   final String floor;
   final String roomNumber;
@@ -42,6 +43,7 @@ class Door {
     required this.id,
     required this.pos,
     this.doorAlias,
+    this.provisionalAlias,
     required this.doorNumber,
     required this.floor,
     required this.roomNumber,
@@ -86,6 +88,7 @@ class Door {
     int? id,
     int? pos,
     String? doorAlias,
+    String? provisionalAlias,
     String? doorNumber,
     String? floor,
     String? roomNumber,
@@ -125,6 +128,7 @@ class Door {
       id: id ?? this.id,
       pos: pos ?? this.pos,
       doorAlias: doorAlias ?? this.doorAlias,
+      provisionalAlias: provisionalAlias ?? this.provisionalAlias,
       doorNumber: doorNumber ?? this.doorNumber,
       floor: floor ?? this.floor,
       roomNumber: roomNumber ?? this.roomNumber,
@@ -175,6 +179,7 @@ class Door {
         'id': id,
         'pos': pos,
         'doorAlias': doorAlias,
+        'provisionalAlias': provisionalAlias,
         'doorNumber': doorNumber,
         'floor': floor,
         'roomNumber': roomNumber,
@@ -217,6 +222,7 @@ class Door {
         id: map['id'],
         pos: map['pos'] ?? 0,
         doorAlias: map['doorAlias'],
+        provisionalAlias: map['provisionalAlias'],
         doorNumber: map['doorNumber'] ?? '',
         floor: map['floor'] ?? '',
         roomNumber: map['roomNumber'] ?? '',
@@ -259,38 +265,57 @@ class Door {
         fsaDriveAcceptanceDate: map['fsaDriveAcceptanceDate'],
       );
 
-  /// Generates an intelligent, human-readable, structured business alias.
-  /// Format: [CUSTOMER 5]-[ADDRESS 5]-[FLOOR 2..3]-[DOOR 2..4]
+  /// Generates structured business alias.
+  /// Format: [Projektnummer (without P-)]-[Pos]-[Floor]-[DoorNumber]
   /// Examples:
-  /// - "Gottsberg GmbH", "Ebner-Eschenbach-Weg 43, 21035 Hamburg", "EG", "1" -> "GOTTS-EBN43-EG-01"
-  /// - "Konz Schäfer", "Hauptstraße 12b", "1. OG", "4" -> "KONSC-HAU12-OG1-04"
-  /// - "Siemens AG", "Werner-von-Siemens-Ring 50", "2. Obergeschoss", "T-201" -> "SIEME-WSI50-OG2-T201"
-  /// - "Deutsche Bahn", "Bahnhofsplatz 1", "", "12" -> "DBAHN-BAH01-12"
-  static String generateAlias(
-    String customer,
-    String address,
-    String doorNumber, {
+  /// - projectNumber: "P-000100", pos: 1, floor: "EG", doorNumber: "21.2" -> "000100-1-EG-21.2"
+  static String generateAlias({
+    String projectNumber = '',
+    dynamic pos = '',
     String floor = '',
+    String doorNumber = '',
   }) {
-    if (customer.trim().isEmpty &&
-        address.trim().isEmpty &&
-        doorNumber.trim().isEmpty &&
-        floor.trim().isEmpty) {
-      return '';
+    final projPart = cleanProjectNumber(projectNumber);
+
+    String posPart = '';
+    if (pos != null) {
+      final posStr = pos.toString().trim();
+      if (posStr.isNotEmpty && posStr != '0') {
+        posPart = posStr;
+      }
     }
 
-    final custPart = _extractCustomerToken(customer, targetLength: 5);
-    final addrPart = _extractAddressToken(address, targetLength: 5);
-    final floorPart = _normalizeFloorToken(floor);
-    final doorPart = _normalizeDoorNumber(doorNumber);
+    final floorPart = cleanAliasToken(floor);
+    final doorPart = cleanAliasToken(doorNumber);
 
     List<String> parts = [];
-    if (custPart.isNotEmpty) parts.add(custPart);
-    if (addrPart.isNotEmpty) parts.add(addrPart);
+    if (projPart.isNotEmpty) parts.add(projPart);
+    if (posPart.isNotEmpty) parts.add(posPart);
     if (floorPart.isNotEmpty) parts.add(floorPart);
     if (doorPart.isNotEmpty) parts.add(doorPart);
 
     return parts.join('-');
+  }
+
+  /// Removes leading "P-" or "p-" from project number.
+  static String cleanProjectNumber(String rawProj) {
+    String trimmed = rawProj.trim();
+    if (trimmed.toLowerCase().startsWith('p-')) {
+      trimmed = trimmed.substring(2).trim();
+    }
+    return trimmed;
+  }
+
+  /// Cleans tokens for alias generation.
+  /// No special characters allowed, only "." (period). Alphanumeric and German letters are allowed.
+  static String cleanAliasToken(String raw) {
+    if (raw.trim().isEmpty) return '';
+    String cleaned = raw.trim().replaceAll(',', '.');
+    // Allow letters, digits, dots, German umlauts
+    cleaned = cleaned.replaceAll(RegExp(r'[^a-zA-Z0-9\.\äöüÄÖÜß]'), '');
+    // Strip leading or trailing dots
+    cleaned = cleaned.replaceAll(RegExp(r'^\.+|\.+$'), '');
+    return cleaned;
   }
 
   /// Standardized, compact temporary alias for doors created ad-hoc in the field.

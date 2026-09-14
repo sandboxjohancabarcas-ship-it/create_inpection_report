@@ -55,6 +55,7 @@ void main() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pos INTEGER,
             doorAlias TEXT,
+            provisionalAlias TEXT,
             doorNumber TEXT,
             floor TEXT,
             roomNumber TEXT,

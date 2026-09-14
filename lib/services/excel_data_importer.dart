@@ -337,13 +337,19 @@ class ExcelDataImporter {
         final fullPanicStandWing = _toBool(_cell(row, 25));
         final doorFunctionOK = _toBool(_cell(row, 26));
 
-        // Handle door alias creation (include floor to distinguish doors with identical numbers across floors)
-        final alias = Door.generateAlias(meta['clientName']!, meta['objectAddress']!, doorNumber, floor: floor);
+        // Handle door alias creation (format: [Projektnummer (without P-)]-[Pos]-[Floor]-[DoorNumber])
+        final alias = Door.generateAlias(
+          projectNumber: meta['projectNumber'] ?? '',
+          pos: pos,
+          floor: floor,
+          doorNumber: doorNumber,
+        );
 
         final door = Door(
           id: null,
           pos: pos,
           doorAlias: alias,
+          provisionalAlias: alias,
           doorNumber: doorNumber,
           floor: floor,
           roomNumber: roomNumber,

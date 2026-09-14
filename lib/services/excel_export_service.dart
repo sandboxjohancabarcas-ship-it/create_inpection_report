@@ -55,7 +55,8 @@ class ExcelExportService {
     // Row 2: Headers (All door properties + Status, Notes & Defect codes)
     final headers = [
       'Pos',
-      'Tür-Alias',
+      'Barcode',
+      'Alias',
       'Tür-Nr.',
       'Geschoss',
       'Raumnr.',
@@ -75,8 +76,8 @@ class ExcelExportService {
       'Beschlagart',
       'Panikfunktion',
       'Zutrittskontrolle',
-      'Schließer Bandseite',
-      'Schließer Bandgegenseite',
+      'Sturzhöhe auf Bandseite',
+      'Sturzhöhe auf Gegenseite',
       'Abnahme FSA / Antrieb',
       'Sturzhöhe innen > 1m',
       'Sturzhöhe innen (m)',
@@ -110,6 +111,7 @@ class ExcelExportService {
       final rowCells = [
         TextCellValue('${d['pos'] ?? posCounter}'),
         TextCellValue(d['doorAlias'] as String? ?? ''),
+        TextCellValue(d['provisionalAlias'] as String? ?? d['doorAlias'] as String? ?? ''),
         TextCellValue(d['doorNumber'] as String? ?? ''),
         TextCellValue(d['floor'] as String? ?? ''),
         TextCellValue(d['roomNumber'] as String? ?? ''),
@@ -292,7 +294,7 @@ class ExcelExportService {
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Türart: ${door['doorType'] ?? ''} | Flügelanzahl: ${door['wingCount'] ?? 1} | Material: ${door['material'] ?? ''} | Hersteller: ${door['manufacturer'] ?? ''} | Zulassungs-Nr.: ${door['approvalNumber'] ?? ''} | Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 5)).value = TextCellValue('DoP-Nr.: ${door['dopNumber'] ?? ''} | Baujahr: ${door['manufactureYear'] ?? ''} | DIN-Richtung: ${door['dinConfiguration'] ?? ''} | Schließertyp: ${door['closerType'] ?? ''} | Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 6)).value = TextCellValue('Schlossmaße: ${door['lockDimensions'] ?? ''} | Beschlagart: ${door['fittingType'] ?? ''} | Panikfunktion: ${door['panicFunction'] ?? ''} | Zutrittskontrolle: ${door['accessControl'] ?? ''}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Schließer Bandseite: ${_boolToStr(door['closerOnHingeSide'])} | Schließer Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])} | Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''}) | Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Sturzhöhe auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])} | Sturzhöhe auf Gegenseite: ${_boolToStr(door['closerOnOppositeSide'])} | Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''}) | Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 8)).value = TextCellValue('Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])} | Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])} | Fluchtwegbeschilderung: ${_boolToStr(door['escapeRouteSignage'])}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 9)).value = TextCellValue('Blindzylinder: ${_boolToStr(door['blindCylinder'])} | PZ-Zylinder: ${_boolToStr(door['pzCylinder'])} | Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])} | Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])} | Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}');
 

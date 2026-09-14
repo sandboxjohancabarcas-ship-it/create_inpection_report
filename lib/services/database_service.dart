@@ -25,7 +25,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 23, // v23: Added separate lintelHeightInsideValue and lintelHeightOutsideValue
+      version: 24, // v24: Added provisionalAlias column
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -34,6 +34,7 @@ class DatabaseService {
             id INTEGER PRIMARY KEY,
             pos INTEGER,
             doorAlias TEXT UNIQUE,
+            provisionalAlias TEXT,
             doorNumber TEXT,
             floor TEXT,
             roomNumber TEXT,
@@ -73,6 +74,7 @@ class DatabaseService {
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
         await db.execute('CREATE UNIQUE INDEX idx_doors_alias ON doors (doorAlias)');
+        await db.execute('CREATE INDEX idx_doors_provisional_alias ON doors (provisionalAlias)');
 
         // Inspections table
         await db.execute('''
@@ -284,6 +286,17 @@ class DatabaseService {
             print('Main DB migration warning (v23 columns): $e');
           }
         }
+
+        if (oldVersion < 24) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN provisionalAlias TEXT");
+            await db.execute("UPDATE doors SET provisionalAlias = doorAlias WHERE provisionalAlias IS NULL OR provisionalAlias = ''");
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_doors_provisional_alias ON doors (provisionalAlias)");
+            print('[DatabaseService] Main DB upgraded to v24: provisionalAlias column added and backfilled.');
+          } catch (e) {
+            print('Main DB migration warning (v24 column): $e');
+          }
+        }
       },
     );
 
@@ -294,7 +307,7 @@ class DatabaseService {
 
   static Future<void> populateMissingAliases(Database db, {bool isLocal = false}) async {
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
-      SELECT d.id, d.doorNumber, d.floor, i.clientName, i.objectAddress
+      SELECT d.id, d.doorNumber, d.floor, d.pos, i.projectNumber
       FROM doors d
       LEFT JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
@@ -309,10 +322,10 @@ class DatabaseService {
       final id = row['id'] as int;
       final doorNumber = row['doorNumber'] as String? ?? '0';
       final floor = row['floor'] as String? ?? '';
-      final clientName = row['clientName'] as String? ?? '';
-      final objectAddress = row['objectAddress'] as String? ?? '';
+      final projectNumber = row['projectNumber'] as String? ?? '';
+      final pos = row['pos'] ?? 0;
       
-      String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+      String generated = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
       if (generated.isEmpty) {
         generated = 'DOOR-$id';
       }
@@ -403,14 +416,37 @@ class DatabaseService {
 
   static Future<Door?> getDoorByAlias(String alias) async {
     final db = await getDb();
-    final maps = await db.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+    final clean = alias.trim();
+    final maps = await db.query(
+      'doors',
+      where: 'doorAlias = ? OR provisionalAlias = ?',
+      whereArgs: [clean, clean],
+      limit: 1,
+    );
     return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 
   /// Updates the doorAlias for a specific door ID in Master DB.
+  /// Preserves the existing alias into provisionalAlias if provisionalAlias is not set.
   static Future<int> updateDoorAlias(int doorId, String newAlias) async {
     final db = await getDb();
     final cleanAlias = newAlias.trim();
+    final maps = await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
+    if (maps.isNotEmpty) {
+      final currentDoor = Door.fromMap(maps.first);
+      final provisional = (currentDoor.provisionalAlias != null && currentDoor.provisionalAlias!.isNotEmpty)
+          ? currentDoor.provisionalAlias
+          : (currentDoor.doorAlias ?? cleanAlias);
+      return await db.update(
+        'doors',
+        {
+          'doorAlias': cleanAlias,
+          'provisionalAlias': provisional,
+        },
+        where: 'id = ?',
+        whereArgs: [doorId],
+      );
+    }
     return await db.update(
       'doors',
       {'doorAlias': cleanAlias},
@@ -457,17 +493,17 @@ class DatabaseService {
         final floor = row['floor'] as String? ?? '';
 
         final linkedInfo = await db.rawQuery('''
-          SELECT i.clientName, i.objectAddress 
+          SELECT i.clientName, i.objectAddress, i.projectNumber 
           FROM inspection_doors id
           JOIN inspections i ON id.inspectionId = i.inspectionId
           WHERE id.doorId = ?
           LIMIT 1
         ''', [id]);
 
-        final clientName = linkedInfo.isNotEmpty ? (linkedInfo.first['clientName'] as String? ?? '') : '';
-        final objectAddress = linkedInfo.isNotEmpty ? (linkedInfo.first['objectAddress'] as String? ?? '') : '';
+        final projectNumber = linkedInfo.isNotEmpty ? (linkedInfo.first['projectNumber'] as String? ?? '') : '';
+        final pos = row['pos'] ?? 0;
 
-        String generated = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+        String generated = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
         if (generated.isEmpty) generated = 'DOOR-$id';
 
         String uniqueAlias = generated;
@@ -489,14 +525,13 @@ class DatabaseService {
     }
 
     // 4. Reconcile mismatched door aliases and merge duplicate doors caused by historical customer misspellings
-    final allInspections = await db.query('inspections', columns: ['inspectionId', 'clientName', 'objectAddress']);
+    final allInspections = await db.query('inspections', columns: ['inspectionId', 'clientName', 'objectAddress', 'projectNumber']);
     int mergedDoorsCount = 0;
     int updatedAliasesCount = 0;
 
     for (final insp in allInspections) {
       final inspId = insp['inspectionId'] as int;
-      final clientName = insp['clientName'] as String? ?? '';
-      final objectAddress = insp['objectAddress'] as String? ?? '';
+      final projectNumber = insp['projectNumber'] as String? ?? '';
 
       final linkedDoors = await db.rawQuery('''
         SELECT d.* 
@@ -509,9 +544,10 @@ class DatabaseService {
         final doorId = doorRow['id'] as int;
         final doorNumber = doorRow['doorNumber'] as String? ?? '';
         final floor = doorRow['floor'] as String? ?? '';
+        final pos = doorRow['pos'] ?? 0;
         final oldAlias = doorRow['doorAlias'] as String? ?? '';
 
-        final newAlias = Door.generateAlias(clientName, objectAddress, doorNumber, floor: floor);
+        final newAlias = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
         if (newAlias.isEmpty || newAlias == oldAlias) continue;
 
         // Check for collision with another door
@@ -707,6 +743,9 @@ class DatabaseService {
   }) async {
     final db = await getDb();
 
+    final inspRows = await db.query('inspections', columns: ['projectNumber'], where: 'inspectionId = ?', whereArgs: [inspectionId]);
+    final projectNumber = inspRows.isNotEmpty ? (inspRows.first['projectNumber'] as String? ?? '') : '';
+
     final List<Map<String, dynamic>> linkedDoors = await db.rawQuery('''
       SELECT d.* 
       FROM doors d
@@ -720,10 +759,10 @@ class DatabaseService {
       final String floor = doorRow['floor'] as String? ?? '';
 
       final String newAlias = Door.generateAlias(
-        newClientName,
-        newObjectAddress,
-        doorNumber,
+        projectNumber: projectNumber,
+        pos: doorRow['pos'] ?? 0,
         floor: floor,
+        doorNumber: doorNumber,
       );
 
       if (newAlias.isEmpty) continue;

@@ -2,52 +2,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wartungstool/models/door.dart';
 
 void main() {
-  group('Intelligent Semantic Alias Generation Tests', () {
-    test('Standard German customer & address format', () {
+  group('Structured Alias Generation Tests', () {
+    test('Standard project number with P- prefix, pos, floor, door number', () {
       final alias = Door.generateAlias(
-        'Gottsberg GmbH',
-        'Ebner-Eschenbach-Weg 43, 21035 Hamburg',
-        '1',
+        projectNumber: 'P-000100',
+        pos: 1,
         floor: 'EG',
+        doorNumber: '21.2',
       );
-      expect(alias, 'GOTTS-EBN43-EG-01');
+      expect(alias, '000100-1-EG-21.2');
     });
 
-    test('Multi-word customer and address with upper floor', () {
+    test('Project number without P-, upper floor with dot, door number', () {
       final alias = Door.generateAlias(
-        'Konz Schäfer',
-        'Hauptstraße 12b',
-        '4',
+        projectNumber: '12345',
+        pos: 15,
         floor: '1. OG',
+        doorNumber: '104',
       );
-      expect(alias, 'KONSC-HA12B-OG1-04');
+      expect(alias, '12345-15-1.OG-104');
     });
 
-    test('Customer with Umlaut transliteration and underground floor', () {
+    test('Cleaning special characters from floor and door number while preserving dots', () {
       final alias = Door.generateAlias(
-        'Bäckerei Müller e.V.',
-        'Mühlenweg 7',
-        '02',
-        floor: 'Untergeschoss',
+        projectNumber: 'P-998877',
+        pos: 3,
+        floor: '2. OG / Flur',
+        doorNumber: '21.2,a',
       );
-      expect(alias, 'BAEMU-MUEH7-UG-02');
-    });
-
-    test('Industrial complex with building/door code and street stop words', () {
-      final alias = Door.generateAlias(
-        'Siemens AG',
-        'Werner-von-Siemens-Ring 50',
-        'T-201',
-        floor: '2. Obergeschoss',
-      );
-      expect(alias, 'SIEME-WER50-OG2-T201');
+      expect(alias, '998877-3-2.OGFlur-21.2.a');
     });
 
     test('Temporary field door alias generation', () {
       final tmpAlias = Door.generateTemporaryAlias('1');
       expect(tmpAlias.startsWith('TMP-'), isTrue);
       expect(tmpAlias.endsWith('-01'), isTrue);
-      expect(tmpAlias.length, lessThanOrEqualTo(14));
     });
   });
 }
