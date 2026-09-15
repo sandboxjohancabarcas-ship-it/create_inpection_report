@@ -37,7 +37,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 14,  // v14: Added provisionalAlias column
+      version: 16,  // v16: Added isLocked column to inspections table
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -80,7 +80,8 @@ class LocalDatabaseService {
             lintelHeightInsideValue TEXT,
             lintelHeightOutsideValue TEXT,
             manufactureYear TEXT DEFAULT '?',
-            fsaDriveAcceptanceDate TEXT
+            fsaDriveAcceptanceDate TEXT,
+            notes TEXT DEFAULT ''
           );
         ''');
 
@@ -94,7 +95,8 @@ class LocalDatabaseService {
             contactPerson TEXT,
             inspectorName TEXT,
             jobNumber TEXT,
-            projectNumber TEXT
+            projectNumber TEXT,
+            isLocked INTEGER DEFAULT 0
           );
         ''');
 
@@ -303,12 +305,41 @@ class LocalDatabaseService {
             print('Local DB migration warning (v14 column): $e');
           }
         }
+
+        if (oldVersion < 15) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN notes TEXT DEFAULT ''");
+            print('Local Database upgraded to version 15: notes column added to doors table.');
+          } catch (e) {
+            print('Local DB migration warning (v15 column): $e');
+          }
+        }
+
+        if (oldVersion < 16) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN isLocked INTEGER DEFAULT 0");
+            print('Local Database upgraded to version 16: isLocked column added to inspections table.');
+          } catch (e) {
+            print('Local DB migration warning (v16 column): $e');
+          }
+        }
       },
     );
 
     await _populateMissingAliases(_db!);
 
     return _db!;
+  }
+
+  /// Sets or updates the lock status for a given inspection ID in Local DB.
+  static Future<void> setInspectionLockStatus(int inspectionId, bool isLocked) async {
+    final db = await getDb();
+    await db.update(
+      'inspections',
+      {'isLocked': isLocked ? 1 : 0},
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
   }
 
   static Future<void> _populateMissingAliases(Database db) async {

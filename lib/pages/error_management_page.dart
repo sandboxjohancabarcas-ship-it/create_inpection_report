@@ -13,6 +13,7 @@ class ErrorManagementPage extends StatefulWidget {
   final int inspectionId;
   /// When true, reads/writes use DatabaseService (Master DB) instead of LocalDatabaseService (working.db).
   final bool isManagerMode;
+  final bool isReadOnly;
 
   const ErrorManagementPage({
     super.key,
@@ -20,6 +21,7 @@ class ErrorManagementPage extends StatefulWidget {
     required this.doorNumber,
     required this.inspectionId,
     this.isManagerMode = false,
+    this.isReadOnly = false,
   });
 
   @override
@@ -818,6 +820,29 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ? Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (widget.isReadOnly)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      border: Border.all(color: Colors.orange.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock_clock, color: Colors.orange.shade900),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Vorjahres-Auftrag: Im Lesemodus. Fehler können von Inspektoren nicht hinzugefügt, bearbeitet oder gelöscht werden.',
+                            style: TextStyle(fontSize: 13, color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 SizedBox(height: 16),
                 
                 // Error list
@@ -834,11 +859,12 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 style: TextStyle(fontSize: 18, color: Colors.grey),
                               ),
                               SizedBox(height: 16),
-                              ElevatedButton.icon(
-                                onPressed: _showAddErrorDialog,
-                                icon: Icon(Icons.add),
-                                label: Text('Fehler hinzufügen'),
-                              ),
+                              if (!widget.isReadOnly)
+                                ElevatedButton.icon(
+                                  onPressed: _showAddErrorDialog,
+                                  icon: Icon(Icons.add),
+                                  label: Text('Fehler hinzufügen'),
+                                ),
                             ],
                           ),
                         )

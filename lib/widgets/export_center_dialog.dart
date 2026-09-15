@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/services/pdf_export_service.dart';
 
@@ -13,19 +14,22 @@ enum ExportFormat { excel, pdf, dbPackage }
 class ExportCenterDialog extends StatefulWidget {
   final int? initialInspectionId;
   final String? initialDoorAlias;
+  final bool isManagerMode;
 
   const ExportCenterDialog({
     super.key,
     this.initialInspectionId,
     this.initialDoorAlias,
+    this.isManagerMode = false,
   });
 
-  static Future<void> show(BuildContext context, {int? initialInspectionId, String? initialDoorAlias}) async {
+  static Future<void> show(BuildContext context, {int? initialInspectionId, String? initialDoorAlias, bool isManagerMode = false}) async {
     await showDialog(
       context: context,
       builder: (context) => ExportCenterDialog(
         initialInspectionId: initialInspectionId,
         initialDoorAlias: initialDoorAlias,
+        isManagerMode: isManagerMode,
       ),
     );
   }
@@ -221,6 +225,10 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
             await DatabaseService.exportDoorsPackage([doorId]);
           }
         }
+      }
+
+      if (!widget.isManagerMode && _selectedInspectionId != null) {
+        await LocalDatabaseService.setInspectionLockStatus(_selectedInspectionId!, true);
       }
 
       setState(() {

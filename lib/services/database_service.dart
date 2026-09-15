@@ -25,7 +25,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 24, // v24: Added provisionalAlias column
+      version: 26, // v26: Added isLocked column to inspections table
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -69,7 +69,8 @@ class DatabaseService {
             lintelHeightInsideValue TEXT,
             lintelHeightOutsideValue TEXT,
             manufactureYear TEXT DEFAULT '?',
-            fsaDriveAcceptanceDate TEXT
+            fsaDriveAcceptanceDate TEXT,
+            notes TEXT DEFAULT ''
           );
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
@@ -86,7 +87,8 @@ class DatabaseService {
             contactPerson TEXT,
             inspectorName TEXT,
             jobNumber TEXT,
-            projectNumber TEXT
+            projectNumber TEXT,
+            isLocked INTEGER DEFAULT 0
           );
         ''');
         await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
@@ -297,12 +299,41 @@ class DatabaseService {
             print('Main DB migration warning (v24 column): $e');
           }
         }
+
+        if (oldVersion < 25) {
+          try {
+            await db.execute("ALTER TABLE doors ADD COLUMN notes TEXT DEFAULT ''");
+            print('[DatabaseService] Main DB upgraded to v25: notes column added to doors table.');
+          } catch (e) {
+            print('Main DB migration warning (v25 column): $e');
+          }
+        }
+
+        if (oldVersion < 26) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN isLocked INTEGER DEFAULT 0");
+            print('[DatabaseService] Main DB upgraded to v26: isLocked column added to inspections table.');
+          } catch (e) {
+            print('Main DB migration warning (v26 column): $e');
+          }
+        }
       },
     );
 
     await populateMissingAliases(_db!);
 
     return _db!;
+  }
+
+  /// Sets or updates the lock status for a given inspection ID in Master DB.
+  static Future<void> setInspectionLockStatus(int inspectionId, bool isLocked) async {
+    final db = await getDb();
+    await db.update(
+      'inspections',
+      {'isLocked': isLocked ? 1 : 0},
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
   }
 
   static Future<void> populateMissingAliases(Database db, {bool isLocal = false}) async {

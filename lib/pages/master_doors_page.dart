@@ -10,6 +10,7 @@ import '../widgets/import_report_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/migration_log_dialog.dart';
 import '../services/customer_normalizer.dart';
+import '../utils/inspection_year_utils.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
@@ -913,6 +914,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             children: clientInspections.map((job) {
               final id = job['inspectionId'] as int;
               final isSelected = _selectedInspectionIds.contains(id);
+              final bool locked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -936,6 +938,40 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       Text(
                         'Auftrag: ${job['jobNumber'] ?? "N/A"}',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () async {
+                          await DatabaseService.setInspectionLockStatus(id, !locked);
+                          _loadData();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: locked ? Colors.red.shade50 : Colors.green.shade50,
+                            border: Border.all(color: locked ? Colors.red.shade300 : Colors.green.shade300),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                locked ? Icons.lock : Icons.lock_open,
+                                size: 12,
+                                color: locked ? Colors.red.shade900 : Colors.green.shade900,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                locked ? 'Gesperrt' : 'Freigegeben',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: locked ? Colors.red.shade900 : Colors.green.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 8),
                       if (job['date'] != null && job['date'].toString().isNotEmpty)
@@ -972,6 +1008,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        icon: Icon(
+                          locked ? Icons.lock : Icons.lock_open,
+                          color: locked ? Colors.red : Colors.green,
+                        ),
+                        tooltip: locked ? 'Auftrag entsperren' : 'Auftrag sperren',
+                        onPressed: () async {
+                          await DatabaseService.setInspectionLockStatus(id, !locked);
+                          _loadData();
+                        },
+                      ),
                       IconButton(
                         icon: const Icon(Icons.description, color: Colors.teal),
                         tooltip: 'GAEB 90 exportieren',

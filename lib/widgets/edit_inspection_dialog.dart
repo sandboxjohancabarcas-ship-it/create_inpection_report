@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
+import '../utils/inspection_year_utils.dart';
 
 /// Dialog that allows a manager or user to change all metadata 
 /// of a single inspection at once.
@@ -47,6 +48,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
   late TextEditingController _contactPersonController;
   late TextEditingController _inspectorNameController;
   late DateTime _selectedDate;
+  bool _isLocked = false;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -76,6 +78,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     _projectNumberController.text = data['projectNumber']?.toString() ?? '';
     _contactPersonController.text = data['contactPerson']?.toString() ?? '';
     _inspectorNameController.text = data['inspectorName']?.toString() ?? '';
+    _isLocked = InspectionYearUtils.isInspectionLocked(data['isLocked']);
     
     final dateStr = data['date']?.toString();
     if (dateStr != null && dateStr.isNotEmpty) {
@@ -129,6 +132,20 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final bool canEdit = InspectionYearUtils.isEditable(
+      isManagerMode: widget.isManagerMode,
+      dateValue: _selectedDate,
+    );
+    if (!canEdit) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vorjahres-Aufträge können vom Inspektor nicht bearbeitet werden.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -141,6 +158,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
         'date': _selectedDate.toIso8601String(),
         'contactPerson': _contactPersonController.text.trim(),
         'inspectorName': _inspectorNameController.text.trim(),
+        'isLocked': _isLocked ? 1 : 0,
       };
 
       if (widget.isManagerMode) {
@@ -269,6 +287,25 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    if (widget.isManagerMode) ...[
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        value: _isLocked,
+                        title: const Text('Auftrag gesperrt (Sperrstatus)'),
+                        subtitle: Text(
+                          _isLocked
+                              ? 'Gesperrt: Inspektor kann Türen/Fehler nicht bearbeiten'
+                              : 'Freigegeben: Inspektor kann Türen/Fehler bearbeiten',
+                        ),
+                        secondary: Icon(
+                          _isLocked ? Icons.lock : Icons.lock_open,
+                          color: _isLocked ? Colors.red : Colors.green,
+                        ),
+                        onChanged: (bool val) {
+                          setState(() => _isLocked = val);
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
+import '../utils/inspection_year_utils.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
@@ -36,6 +37,8 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   final Set<int> _selectedDoorIds = {};
   bool _isSyncing = false;
   final TextEditingController _searchController = TextEditingController();
+  String? _inspectionDate;
+  bool _isEditable = true;
 
   @override
   void initState() {
@@ -54,6 +57,18 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     List<Door> doors;
     Map<int, DoorErrorSummary> errorSummaries;
     _selectedDoorIds.clear();
+
+    final Map<String, dynamic>? inspData = widget.isManagerMode
+        ? await DatabaseService.getInspectionById(widget.inspectionId)
+        : await LocalDatabaseService.getInspectionById(widget.inspectionId);
+
+    _inspectionDate = inspData?['date']?.toString();
+    final isLocked = inspData?['isLocked'];
+    _isEditable = InspectionYearUtils.isEditable(
+      isManagerMode: widget.isManagerMode,
+      dateValue: _inspectionDate,
+      isLocked: isLocked,
+    );
 
     if (widget.isManagerMode) {
       doors = await DatabaseService.getDoorsByInspectionIds(
@@ -88,6 +103,15 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
 
   Future<void> _handleDeleteDoors() async {
     if (_selectedDoorIds.isEmpty) return;
+    if (!_isEditable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Türen in Vorjahres-Aufträgen können vom Inspektor nicht gelöscht werden.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     final bool confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -129,6 +153,15 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   Future<void> _handleScanBarcode() async {
+    if (!_isEditable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vorjahres-Aufträge sind für Inspektoren schreibgeschützt.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
     final scanned = await BarcodeScannerDialog.show(
       context,
       title: 'Barcode für Türsuche / Alias-Zuweisung scannen',
@@ -155,6 +188,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
             door: matchingDoor,
             isManagerMode: widget.isManagerMode,
             inspectionId: widget.inspectionId,
+            isReadOnly: !_isEditable,
           ),
         ),
       );
@@ -186,6 +220,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   void _showAssignBarcodeDialog(String scannedAlias) {
+    if (!_isEditable) return;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -217,7 +252,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   Future<void> _updateDoorAlias(Door door, String newAlias) async {
-    if (door.id == null) return;
+    if (door.id == null || !_isEditable) return;
     if (widget.isManagerMode) {
       await DatabaseService.updateDoorAlias(door.id!, newAlias);
     } else {
@@ -336,36 +371,95 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           : Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(widget.title),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(child: Text(widget.title, overflow: TextOverflow.ellipsis)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _isEditable ? Colors.green.shade50 : Colors.red.shade50,
+                    border: Border.all(color: _isEditable ? Colors.green.shade300 : Colors.red.shade300),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isEditable ? Icons.lock_open : Icons.lock,
+                        size: 10,
+                        color: _isEditable ? Colors.green.shade900 : Colors.red.shade900,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isEditable ? 'Freigegeben' : 'Gesperrt',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: _isEditable ? Colors.green.shade900 : Colors.red.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             Text(
               'ID: ${widget.inspectionId} • ${_doors.length} Tür(en)',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
         ),
-        actions: isSelectionMode ? [
-          IconButton(
-            icon: Icon(_selectedDoorIds.length == _doors.length ? Icons.check_box : Icons.check_box_outline_blank),
-            onPressed: () {
-              setState(() {
-                if (_selectedDoorIds.length == _doors.length) {
-                  _selectedDoorIds.clear();
-                } else {
-                  _selectedDoorIds.addAll(_doors.map((d) => d.id!));
-                }
-              });
-            },
-          )
-        ] : [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
-            tooltip: 'Barcode / QR-Code scannen',
-            onPressed: _handleScanBarcode,
-          ),
+        actions: isSelectionMode
+            ? [
+                IconButton(
+                  icon: Icon(_selectedDoorIds.length == _doors.length ? Icons.check_box : Icons.check_box_outline_blank),
+                  onPressed: () {
+                    setState(() {
+                      if (_selectedDoorIds.length == _doors.length) {
+                        _selectedDoorIds.clear();
+                      } else {
+                        _selectedDoorIds.addAll(_doors.map((d) => d.id!));
+                      }
+                    });
+                  },
+                ),
+              ]
+            : [
+                if (widget.isManagerMode)
+            IconButton(
+              icon: Icon(
+                _isEditable ? Icons.lock_open : Icons.lock,
+                color: _isEditable ? Colors.green : Colors.red,
+              ),
+              tooltip: _isEditable ? 'Auftrag sperren (für Inspektor sperren)' : 'Auftrag entsperren (für Inspektor freigeben)',
+              onPressed: () async {
+                await DatabaseService.setInspectionLockStatus(widget.inspectionId, _isEditable);
+                _loadDoors();
+              },
+            ),
+          if (_isEditable)
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
+              tooltip: 'Barcode / QR-Code scannen',
+              onPressed: _handleScanBarcode,
+            ),
           IconButton(
             icon: const Icon(Icons.edit_note),
-            tooltip: 'Auftrags-Metadaten bearbeiten',
+            tooltip: widget.isManagerMode
+                ? 'Auftrags-Metadaten & Sperrstatus bearbeiten'
+                : 'Schreibgeschützt für Inspektor',
             onPressed: () async {
+              if (!widget.isManagerMode) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Inspektionsdaten können nur vom Manager bearbeitet werden.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
               final updated = await EditInspectionDialog.show(
                 context,
                 inspectionId: widget.inspectionId,
@@ -385,6 +479,29 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       ),
       body: Column(
         children: [
+          if (!_isEditable)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                border: Border.all(color: Colors.orange.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_clock, color: Colors.orange.shade900),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Gesperrte Inspektion: Im Lesemodus. Inspektoren können gesperrte Inspektionen nicht bearbeiten.',
+                      style: TextStyle(fontSize: 13, color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (!isSelectionMode)
             Padding(
               padding: const EdgeInsets.all(12.0),
@@ -486,20 +603,21 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                             );
                                           },
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 20),
-                                          tooltip: 'Barcode scannen & Alias zuweisen',
-                                          onPressed: () async {
-                                            final scanned = await BarcodeScannerDialog.show(
-                                              context,
-                                              title: 'Neuen Barcode für Tür ${door.doorNumber} scannen',
-                                            );
-                                            if (scanned != null && scanned.isNotEmpty && mounted) {
-                                              await _updateDoorAlias(door, scanned);
-                                            }
-                                          },
-                                        ),
-                                        const Icon(Icons.edit_note),
+                                        if (_isEditable)
+                                          IconButton(
+                                            icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 20),
+                                            tooltip: 'Barcode scannen & Alias zuweisen',
+                                            onPressed: () async {
+                                              final scanned = await BarcodeScannerDialog.show(
+                                                context,
+                                                title: 'Neuen Barcode für Tür ${door.doorNumber} scannen',
+                                              );
+                                              if (scanned != null && scanned.isNotEmpty && mounted) {
+                                                await _updateDoorAlias(door, scanned);
+                                              }
+                                            },
+                                          ),
+                                        Icon(_isEditable ? Icons.edit_note : Icons.visibility, color: _isEditable ? null : Colors.grey),
                                       ],
                                     ),
                               onTap: () async {
@@ -513,6 +631,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                         door: door,
                                         isManagerMode: widget.isManagerMode,
                                         inspectionId: widget.inspectionId,
+                                        isReadOnly: !_isEditable,
                                       ),
                                     ),
                                   );
@@ -534,8 +653,8 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   IconButton(
-                    onPressed: _isSyncing ? null : _handleDeleteDoors,
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: (_isSyncing || !_isEditable) ? null : _handleDeleteDoors,
+                    icon: Icon(Icons.delete_outline, color: _isEditable ? Colors.red : Colors.grey),
                     tooltip: 'Löschen',
                   ),
                   const VerticalDivider(),
@@ -547,7 +666,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 ],
               ),
             ),
-      floatingActionButton: (widget.isManagerMode || isSelectionMode)
+      floatingActionButton: (widget.isManagerMode || isSelectionMode || !_isEditable)
           ? null
           : FloatingActionButton(
               heroTag: 'fab_inspection_doors',

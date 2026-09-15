@@ -38,6 +38,7 @@ class Door {
   final String? lintelHeightOutsideValue;
   final String manufactureYear;
   final String? fsaDriveAcceptanceDate;
+  final String notes;
 
   Door({
     required this.id,
@@ -78,6 +79,7 @@ class Door {
     this.lintelHeightOutsideValue,
     this.manufactureYear = '?',
     this.fsaDriveAcceptanceDate,
+    this.notes = '',
   });
 
   // ---------------------------------------------------------
@@ -123,6 +125,7 @@ class Door {
     String? lintelHeightOutsideValue,
     String? manufactureYear,
     String? fsaDriveAcceptanceDate,
+    String? notes,
   }) {
     return Door(
       id: id ?? this.id,
@@ -171,6 +174,7 @@ class Door {
       lintelHeightOutsideValue: lintelHeightOutsideValue ?? this.lintelHeightOutsideValue,
       manufactureYear: manufactureYear ?? this.manufactureYear,
       fsaDriveAcceptanceDate: fsaDriveAcceptanceDate ?? this.fsaDriveAcceptanceDate,
+      notes: notes ?? this.notes,
     );
   }
 
@@ -215,6 +219,7 @@ class Door {
         'lintelHeightOutsideValue': lintelHeightOutsideValue,
         'manufactureYear': manufactureYear,
         'fsaDriveAcceptanceDate': fsaDriveAcceptanceDate,
+        'notes': notes,
       };
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
@@ -263,6 +268,7 @@ class Door {
             : map['lintelHeightOutsideValue']?.toString(),
         manufactureYear: map['manufactureYear'] ?? '?',
         fsaDriveAcceptanceDate: map['fsaDriveAcceptanceDate'],
+        notes: map['notes']?.toString() ?? '',
       );
 
   /// Generates structured business alias.

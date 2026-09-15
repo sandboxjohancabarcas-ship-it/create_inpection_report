@@ -11,6 +11,7 @@ import '../widgets/inspection_summary_card.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/export_center_dialog.dart';
+import '../utils/inspection_year_utils.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -558,6 +559,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           projectNumber: job['projectNumber']?.toString() ?? '',
                           date: job['date'] ?? '',
                           doorCount: job['doorCount'] != null ? (job['doorCount'] as num).toInt() : null,
+                          isLocked: job['isLocked'],
+                          onToggleLock: () async {
+                            final currentlyLocked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
+                            await DatabaseService.setInspectionLockStatus(id, !currentlyLocked);
+                            if (mounted) _refreshInspections();
+                          },
                           isSelected: isSelected,
                           onSelectionChanged: (_) => toggleSelection(),
                           onEdit: () async {
