@@ -4,18 +4,29 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 
 class ExcelExportService {
-  static String _boolToStr(dynamic val) {
-    if (val == null) return 'Nein';
-    if (val is bool) return val ? 'Ja' : 'Nein';
-    if (val is num) return val == 1 ? 'Ja' : 'Nein';
+  static String _xStr(dynamic val) {
+    if (val == null) return '';
+    if (val is bool) return val ? 'X' : '';
+    if (val is num) return val == 1 ? 'X' : '';
     if (val is String) {
       final lower = val.trim().toLowerCase();
-      return (lower == '1' || lower == 'true' || lower == 'ja') ? 'Ja' : 'Nein';
+      return (lower == '1' || lower == 'true' || lower == 'ja' || lower == 'x') ? 'X' : '';
     }
-    return 'Nein';
+    return '';
   }
 
-  /// Exports a single inspection job to a formatted Excel workbook (.xlsx)
+  static String _jnStr(dynamic val) {
+    if (val == null) return 'N';
+    if (val is bool) return val ? 'J' : 'N';
+    if (val is num) return val == 1 ? 'J' : 'N';
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      return (lower == '1' || lower == 'true' || lower == 'ja' || lower == 'j') ? 'J' : 'N';
+    }
+    return 'N';
+  }
+
+  /// Exports a single inspection job to a formatted Excel workbook (.xlsx / .xlsm compatible)
   static Future<File> exportSingleInspection(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
     if (data.isEmpty) {
@@ -26,92 +37,122 @@ class ExcelExportService {
     final insp = data['inspection'] as Map<String, dynamic>;
     final doors = data['doors'] as List<Map<String, dynamic>>;
 
-    final String clientName = insp['clientName'] as String? ?? 'Kunde';
+    final String clientName = insp['clientName'] as String? ?? '';
     final String dateStr = insp['date'] as String? ?? '';
+    final String jobNumber = insp['jobNumber'] as String? ?? '';
+    final String objectAddress = insp['objectAddress'] as String? ?? '';
+    final String contactPerson = insp['contactPerson'] as String? ?? '';
+    final String inspectorName = insp['inspectorName'] as String? ?? '';
+
     final String sheetName = 'Türlisten ${dateStr.replaceAll('-', '.')}';
 
-    // Rename default sheet or create
     final sheet = excel[sheetName];
     if (excel.sheets.containsKey('Sheet1')) {
       excel.delete('Sheet1');
     }
 
-    // Row 0: Metadata Header
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue(
-      'Kunde: $clientName | Objekt: ${insp['objectAddress'] ?? ''} | Datum: $dateStr | Auftrag: ${insp['jobNumber'] ?? ''} | Projekt: ${insp['projectNumber'] ?? ''}',
-    );
-
-    // Collect all distinct error codes across doors in this inspection
-    final Set<String> defectCodes = {};
+    // Collect all distinct error codes & descriptions across doors in this inspection
+    final Map<String, String> defectMap = {}; // Key: errorCode/key -> Value: "[code] [description]"
     for (final d in doors) {
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       for (final e in errors) {
         final code = (e['errorCode'] ?? e['code'] ?? '') as String;
-        if (code.isNotEmpty) defectCodes.add(code);
+        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final key = code.isNotEmpty ? code : desc;
+        if (key.isNotEmpty) {
+          final label = code.isNotEmpty ? (desc.isNotEmpty ? '$code $desc' : code) : desc;
+          defectMap[key] = label;
+        }
       }
     }
-    final sortedDefectCodes = defectCodes.toList()..sort();
+    final sortedDefectKeys = defectMap.keys.toList()..sort();
 
-    // Row 2: Headers (All door properties + Status, Notes & Defect codes)
-    final headers = [
-      'Pos',
-      'Barcode',
-      'Alias',
-      'Tür-Nr.',
-      'Geschoss',
-      'Raumnr.',
-      'Raumbezeichnung',
-      'Türart',
-      'Flügelanzahl',
-      'Material',
-      'Hersteller',
-      'Zulassungs-Nr.',
-      'Hersteller-Nr.',
-      'DoP-Nr.',
-      'Baujahr',
-      'DIN-Richtung',
-      'Schließertyp',
-      'Schließfolgeregler',
-      'Schlossmaße',
-      'Beschlagart',
-      'Panikfunktion',
-      'Zutrittskontrolle',
-      'Sturzhöhe auf Bandseite',
-      'Sturzhöhe auf Gegenseite',
-      'Abnahme FSA / Antrieb',
-      'Sturzhöhe innen > 1m',
-      'Sturzhöhe innen (m)',
-      'Sturzhöhe außen > 1m',
-      'Sturzhöhe außen (m)',
-      'Fluchttürsteuerung',
-      'Fluchtwegsituation',
-      'Fluchtwegbeschilderung',
-      'Blindzylinder',
-      'PZ-Zylinder',
-      'Fluchtrichtung beachtet',
-      'Vollpanik Standflügel',
-      'Türfunktion OK',
-      'Status',
-      'Bemerkung',
-      ...sortedDefectCodes.map((c) => 'Mangel $c'),
-    ];
+    // ── ROW 0: Metadata Row ───────────────────────────────────
+    final metaText = 'Kunde: $clientName Objekt: $objectAddress Datum: $dateStr Ansprechpartner: $contactPerson Monteur: $inspectorName Auftragsnummer: $jobNumber';
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue(metaText);
 
-    for (int col = 0; col < headers.length; col++) {
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 2)).value = TextCellValue(headers[col]);
+    // Dynamic error sequence numbers (1, 2, 3...) above defect columns
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final colIdx = 28 + i;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 0)).value = TextCellValue('${i + 1}');
     }
 
-    // Row 3+: Door rows
+    // ── ROW 1: Grouped Category Headers (Application UI Categories) ───────
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Grundinformationen');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: 1)).value = TextCellValue('Tür Spezifikationen');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: 1)).value = TextCellValue('Installation');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 17, rowIndex: 1)).value = TextCellValue('Sicherheit & Zugang');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: 1)).value = TextCellValue('Bewertung');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 28, rowIndex: 1)).value = TextCellValue('Mängelhinweise [$jobNumber]');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 28 + sortedDefectKeys.length, rowIndex: 1)).value = TextCellValue('Anmerkung');
+
+    // ── ROW 2: Column Headers ──────────────────────────────────
+    final fixedHeaders = [
+      'Pos.',
+      'Barcode',
+      'Tür Nr.',
+      'Etage',
+      'Raum Nr.',
+      'Raumbezeichnung',
+      'Türtyp (T30/RS/T90/Panik P/WK/usw.)',
+      'Flügelanzahl',
+      'Türmaterial / Türart',
+      'Türhersteller / Türsystem',
+      'DIN L/R',
+      'Türschließer / Automatikantrieb',
+      'GSR / EMF / EMR',
+      'Schloßmaße',
+      'Türschließer auf Bandseite',
+      'Türschließer auf Bandgegenseite',
+      'Sturzhöhe unter 1 Meter',
+      'Fluchtürsteuerung / Türwächter',
+      'Zutrittskontrolle',
+      'Fluchtwegsituation',
+      'Fluchwegbeschilderung',
+      'Blindzylinder',
+      'PZ-Zylinder',
+      'Garnitur',
+      'Panikfunktion',
+      'Fluchtrichtung eingehalten',
+      'Vollpanik (Standflügel)',
+      'Tür einschl. Komponenten in ordentlicher Funktion',
+    ];
+
+    for (int col = 0; col < fixedHeaders.length; col++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 2)).value = TextCellValue(fixedHeaders[col]);
+    }
+
+    // Dynamic Defect Column Headers (Col 28 to 28 + N - 1)
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final colIdx = 28 + i;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 2)).value = TextCellValue(defectMap[sortedDefectKeys[i]]!);
+    }
+
+    // Notes Column Header (Col 28 + N)
+    final notesColIdx = 28 + sortedDefectKeys.length;
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: 2)).value = TextCellValue('Anmerkung');
+
+    // ── ROW 3+: Data Rows ──────────────────────────────────────
     int rowIndex = 3;
     int posCounter = 1;
+    final Map<String, int> defectColumnTotals = {};
 
     for (final d in doors) {
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
-      final doorErrorCodes = errors.map((e) => (e['errorCode'] ?? e['code'] ?? '') as String).toSet();
+      final Map<String, int> doorDefectQtyMap = {};
+      for (final e in errors) {
+        final code = (e['errorCode'] ?? e['code'] ?? '') as String;
+        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final key = code.isNotEmpty ? code : desc;
+        final qty = (e['quantity'] as num?)?.toInt() ?? 1;
+        if (key.isNotEmpty) {
+          doorDefectQtyMap[key] = (doorDefectQtyMap[key] ?? 0) + qty;
+        }
+      }
 
-      final rowCells = [
+      final fixedCells = [
         TextCellValue('${d['pos'] ?? posCounter}'),
         TextCellValue(d['doorAlias'] as String? ?? ''),
-        TextCellValue(d['provisionalAlias'] as String? ?? d['doorAlias'] as String? ?? ''),
         TextCellValue(d['doorNumber'] as String? ?? ''),
         TextCellValue(d['floor'] as String? ?? ''),
         TextCellValue(d['roomNumber'] as String? ?? ''),
@@ -120,42 +161,58 @@ class ExcelExportService {
         TextCellValue('${d['wingCount'] ?? 1}'),
         TextCellValue(d['material'] as String? ?? ''),
         TextCellValue(d['manufacturer'] as String? ?? ''),
-        TextCellValue(d['approvalNumber'] as String? ?? ''),
-        TextCellValue(d['manufacturerNumber'] as String? ?? ''),
-        TextCellValue(d['dopNumber'] as String? ?? ''),
-        TextCellValue(d['manufactureYear'] as String? ?? ''),
         TextCellValue(d['dinConfiguration'] as String? ?? ''),
         TextCellValue(d['closerType'] as String? ?? ''),
         TextCellValue(d['closingSequenceSystem'] as String? ?? ''),
         TextCellValue(d['lockDimensions'] as String? ?? ''),
+        TextCellValue(_xStr(d['closerOnHingeSide'])),
+        TextCellValue(_xStr(d['closerOnOppositeSide'])),
+        TextCellValue(_xStr(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m'])),
+        TextCellValue(d['escapeDoorControl'] == true ? 'Ja' : 'Nein'),
+        TextCellValue(d['accessControl'] as String? ?? 'Nein'),
+        TextCellValue(_xStr(d['escapeRouteSituation'])),
+        TextCellValue(_xStr(d['escapeRouteSignage'])),
+        TextCellValue(_xStr(d['blindCylinder'])),
+        TextCellValue(_xStr(d['pzCylinder'])),
         TextCellValue(d['fittingType'] as String? ?? ''),
         TextCellValue(d['panicFunction'] as String? ?? ''),
-        TextCellValue(d['accessControl'] as String? ?? ''),
-        TextCellValue(_boolToStr(d['closerOnHingeSide'])),
-        TextCellValue(_boolToStr(d['closerOnOppositeSide'])),
-        TextCellValue(d['fsaDriveAcceptanceDate'] as String? ?? ''),
-        TextCellValue(_boolToStr(d['lintelHeightInsideOver1m'])),
-        TextCellValue(d['lintelHeightInsideValue'] as String? ?? ''),
-        TextCellValue(_boolToStr(d['lintelHeightOutsideOver1m'])),
-        TextCellValue(d['lintelHeightOutsideValue'] as String? ?? ''),
-        TextCellValue(_boolToStr(d['escapeDoorControl'])),
-        TextCellValue(_boolToStr(d['escapeRouteSituation'])),
-        TextCellValue(_boolToStr(d['escapeRouteSignage'])),
-        TextCellValue(_boolToStr(d['blindCylinder'])),
-        TextCellValue(_boolToStr(d['pzCylinder'])),
-        TextCellValue(_boolToStr(d['escapeDirectionRespected'])),
-        TextCellValue(_boolToStr(d['fullPanicStandWing'])),
-        TextCellValue(_boolToStr(d['doorFunctionOK'])),
-        TextCellValue(d['junctionStatus'] as String? ?? 'InProgress'),
-        TextCellValue(d['junctionNotes'] as String? ?? ''),
-        ...sortedDefectCodes.map((code) => TextCellValue(doorErrorCodes.contains(code) ? 'X' : '')),
+        TextCellValue(_xStr(d['escapeDirectionRespected'])),
+        TextCellValue(_xStr(d['fullPanicStandWing'])),
+        TextCellValue(_jnStr(d['doorFunctionOK'])),
       ];
 
-      for (int col = 0; col < rowCells.length; col++) {
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: rowIndex)).value = rowCells[col];
+      for (int c = 0; c < fixedCells.length; c++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).value = fixedCells[c];
       }
+
+      // Dynamic Defect Cells
+      for (int i = 0; i < sortedDefectKeys.length; i++) {
+        final key = sortedDefectKeys[i];
+        final colIdx = 28 + i;
+        if (doorDefectQtyMap.containsKey(key)) {
+          final qty = doorDefectQtyMap[key]!;
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('$qty');
+          defectColumnTotals[key] = (defectColumnTotals[key] ?? 0) + qty;
+        } else {
+          sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('');
+        }
+      }
+
+      // Anmerkung Cell (Notes property)
+      final doorNotes = (d['notes'] ?? d['junctionNotes'] ?? '').toString();
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: rowIndex)).value = TextCellValue(doorNotes);
+
       rowIndex++;
       posCounter++;
+    }
+
+    // ── BOTTOM SUMMARY ROW: Total Sums ────────────────────────
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex)).value = TextCellValue('Summe für Mängelbeseitigung');
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final key = sortedDefectKeys[i];
+      final colIdx = 28 + i;
+      final total = defectColumnTotals[key] ?? 0;
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('$total');
     }
 
     final file = File(outputPath);
@@ -204,10 +261,9 @@ class ExcelExportService {
     // Tab 2: Defect History Ledger with All Door Properties
     final defectSheet = excel['Mängelhistorie (Revision)'];
     final defectHeaders = [
-      'Datum', 'Auftrag', 'Tür-Alias', 'Tür-Nr.', 'Geschoss', 'Raumnr.', 'Raum',
-      'Türart', 'Flügel', 'Material', 'Hersteller', 'Zulassungs-Nr.', 'Hersteller-Nr.', 'DoP-Nr.', 'Baujahr',
-      'DIN', 'Schließer', 'Schließfolge', 'Schlossmaß', 'Beschlag', 'Panikfkt', 'Zutrittskontrolle', 'Bandseite', 'Bandgegenseite',
-      'Sturzhöhe<1m', 'Sturzhöhe>1m', 'Sturzhöhe(m)', 'Fluchttürsteu.', 'Fluchtwegsit.', 'Beschilderung', 'Blindzyl.', 'PZ-Zyl.',
+      'Datum', 'Auftrag', 'Barcode', 'Tür-Nr.', 'Geschoss', 'Raumnr.', 'Raum',
+      'Türart', 'Flügel', 'Material', 'Hersteller', 'DIN', 'Schließer', 'Schließfolge', 'Schlossmaß', 'Garnitur', 'Panikfkt', 'Zutrittskontrolle', 'Bandseite', 'Bandgegenseite',
+      'Sturzhöhe', 'Fluchttürsteu.', 'Fluchtwegsit.', 'Beschilderung', 'Blindzyl.', 'PZ-Zyl.',
       'Fluchtricht.OK', 'VollpanikStand', 'FunktionOK',
       'Mängelcode', 'Kategorie', 'Beschreibung', 'Notizen'
     ];
@@ -234,21 +290,19 @@ class ExcelExportService {
           final rowData = [
             date, job, alias, doorNum, floor, roomNum, room,
             d['doorType'] ?? '', '${d['wingCount'] ?? 1}', d['material'] ?? '', d['manufacturer'] ?? '',
-            d['approvalNumber'] ?? '', d['manufacturerNumber'] ?? '', d['dopNumber'] ?? '', d['manufactureYear'] ?? '',
             d['dinConfiguration'] ?? '', d['closerType'] ?? '', d['closingSequenceSystem'] ?? '',
             d['lockDimensions'] ?? '', d['fittingType'] ?? '', d['panicFunction'] ?? '', d['accessControl'] ?? '',
-            _boolToStr(d['closerOnHingeSide']), _boolToStr(d['closerOnOppositeSide']),
-            _boolToStr(d['lintelHeightInsideOver1m']), d['lintelHeightInsideValue'] as String? ?? '',
-            _boolToStr(d['lintelHeightOutsideOver1m']), d['lintelHeightOutsideValue'] as String? ?? '',
-            _boolToStr(d['escapeDoorControl']),
-            _boolToStr(d['escapeRouteSituation']), _boolToStr(d['escapeRouteSignage']),
-            _boolToStr(d['blindCylinder']), _boolToStr(d['pzCylinder']),
-            _boolToStr(d['escapeDirectionRespected']), _boolToStr(d['fullPanicStandWing']),
-            _boolToStr(d['doorFunctionOK']),
+            _xStr(d['closerOnHingeSide']), _xStr(d['closerOnOppositeSide']),
+            _xStr(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m']),
+            _xStr(d['escapeDoorControl']),
+            _xStr(d['escapeRouteSituation']), _xStr(d['escapeRouteSignage']),
+            _xStr(d['blindCylinder']), _xStr(d['pzCylinder']),
+            _xStr(d['escapeDirectionRespected']), _xStr(d['fullPanicStandWing']),
+            _jnStr(d['doorFunctionOK']),
             e['errorCode'] as String? ?? e['code'] as String? ?? '',
             e['errorCat'] as String? ?? e['category'] as String? ?? '',
             e['errorDesc'] as String? ?? e['description'] as String? ?? '',
-            e['notes'] as String? ?? '',
+            e['notes'] as String? ?? d['notes'] as String? ?? '',
           ];
 
           for (int c = 0; c < rowData.length; c++) {
@@ -287,25 +341,26 @@ class ExcelExportService {
     }
 
     // Section 1: Specs (All door properties)
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue('STAMMDATEN TÜR-AKTE (ALLE TÜR-EIGENSCHAFTEN)');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Tür-Alias (QR/Patienten-ID): ${door['doorAlias'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue('STAMMDATEN TÜR-AKTE');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Barcode: ${door['doorAlias'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2)).value = TextCellValue('Türnummer: ${door['doorNumber'] ?? ''} | Pos: ${door['pos'] ?? 0}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 3)).value = TextCellValue('Geschoss: ${door['floor'] ?? ''} | Raumnr: ${door['roomNumber'] ?? ''} | Raum: ${door['roomDesignation'] ?? ''}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Türart: ${door['doorType'] ?? ''} | Flügelanzahl: ${door['wingCount'] ?? 1} | Material: ${door['material'] ?? ''} | Hersteller: ${door['manufacturer'] ?? ''} | Zulassungs-Nr.: ${door['approvalNumber'] ?? ''} | Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 5)).value = TextCellValue('DoP-Nr.: ${door['dopNumber'] ?? ''} | Baujahr: ${door['manufactureYear'] ?? ''} | DIN-Richtung: ${door['dinConfiguration'] ?? ''} | Schließertyp: ${door['closerType'] ?? ''} | Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 4)).value = TextCellValue('Türart: ${door['doorType'] ?? ''} | Flügelanzahl: ${door['wingCount'] ?? 1} | Material: ${door['material'] ?? ''} | Hersteller: ${door['manufacturer'] ?? ''}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 5)).value = TextCellValue('DIN-Richtung: ${door['dinConfiguration'] ?? ''} | Schließertyp: ${door['closerType'] ?? ''} | Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}');
     sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 6)).value = TextCellValue('Schlossmaße: ${door['lockDimensions'] ?? ''} | Beschlagart: ${door['fittingType'] ?? ''} | Panikfunktion: ${door['panicFunction'] ?? ''} | Zutrittskontrolle: ${door['accessControl'] ?? ''}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Sturzhöhe auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])} | Sturzhöhe auf Gegenseite: ${_boolToStr(door['closerOnOppositeSide'])} | Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''}) | Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 8)).value = TextCellValue('Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])} | Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])} | Fluchtwegbeschilderung: ${_boolToStr(door['escapeRouteSignage'])}');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 9)).value = TextCellValue('Blindzylinder: ${_boolToStr(door['blindCylinder'])} | PZ-Zylinder: ${_boolToStr(door['pzCylinder'])} | Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])} | Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])} | Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 7)).value = TextCellValue('Sturzhöhe Bandseite: ${_xStr(door['closerOnHingeSide'])} | Sturzhöhe Gegenseite: ${_xStr(door['closerOnOppositeSide'])} | Sturzhöhe > 1m: ${_xStr(door['lintelHeightInsideOver1m'] ?? door['lintelHeightOutsideOver1m'])}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 8)).value = TextCellValue('Fluchttürsteuerung: ${_xStr(door['escapeDoorControl'])} | Fluchtwegsituation: ${_xStr(door['escapeRouteSituation'])} | Fluchtwegbeschilderung: ${_xStr(door['escapeRouteSignage'])}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 9)).value = TextCellValue('Blindzylinder: ${_xStr(door['blindCylinder'])} | PZ-Zylinder: ${_xStr(door['pzCylinder'])} | Fluchtrichtung beachtet: ${_xStr(door['escapeDirectionRespected'])} | Vollpanik Standflügel: ${_xStr(door['fullPanicStandWing'])} | Türfunktion OK: ${_jnStr(door['doorFunctionOK'])}');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 10)).value = TextCellValue('Notizen: ${door['notes'] ?? ''}');
 
     // Section 2: Timeline
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 11)).value = TextCellValue('INSPEKTIONSHISTORIE & MÄNGELPROTOKOLL');
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 12)).value = TextCellValue('INSPEKTIONSHISTORIE & MÄNGELPROTOKOLL');
     final headers = ['Datum', 'Kunde', 'Objektadresse', 'Auftrag', 'Status', 'Erfasste Mängel', 'Notizen'];
     for (int col = 0; col < headers.length; col++) {
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 12)).value = TextCellValue(headers[col]);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 13)).value = TextCellValue(headers[col]);
     }
 
-    int rowIdx = 13;
+    int rowIdx = 14;
     for (final item in historyItems) {
       final insp = item is Map ? (item['inspection'] as Map<String, dynamic>? ?? item) : <String, dynamic>{};
       final errors = item is Map ? (item['errors'] as List<dynamic>? ?? []) : [];
@@ -336,4 +391,3 @@ class ExcelExportService {
     return file;
   }
 }
-

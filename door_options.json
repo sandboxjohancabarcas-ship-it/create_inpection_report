@@ -19,7 +19,8 @@
       "FB-1",
       "FB-2",
       "FB-3",
-      "FB-4"
+      "FB-4",
+      "Alu/Glas"
     ],
     "default": "?"
   },
@@ -40,7 +41,8 @@
       "Holz/Glas",
       "Stahlblech",
       "Stahlblech/Glas",
-      "Kunststoff"
+      "Kunststoff",
+      "Do TS 93"
     ],
     "default": "?"
   },
@@ -64,7 +66,8 @@
       "Specht-Holz",
       "Schwarze-Stahl",
       "Hoba-Holz",
-      "Hydro Building Systems WICSTYLE 77 FP Z-6.20-2004"
+      "1",
+      "Novoferm"
     ],
     "default": "?"
   },
@@ -81,7 +84,7 @@
       "DIN R aus St-Flg. Ver.",
       "DIN L ein St-Flg. Ver.",
       "DIN R ein St-Flg. Ver.",
-      "DIN R auswärts Standflg. Ver."
+      "Do TS 93 EMR"
     ],
     "default": "?"
   },
@@ -195,8 +198,8 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "ED250+ED250PA+RM-ED+2xRM-N",
-      "ED250+RM-ED"
+      "Fluchtwegsituation prüfen!",
+      "Tür nicht mehr vorhanden"
     ],
     "default": "?"
   },
@@ -223,7 +226,9 @@
       "MfV-35/92/10-24 U",
       "SVP",
       "Motorschloss",
-      "35/92/9/22x284/F Wicona"
+      "35/92/9/28/F",
+      "Nemef/65/72/9/24+235/FR",
+      "Nemef/65/72/9/24+235/F"
     ],
     "default": "?"
   },
@@ -245,7 +250,8 @@
       "Ja ?",
       "KABA Evolo",
       "CES",
-      "U&Z"
+      "U&Z",
+      "CES Digitalzylinder"
     ],
     "default": "Nein"
   },

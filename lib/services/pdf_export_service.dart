@@ -16,6 +16,28 @@ class PdfExportService {
     return 'Nein';
   }
 
+  static String _xStr(dynamic val) {
+    if (val == null) return '';
+    if (val is bool) return val ? 'X' : '';
+    if (val is num) return val == 1 ? 'X' : '';
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      return (lower == '1' || lower == 'true' || lower == 'ja' || lower == 'x') ? 'X' : '';
+    }
+    return '';
+  }
+
+  static String _jnStr(dynamic val) {
+    if (val == null) return 'N';
+    if (val is bool) return val ? 'J' : 'N';
+    if (val is num) return val == 1 ? 'J' : 'N';
+    if (val is String) {
+      final lower = val.trim().toLowerCase();
+      return (lower == '1' || lower == 'true' || lower == 'ja' || lower == 'j') ? 'J' : 'N';
+    }
+    return 'N';
+  }
+
   /// Exports a single inspection report to a formatted PDF document
   static Future<File> exportSingleInspectionPdf(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
@@ -26,59 +48,66 @@ class PdfExportService {
     final insp = data['inspection'] as Map<String, dynamic>;
     final doors = data['doors'] as List<Map<String, dynamic>>;
 
+    // Collect all distinct error codes & descriptions across doors in this inspection
+    final Map<String, String> defectMap = {};
+    for (final d in doors) {
+      final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
+      for (final e in errors) {
+        final code = (e['errorCode'] ?? e['code'] ?? '') as String;
+        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final key = code.isNotEmpty ? code : desc;
+        if (key.isNotEmpty) {
+          final label = code.isNotEmpty ? (desc.isNotEmpty ? '$code $desc' : code) : desc;
+          defectMap[key] = label;
+        }
+      }
+    }
+    final sortedDefectKeys = defectMap.keys.toList()..sort();
+
     final document = PdfDocument();
     document.pageSettings.orientation = PdfPageOrientation.landscape;
     final page = document.pages.add();
 
-    final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 14, style: PdfFontStyle.bold);
-    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
-    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 5);
+    final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
+    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 4.5, style: PdfFontStyle.bold);
+    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 4.5);
 
     // Title
     page.graphics.drawString(
       'INSPEKTIONSBERICHT',
       titleFont,
       brush: PdfSolidBrush(PdfColor(13, 71, 161)),
-      bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 20),
+      bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 16),
     );
 
     // Metadata Block
-    final metaText = 'Kunde: ${insp['clientName'] ?? ''}  |  Objektadresse: ${insp['objectAddress'] ?? ''}\n'
-        'Datum: ${insp['date'] ?? ''}  |  Auftragsnr.: ${insp['jobNumber'] ?? ''}  |  Projekt: ${insp['projectNumber'] ?? ''}';
+    final metaText = 'Kunde: ${insp['clientName'] ?? ''} | Objekt: ${insp['objectAddress'] ?? ''} | Datum: ${insp['date'] ?? ''} | Auftragsnr.: ${insp['jobNumber'] ?? ''} | Projekt: ${insp['projectNumber'] ?? ''} | Prüfer: ${insp['inspectorName'] ?? ''}';
 
     page.graphics.drawString(
       metaText,
-      PdfStandardFont(PdfFontFamily.helvetica, 8),
-      bounds: Rect.fromLTWH(0, 22, page.getClientSize().width, 25),
+      PdfStandardFont(PdfFontFamily.helvetica, 7),
+      bounds: Rect.fromLTWH(0, 18, page.getClientSize().width, 18),
     );
 
-    // Table with individual column headers for each door property
-    final headers = [
+    // Table Column Headers
+    final fixedHeaders = [
       'Pos',
-      'Tür-Alias',
-      'Tür-Nr.',
-      'Geschoss',
-      'Raumnr.',
+      'Barcode',
+      'Tür Nr.',
+      'Etage',
+      'Raum Nr.',
       'Raumbezeichnung',
-      'Türart',
+      'Türtyp',
       'Flügel',
       'Material',
       'Hersteller',
-      'Zulassungs-Nr.',
-      'Hersteller-Nr.',
-      'DoP-Nr.',
-      'Baujahr',
       'DIN',
       'Schließer',
       'Schließfolge',
       'Schlossmaß',
       'Bandseite',
       'Bandgegenseite',
-      'Abnahme FSA/Antrieb',
-      'Sturz in >1m',
-      'Sturz in (m)',
-      'Sturz aus >1m',
-      'Sturz aus (m)',
+      'Sturz >1m',
       'Fluchttürst.',
       'Zutritt',
       'Fluchtwegsit.',
@@ -88,29 +117,50 @@ class PdfExportService {
       'Beschlag',
       'Panikfkt',
       'Fluchtricht.OK',
-      'VollpanikStand',
-      'FunktionOK',
-      'Status',
-      'Notizen',
-      'Erfasste Mängel',
+      'Vollpanik',
+      'Funktion OK',
     ];
 
+    final totalCols = fixedHeaders.length + sortedDefectKeys.length + 1; // +1 for Anmerkung
     final PdfGrid grid = PdfGrid();
-    grid.columns.add(count: headers.length);
+    grid.columns.add(count: totalCols);
     grid.headers.add(1);
 
     final PdfGridRow headerRow = grid.headers[0];
-    for (int col = 0; col < headers.length; col++) {
-      headerRow.cells[col].value = headers[col];
+    for (int col = 0; col < fixedHeaders.length; col++) {
+      headerRow.cells[col].value = fixedHeaders[col];
       headerRow.cells[col].style.font = headerFont;
       headerRow.cells[col].style.backgroundBrush = PdfSolidBrush(PdfColor(220, 230, 242));
     }
 
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final colIdx = fixedHeaders.length + i;
+      headerRow.cells[colIdx].value = defectMap[sortedDefectKeys[i]]!;
+      headerRow.cells[colIdx].style.font = headerFont;
+      headerRow.cells[colIdx].style.backgroundBrush = PdfSolidBrush(PdfColor(255, 235, 238));
+    }
+
+    final notesColIdx = fixedHeaders.length + sortedDefectKeys.length;
+    headerRow.cells[notesColIdx].value = 'Anmerkung';
+    headerRow.cells[notesColIdx].style.font = headerFont;
+    headerRow.cells[notesColIdx].style.backgroundBrush = PdfSolidBrush(PdfColor(240, 240, 240));
+
     int posCounter = 1;
+    final Map<String, int> defectTotals = {};
+
     for (final d in doors) {
       final PdfGridRow row = grid.rows.add();
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
-      final errorSummary = errors.map((e) => '${e['errorCode'] ?? e['code']}').join(', ');
+      final Map<String, int> doorDefectQtyMap = {};
+      for (final e in errors) {
+        final code = (e['errorCode'] ?? e['code'] ?? '') as String;
+        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final key = code.isNotEmpty ? code : desc;
+        final qty = (e['quantity'] as num?)?.toInt() ?? 1;
+        if (key.isNotEmpty) {
+          doorDefectQtyMap[key] = (doorDefectQtyMap[key] ?? 0) + qty;
+        }
+      }
 
       final rowValues = [
         '${d['pos'] ?? posCounter}',
@@ -123,47 +173,68 @@ class PdfExportService {
         '${d['wingCount'] ?? 1}',
         d['material'] as String? ?? '',
         d['manufacturer'] as String? ?? '',
-        d['approvalNumber'] as String? ?? '',
-        d['manufacturerNumber'] as String? ?? '',
-        d['dopNumber'] as String? ?? '',
-        d['manufactureYear'] as String? ?? '',
         d['dinConfiguration'] as String? ?? '',
         d['closerType'] as String? ?? '',
         d['closingSequenceSystem'] as String? ?? '',
         d['lockDimensions'] as String? ?? '',
-        _boolToStr(d['closerOnHingeSide']),
-        _boolToStr(d['closerOnOppositeSide']),
-        d['fsaDriveAcceptanceDate'] as String? ?? '',
-        _boolToStr(d['lintelHeightInsideOver1m']),
-        d['lintelHeightInsideValue'] as String? ?? '',
-        _boolToStr(d['lintelHeightOutsideOver1m']),
-        d['lintelHeightOutsideValue'] as String? ?? '',
-        _boolToStr(d['escapeDoorControl']),
-        d['accessControl'] as String? ?? '',
-        _boolToStr(d['escapeRouteSituation']),
-        _boolToStr(d['escapeRouteSignage']),
-        _boolToStr(d['blindCylinder']),
-        _boolToStr(d['pzCylinder']),
+        _xStr(d['closerOnHingeSide']),
+        _xStr(d['closerOnOppositeSide']),
+        _xStr(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m']),
+        d['escapeDoorControl'] == true ? 'Ja' : 'Nein',
+        d['accessControl'] as String? ?? 'Nein',
+        _xStr(d['escapeRouteSituation']),
+        _xStr(d['escapeRouteSignage']),
+        _xStr(d['blindCylinder']),
+        _xStr(d['pzCylinder']),
         d['fittingType'] as String? ?? '',
         d['panicFunction'] as String? ?? '',
-        _boolToStr(d['escapeDirectionRespected']),
-        _boolToStr(d['fullPanicStandWing']),
-        _boolToStr(d['doorFunctionOK']),
-        d['junctionStatus'] as String? ?? 'InProgress',
-        d['junctionNotes'] as String? ?? '',
-        errorSummary.isEmpty ? 'Mängelfrei' : errorSummary,
+        _xStr(d['escapeDirectionRespected']),
+        _xStr(d['fullPanicStandWing']),
+        _jnStr(d['doorFunctionOK']),
       ];
 
       for (int c = 0; c < rowValues.length; c++) {
         row.cells[c].value = rowValues[c];
         row.cells[c].style.font = bodyFont;
       }
+
+      for (int i = 0; i < sortedDefectKeys.length; i++) {
+        final key = sortedDefectKeys[i];
+        final colIdx = fixedHeaders.length + i;
+        if (doorDefectQtyMap.containsKey(key)) {
+          final qty = doorDefectQtyMap[key]!;
+          row.cells[colIdx].value = '$qty';
+          row.cells[colIdx].style.font = bodyFont;
+          defectTotals[key] = (defectTotals[key] ?? 0) + qty;
+        } else {
+          row.cells[colIdx].value = '';
+          row.cells[colIdx].style.font = bodyFont;
+        }
+      }
+
+      final doorNotes = (d['notes'] ?? d['junctionNotes'] ?? '').toString();
+      row.cells[notesColIdx].value = doorNotes;
+      row.cells[notesColIdx].style.font = bodyFont;
+
       posCounter++;
+    }
+
+    // Bottom total sum row
+    final PdfGridRow summaryRow = grid.rows.add();
+    summaryRow.cells[0].value = 'Summe für Mängelbeseitigung';
+    summaryRow.cells[0].style.font = headerFont;
+
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final key = sortedDefectKeys[i];
+      final colIdx = fixedHeaders.length + i;
+      final total = defectTotals[key] ?? 0;
+      summaryRow.cells[colIdx].value = '$total';
+      summaryRow.cells[colIdx].style.font = headerFont;
     }
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 50, page.getClientSize().width, page.getClientSize().height - 55),
+      bounds: Rect.fromLTWH(0, 40, page.getClientSize().width, page.getClientSize().height - 45),
     );
 
     final file = File(outputPath);
