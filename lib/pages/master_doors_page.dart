@@ -1118,6 +1118,12 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       });
     }
 
+    final int totalCount = _masterDoors.length;
+    final int shownCount = displayDoors.length;
+    final int withErrorsCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) > 0).length;
+    final int errorFreeCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) == 0).length;
+    final bool isFilterActive = _searchController.text.isNotEmpty || _selectedClient != 'Alle' || _errorFilter != ErrorFilterOption.all;
+
     return Column(
       children: [
         // Error Filter & Sort Control Bar
@@ -1229,6 +1235,75 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 ),
               ],
             ),
+          ),
+        ),
+        const Divider(height: 1),
+
+        // Metrics Summary Banner for Door Inventory
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: isFilterActive ? Colors.blue.shade50.withValues(alpha: 0.6) : Colors.grey.shade100,
+          child: Row(
+            children: [
+              Icon(
+                isFilterActive ? Icons.filter_alt_outlined : Icons.analytics_outlined,
+                size: 18,
+                color: isFilterActive ? Colors.blue.shade800 : Colors.grey.shade700,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Angezeigt: ',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade900),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isFilterActive ? Colors.blue.shade700 : Colors.deepPurple,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$shownCount Tür(en)',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              if (isFilterActive && totalCount != shownCount) ...[
+                const SizedBox(width: 6),
+                Text(
+                  '(von $totalCount gesamt)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                ),
+              ],
+              const Spacer(),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      border: Border.all(color: Colors.red.shade200),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$withErrorsCount mit Mängeln',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.red.shade900),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      border: Border.all(color: Colors.green.shade200),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$errorFreeCount mängelfrei',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const Divider(height: 1),

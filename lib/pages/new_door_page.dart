@@ -296,20 +296,27 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             ? await DatabaseService.getDetailedErrorsForInspectionDoor(junctionId)
             : await LocalDatabaseService.getDetailedErrorsForInspectionDoor(junctionId);
 
-        final errorCodes = errors
-            .map((e) => (e['errorCode'] ?? e['code'] ?? '').toString().trim())
-            .where((c) => c.isNotEmpty)
-            .toSet()
-            .toList();
+        final List<String> formattedEntries = [];
+        for (final e in errors) {
+          final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '').toString().trim();
+          final note = (e['notes'] ?? '').toString().trim();
+          if (desc.isNotEmpty && note.isNotEmpty) {
+            formattedEntries.add('$desc: $note');
+          } else if (desc.isNotEmpty) {
+            formattedEntries.add(desc);
+          } else if (note.isNotEmpty) {
+            formattedEntries.add(note);
+          }
+        }
 
-        if (errorCodes.isNotEmpty) {
-          final codeString = errorCodes.join(', ');
+        if (formattedEntries.isNotEmpty) {
+          final newNotesText = formattedEntries.join('\n');
           if (mounted) {
             setState(() {
-              if (notesController.text.trim().isEmpty || _isOnlyErrorCodes(notesController.text.trim())) {
-                notesController.text = codeString;
-              } else if (!notesController.text.contains(codeString)) {
-                notesController.text = '${notesController.text.trim()} ($codeString)';
+              if (notesController.text.trim().isEmpty || _isAutoSyncedErrorNotes(notesController.text.trim(), formattedEntries)) {
+                notesController.text = newNotesText;
+              } else if (!notesController.text.contains(newNotesText)) {
+                notesController.text = '${notesController.text.trim()}\n$newNotesText';
               }
             });
           }
@@ -320,10 +327,17 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
   }
 
-  bool _isOnlyErrorCodes(String text) {
+  bool _isAutoSyncedErrorNotes(String text, List<String> formattedEntries) {
     if (text.isEmpty) return true;
-    final parts = text.split(',').map((s) => s.trim()).toList();
-    return parts.every((p) => p.startsWith('M-') || p.startsWith('ERR_') || p.contains('-'));
+    final trimmed = text.trim();
+    // Legacy check for old error codes format (e.g. M-01, M-02)
+    final parts = trimmed.split(',').map((s) => s.trim()).toList();
+    if (parts.every((p) => p.startsWith('M-') || p.startsWith('ERR_') || p.contains('-'))) {
+      return true;
+    }
+    // Check if lines match error descriptions / notes
+    final lines = trimmed.split('\n').map((l) => l.trim()).toList();
+    return lines.every((line) => formattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry.split(':').first)));
   }
 
   // Build a Door object from form fields
