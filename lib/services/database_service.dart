@@ -2842,7 +2842,7 @@ class DatabaseService {
       FROM doors d
       INNER JOIN inspection_doors id ON d.id = id.doorId
       WHERE id.inspectionId = ?
-      ORDER BY d.doorNumber ASC
+      ORDER BY d.pos ASC, d.doorNumber ASC
     ''', [inspectionId]);
 
     final List<Map<String, dynamic>> processedDoors = [];

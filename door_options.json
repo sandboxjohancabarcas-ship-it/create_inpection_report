@@ -19,8 +19,7 @@
       "FB-1",
       "FB-2",
       "FB-3",
-      "FB-4",
-      "Alu/Glas"
+      "FB-4"
     ],
     "default": "?"
   },
@@ -41,8 +40,7 @@
       "Holz/Glas",
       "Stahlblech",
       "Stahlblech/Glas",
-      "Kunststoff",
-      "Do TS 93"
+      "Kunststoff"
     ],
     "default": "?"
   },
@@ -66,8 +64,12 @@
       "Specht-Holz",
       "Schwarze-Stahl",
       "Hoba-Holz",
-      "1",
-      "Novoferm"
+      "Jeld Wen",
+      "Schüco Jansen",
+      "Neuform",
+      "Hörmann",
+      "RP",
+      "Jansen"
     ],
     "default": "?"
   },
@@ -83,8 +85,7 @@
       "DIN L aus St-Flg. Ver.",
       "DIN R aus St-Flg. Ver.",
       "DIN L ein St-Flg. Ver.",
-      "DIN R ein St-Flg. Ver.",
-      "Do TS 93 EMR"
+      "DIN R ein St-Flg. Ver."
     ],
     "default": "?"
   },
@@ -198,8 +199,7 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "Fluchtwegsituation prüfen!",
-      "Tür nicht mehr vorhanden"
+      "GSR mech.+2HM+1SM+FSZ Basis"
     ],
     "default": "?"
   },
@@ -226,9 +226,35 @@
       "MfV-35/92/10-24 U",
       "SVP",
       "Motorschloss",
-      "35/92/9/28/F",
-      "Nemef/65/72/9/24+235/FR",
-      "Nemef/65/72/9/24+235/F"
+      "65/72/9/20x235/FR",
+      "35/92/9/24-270 F",
+      "35/72/9/20-250FE",
+      "60/72/9/24x235/FR",
+      "65/72/9/24x235/FR",
+      "35/92/9/24U-270",
+      "30/92/9/24U-265",
+      "30/92/9/24-270F",
+      "30/72/8/24-215F",
+      "35/92/9/55-305F",
+      "30/72/8/20-250F",
+      "30/92/9/24-340F",
+      "35/92/9/24-305F",
+      "35/92/9/24-260F",
+      "65/72/8/20x235/FR",
+      "30/72/9/20-250F",
+      "30/92/9/28-270F",
+      "30/92/9/28-305F",
+      "60/72/8/24-235FR",
+      "30/92/9/24-380F",
+      "Mehrfachverriegelung",
+      "45/72/9/24-270F",
+      "60/72/8/20-235FR",
+      "40/92/9/55-305F",
+      "35/92/9/24-270F",
+      "100/72/9/24-235FR",
+      "100/72/9/20-235FR",
+      "35/92/9/24-240F",
+      "Nemef/65/72/9/24x235/FR"
     ],
     "default": "?"
   },
@@ -251,7 +277,7 @@
       "KABA Evolo",
       "CES",
       "U&Z",
-      "CES Digitalzylinder"
+      "Simons&Voss"
     ],
     "default": "Nein"
   },

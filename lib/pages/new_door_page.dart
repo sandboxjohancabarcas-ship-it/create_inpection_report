@@ -340,6 +340,128 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return lines.every((line) => formattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry.split(':').first)));
   }
 
+  void _openNotesDialog() {
+    final dialogController = TextEditingController(text: notesController.text);
+    final bool readOnly = widget.isReadOnly ?? false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.note_alt_outlined, color: Colors.blue.shade800, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tür-Notizen & Mängelhinweise',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    doorAliasController.text.isNotEmpty
+                        ? 'Barcode: ${doorAliasController.text}'
+                        : 'Türnummer: ${doorNumberController.text}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 650,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 20, color: Colors.blue.shade800),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          readOnly
+                              ? 'Erfasste Notizen und automatisch dokumentierte Mängelhinweise zu dieser Tür (Lesemodus).'
+                              : 'Hier werden angemeldete Mängelhinweise und Notizen zusammengefasst. Sie können den Text beliebig erweitern oder ergänzen.',
+                          style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: dialogController,
+                  readOnly: readOnly,
+                  maxLines: 14,
+                  minLines: 8,
+                  style: const TextStyle(fontSize: 14, height: 1.4),
+                  decoration: InputDecoration(
+                    labelText: 'Notizen & Mängelbeschreibungen (Volltext)',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    hintText: 'Keine Notizen erfasst...',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (!readOnly) ...[
+            TextButton.icon(
+              icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+              label: const Text('Text leeren'),
+              onPressed: () {
+                dialogController.clear();
+              },
+            ),
+            TextButton(
+              child: const Text('Abbrechen'),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.check),
+              label: const Text('Übernehmen'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              onPressed: () {
+                setState(() {
+                  notesController.text = dialogController.text;
+                });
+                Navigator.of(ctx).pop();
+              },
+            ),
+          ] else ...[
+            TextButton(
+              child: const Text('Schließen'),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // Build a Door object from form fields
   Door buildDoor() {
     String prov = provisionalAliasController.text.trim();
@@ -952,13 +1074,71 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Schlossabmessungen"),
             ),
 
-            // Notizen (Türspezifikation)
-            TextField(
-              controller: notesController,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: "Notizen",
-                hintText: "Zusätzliche Informationen zur Tür oder Mängelcodes...",
+            // Notizen (Türspezifikation) - Pop-Up Window Integration
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade400),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.notes, color: Theme.of(context).primaryColor, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            "Notizen & Mängelhinweise",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _openNotesDialog,
+                        icon: const Icon(Icons.open_in_new, size: 16),
+                        label: Text(widget.isReadOnly == true ? "Notizen ansehen" : "In Pop-Up Fenster bearbeiten"),
+                        style: ElevatedButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: _openNotesDialog,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(minHeight: 60),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        notesController.text.trim().isNotEmpty
+                            ? notesController.text.trim()
+                            : "(Keine Notizen erfasst. Klicken Sie hier oder auf den Pop-Up Button, um Notizen einzugeben...)",
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.3,
+                          color: notesController.text.trim().isNotEmpty
+                              ? Theme.of(context).textTheme.bodyMedium?.color
+                              : Colors.grey.shade600,
+                          fontStyle: notesController.text.trim().isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

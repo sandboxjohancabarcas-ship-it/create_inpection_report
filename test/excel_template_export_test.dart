@@ -56,7 +56,7 @@ void main() {
         'code': 'E01',
         'description': 'Schließkraft ungenügend',
         'category': 'Türschließer',
-      });
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // Insert defect for door
       await db.insert('inspection_door_errors', {

@@ -35,7 +35,17 @@ class ExcelExportService {
 
     final excel = Excel.createExcel();
     final insp = data['inspection'] as Map<String, dynamic>;
-    final doors = data['doors'] as List<Map<String, dynamic>>;
+    final doors = List<Map<String, dynamic>>.from(data['doors'] as List<Map<String, dynamic>>);
+
+    // Sort doors ascending by Pos. (pos)
+    doors.sort((a, b) {
+      final posA = (a['pos'] as num?)?.toInt() ?? 999999;
+      final posB = (b['pos'] as num?)?.toInt() ?? 999999;
+      if (posA != posB) return posA.compareTo(posB);
+      final numA = (a['doorNumber'] as String? ?? '');
+      final numB = (b['doorNumber'] as String? ?? '');
+      return numA.compareTo(numB);
+    });
 
     final String clientName = insp['clientName'] as String? ?? '';
     final String dateStr = insp['date'] as String? ?? '';
@@ -67,24 +77,177 @@ class ExcelExportService {
     }
     final sortedDefectKeys = defectMap.keys.toList()..sort();
 
+    // ── STYLING DEFINITIONS FOR CUSTOMER PRESENTATION ──────────────
+    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#BFBFBF'));
+    final borderMedium = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
+    final borderDouble = Border(borderStyle: BorderStyle.Double, borderColorHex: ExcelColor.fromHexString('#000000'));
+
+    final metaStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#1F497D'),
+      verticalAlign: VerticalAlign.Center,
+    );
+
+    final categoryHeaderStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+      backgroundColorHex: ExcelColor.fromHexString('#1F497D'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderMedium,
+      bottomBorder: borderMedium,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final colHeaderFixedStyle = CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#D9E1F2'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderMedium,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final colHeaderDefectStyle = CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#FCE4D6'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderMedium,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final colHeaderNotesStyle = CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderMedium,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final dataCenterEvenStyle = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final dataCenterOddStyle = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#F2F4F8'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final dataLeftEvenStyle = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final dataLeftOddStyle = CellStyle(
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#F2F4F8'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final summaryLabelStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderMedium,
+      bottomBorder: borderDouble,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final summaryStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderMedium,
+      bottomBorder: borderDouble,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
     // ── ROW 0: Metadata Row ───────────────────────────────────
-    final metaText = 'Kunde: $clientName Objekt: $objectAddress Datum: $dateStr Ansprechpartner: $contactPerson Monteur: $inspectorName Auftragsnummer: $jobNumber';
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value = TextCellValue(metaText);
+    final metaText = 'Kunde: $clientName | Objekt: $objectAddress | Datum: $dateStr | Ansprechpartner: $contactPerson | Monteur: $inspectorName | Auftragsnummer: $jobNumber';
+    final metaCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0));
+    metaCell.value = TextCellValue(metaText);
+    metaCell.cellStyle = metaStyle;
 
     // Dynamic error sequence numbers (1, 2, 3...) above defect columns
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = 28 + i;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 0)).value = TextCellValue('${i + 1}');
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 0));
+      cell.value = TextCellValue('${i + 1}');
+      cell.cellStyle = colHeaderDefectStyle;
     }
 
     // ── ROW 1: Grouped Category Headers (Application UI Categories) ───────
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value = TextCellValue('Grundinformationen');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: 1)).value = TextCellValue('Tür Spezifikationen');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: 1)).value = TextCellValue('Installation');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 17, rowIndex: 1)).value = TextCellValue('Sicherheit & Zugang');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: 1)).value = TextCellValue('Bewertung');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 28, rowIndex: 1)).value = TextCellValue('Mängelhinweise [$jobNumber]');
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 28 + sortedDefectKeys.length, rowIndex: 1)).value = TextCellValue('Anmerkung');
+    final categoriesMap = <int, String>{
+      0: 'Grundinformationen',
+      6: 'Tür Spezifikationen',
+      11: 'Installation',
+      17: 'Sicherheit & Zugang',
+      27: 'Bewertung',
+      28: 'Mängelhinweise [$jobNumber]',
+      28 + sortedDefectKeys.length: 'Anmerkung',
+    };
+
+    final totalCols = 28 + sortedDefectKeys.length + 1;
+    for (int c = 0; c < totalCols; c++) {
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 1));
+      if (categoriesMap.containsKey(c)) {
+        cell.value = TextCellValue(categoriesMap[c]!);
+      }
+      cell.cellStyle = categoryHeaderStyle;
+    }
 
     // ── ROW 2: Column Headers ──────────────────────────────────
     final fixedHeaders = [
@@ -119,18 +282,24 @@ class ExcelExportService {
     ];
 
     for (int col = 0; col < fixedHeaders.length; col++) {
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 2)).value = TextCellValue(fixedHeaders[col]);
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 2));
+      cell.value = TextCellValue(fixedHeaders[col]);
+      cell.cellStyle = colHeaderFixedStyle;
     }
 
     // Dynamic Defect Column Headers (Col 28 to 28 + N - 1)
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = 28 + i;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 2)).value = TextCellValue(defectMap[sortedDefectKeys[i]]!);
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 2));
+      cell.value = TextCellValue(defectMap[sortedDefectKeys[i]]!);
+      cell.cellStyle = colHeaderDefectStyle;
     }
 
     // Notes Column Header (Col 28 + N)
     final notesColIdx = 28 + sortedDefectKeys.length;
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: 2)).value = TextCellValue('Anmerkung');
+    final notesHeaderCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: 2));
+    notesHeaderCell.value = TextCellValue('Anmerkung');
+    notesHeaderCell.cellStyle = colHeaderNotesStyle;
 
     // ── ROW 3+: Data Rows ──────────────────────────────────────
     int rowIndex = 3;
@@ -138,6 +307,10 @@ class ExcelExportService {
     final Map<String, int> defectColumnTotals = {};
 
     for (final d in doors) {
+      final isEven = (rowIndex % 2 == 0);
+      final centerStyle = isEven ? dataCenterEvenStyle : dataCenterOddStyle;
+      final leftStyle = isEven ? dataLeftEvenStyle : dataLeftOddStyle;
+
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       final Map<String, int> doorDefectQtyMap = {};
       for (final e in errors) {
@@ -181,38 +354,56 @@ class ExcelExportService {
         TextCellValue(_jnStr(d['doorFunctionOK'])),
       ];
 
+      // Left-aligned string columns: 2, 4, 5, 6, 8, 9, 11, 12, 13, 17, 18, 23, 24
+      final leftAlignedCols = {2, 4, 5, 6, 8, 9, 11, 12, 13, 17, 18, 23, 24};
+
       for (int c = 0; c < fixedCells.length; c++) {
-        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).value = fixedCells[c];
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex));
+        cell.value = fixedCells[c];
+        cell.cellStyle = leftAlignedCols.contains(c) ? leftStyle : centerStyle;
       }
 
       // Dynamic Defect Cells
       for (int i = 0; i < sortedDefectKeys.length; i++) {
         final key = sortedDefectKeys[i];
         final colIdx = 28 + i;
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex));
         if (doorDefectQtyMap.containsKey(key)) {
           final qty = doorDefectQtyMap[key]!;
-          sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('$qty');
+          cell.value = TextCellValue('$qty');
           defectColumnTotals[key] = (defectColumnTotals[key] ?? 0) + qty;
         } else {
-          sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('');
+          cell.value = TextCellValue('');
         }
+        cell.cellStyle = centerStyle;
       }
 
       // Anmerkung Cell (Notes property)
       final doorNotes = (d['notes'] ?? d['junctionNotes'] ?? '').toString();
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: rowIndex)).value = TextCellValue(doorNotes);
+      final notesCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: rowIndex));
+      notesCell.value = TextCellValue(doorNotes);
+      notesCell.cellStyle = leftStyle;
 
       rowIndex++;
       posCounter++;
     }
 
     // ── BOTTOM SUMMARY ROW: Total Sums ────────────────────────
-    sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex)).value = TextCellValue('Summe für Mängelbeseitigung');
+    for (int c = 0; c < totalCols; c++) {
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex));
+      cell.cellStyle = summaryStyle;
+    }
+    final sumLabelCell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex));
+    sumLabelCell.value = TextCellValue('Summe für Mängelbeseitigung');
+    sumLabelCell.cellStyle = summaryLabelStyle;
+
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final key = sortedDefectKeys[i];
       final colIdx = 28 + i;
       final total = defectColumnTotals[key] ?? 0;
-      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex)).value = TextCellValue('$total');
+      final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: rowIndex));
+      cell.value = TextCellValue('$total');
+      cell.cellStyle = summaryStyle;
     }
 
     final file = File(outputPath);

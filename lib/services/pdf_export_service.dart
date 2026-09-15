@@ -46,7 +46,17 @@ class PdfExportService {
     }
 
     final insp = data['inspection'] as Map<String, dynamic>;
-    final doors = data['doors'] as List<Map<String, dynamic>>;
+    final doors = List<Map<String, dynamic>>.from(data['doors'] as List<Map<String, dynamic>>);
+
+    // Sort doors ascending by Pos. (pos)
+    doors.sort((a, b) {
+      final posA = (a['pos'] as num?)?.toInt() ?? 999999;
+      final posB = (b['pos'] as num?)?.toInt() ?? 999999;
+      if (posA != posB) return posA.compareTo(posB);
+      final numA = (a['doorNumber'] as String? ?? '');
+      final numB = (b['doorNumber'] as String? ?? '');
+      return numA.compareTo(numB);
+    });
 
     // Collect all distinct error codes & descriptions across doors in this inspection
     final Map<String, String> defectMap = {};
@@ -69,8 +79,8 @@ class PdfExportService {
     final page = document.pages.add();
 
     final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
-    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 4.5, style: PdfFontStyle.bold);
-    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 4.5);
+    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
+    final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 5);
 
     // Title
     page.graphics.drawString(
@@ -123,27 +133,37 @@ class PdfExportService {
 
     final totalCols = fixedHeaders.length + sortedDefectKeys.length + 1; // +1 for Anmerkung
     final PdfGrid grid = PdfGrid();
+    grid.style.cellPadding = PdfPaddings(left: 1.5, right: 1.5, top: 2, bottom: 2);
+
     grid.columns.add(count: totalCols);
     grid.headers.add(1);
 
     final PdfGridRow headerRow = grid.headers[0];
+    final headerBorderPen = PdfPen(PdfColor(0, 0, 0), width: 1.0);
+
     for (int col = 0; col < fixedHeaders.length; col++) {
-      headerRow.cells[col].value = fixedHeaders[col];
-      headerRow.cells[col].style.font = headerFont;
-      headerRow.cells[col].style.backgroundBrush = PdfSolidBrush(PdfColor(220, 230, 242));
+      final cell = headerRow.cells[col];
+      cell.value = fixedHeaders[col];
+      cell.style.font = headerFont;
+      cell.style.backgroundBrush = PdfSolidBrush(PdfColor(217, 225, 242));
+      cell.style.borders.all = headerBorderPen;
     }
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = fixedHeaders.length + i;
-      headerRow.cells[colIdx].value = defectMap[sortedDefectKeys[i]]!;
-      headerRow.cells[colIdx].style.font = headerFont;
-      headerRow.cells[colIdx].style.backgroundBrush = PdfSolidBrush(PdfColor(255, 235, 238));
+      final cell = headerRow.cells[colIdx];
+      cell.value = defectMap[sortedDefectKeys[i]]!;
+      cell.style.font = headerFont;
+      cell.style.backgroundBrush = PdfSolidBrush(PdfColor(252, 228, 214));
+      cell.style.borders.all = headerBorderPen;
     }
 
     final notesColIdx = fixedHeaders.length + sortedDefectKeys.length;
-    headerRow.cells[notesColIdx].value = 'Anmerkung';
-    headerRow.cells[notesColIdx].style.font = headerFont;
-    headerRow.cells[notesColIdx].style.backgroundBrush = PdfSolidBrush(PdfColor(240, 240, 240));
+    final notesCell = headerRow.cells[notesColIdx];
+    notesCell.value = 'Anmerkung';
+    notesCell.style.font = headerFont;
+    notesCell.style.backgroundBrush = PdfSolidBrush(PdfColor(226, 239, 218));
+    notesCell.style.borders.all = headerBorderPen;
 
     int posCounter = 1;
     final Map<String, int> defectTotals = {};
@@ -221,6 +241,15 @@ class PdfExportService {
 
     // Bottom total sum row
     final PdfGridRow summaryRow = grid.rows.add();
+    final summaryBorderPen = PdfPen(PdfColor(0, 0, 0), width: 1.2);
+    final summaryBg = PdfSolidBrush(PdfColor(226, 239, 218));
+
+    for (int c = 0; c < totalCols; c++) {
+      summaryRow.cells[c].style.backgroundBrush = summaryBg;
+      summaryRow.cells[c].style.borders.top = summaryBorderPen;
+      summaryRow.cells[c].style.borders.bottom = summaryBorderPen;
+    }
+
     summaryRow.cells[0].value = 'Summe für Mängelbeseitigung';
     summaryRow.cells[0].style.font = headerFont;
 

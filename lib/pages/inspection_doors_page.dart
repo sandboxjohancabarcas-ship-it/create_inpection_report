@@ -270,6 +270,87 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     }
   }
 
+  void _showDoorNotesPopUp(Door door) {
+    final notesText = door.notes.isNotEmpty ? door.notes : '(Keine Notizen erfasst)';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(Icons.note_alt_outlined, color: Colors.blue.shade800, size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tür ${door.doorNumber} - Notizen & Mängel', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Barcode: ${door.doorAlias ?? "Kein Alias"}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 600,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: SelectableText(
+                    notesText,
+                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: const Text('Schließen'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+          if (_isEditable)
+            ElevatedButton.icon(
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Formular bearbeiten'),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DoorInspectionForm(
+                      door: door,
+                      isManagerMode: widget.isManagerMode,
+                      inspectionId: widget.inspectionId,
+                      isReadOnly: !_isEditable,
+                    ),
+                  ),
+                ).then((_) => _loadDoors());
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildErrorStatusBadge(DoorErrorSummary summary) {
     Color bg;
     Color fg;
@@ -588,6 +669,12 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                   : Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (door.notes.isNotEmpty)
+                                          IconButton(
+                                            icon: const Icon(Icons.note_alt_outlined, color: Colors.blue, size: 20),
+                                            tooltip: 'Notizen & Mängel im Pop-Up Fenster öffnen',
+                                            onPressed: () => _showDoorNotesPopUp(door),
+                                          ),
                                         IconButton(
                                           icon: const Icon(Icons.history_edu, color: Colors.blueGrey, size: 20),
                                           tooltip: 'Tür-Akte & Historie',
