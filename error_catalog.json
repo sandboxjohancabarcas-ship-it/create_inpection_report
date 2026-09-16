@@ -1266,7 +1266,7 @@
     "recommendation": "",
     "normReference": ""
   },
-  "7. 1": {
+  "7.1": {
     "description": "Rauchmeldezentrale Contur silber im Austausch",
     "category": "Mangel",
     "severity": "medium",
@@ -1499,62 +1499,6 @@
   },
   "3.2.6": {
     "description": "FH-Antipanikschloss B/65/72/24/9/DRE ersetzen",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "Brand- und Rauchschutzkonzept überprüfen": {
-    "description": "Brand- und Rauchschutzkonzept überprüfen",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "FH Nemef-Antipanikschloss \"E\" ersetzen": {
-    "description": "FH Nemef-Antipanikschloss \"E\" ersetzen",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "Boden ungerade, BD senkt nicht vollständig ab": {
-    "description": "Boden ungerade, BD senkt nicht vollständig ab",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "Handtaster nicht nach DiBt, erneuern": {
-    "description": "Handtaster nicht nach DiBt, erneuern",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "Haftmagnet Dorma EM 500 erneuern": {
-    "description": "Haftmagnet Dorma EM 500 erneuern",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "Zargenanschlag beschädigt": {
-    "description": "Zargenanschlag beschädigt",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "BD Athmer JW Schall-EX Large 958mm 30/15": {
-    "description": "BD Athmer JW Schall-EX Large 958mm 30/15",
-    "category": "Mangel",
-    "severity": "medium",
-    "recommendation": "",
-    "normReference": ""
-  },
-  "FSA ohne Strom": {
-    "description": "FSA ohne Strom",
     "category": "Mangel",
     "severity": "medium",
     "recommendation": "",

@@ -595,60 +595,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             ),
             const VerticalDivider(),
             TextButton.icon(
-              onPressed: () async {
-                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
-                final service = GaebExportService(
-                  customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['projectName'] ?? 'Unbekannt',
-                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
-                );
-                
-                final data = await _prepareExportData();
-                final file = await service.exportToD83(data);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('GAEB 90 exportiert nach: ${file.path}')),
-                  );
-                  
-                  // Trigger Cloud Upload
-                  final selectedDirectoryId = await _confirmCloudUpload();
-                  if (selectedDirectoryId != null) {
-                    await _uploadToCloud(file, service.jobNumber, selectedDirectoryId);
-                  }
-                }
-              },
-              icon: const Icon(Icons.description),
-              label: const Text('GAEB 90 exportieren'),
-            ),
-            const VerticalDivider(),
-            TextButton.icon(
-              onPressed: () async {
-                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
-                final service = GaebExportService(
-                  customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['projectName'] ?? 'Unbekannt',
-                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
-                );
-
-                final data = await _prepareExportData();
-                final file = await service.exportToXml(data);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('GAEB XML exportiert nach: ${file.path}')),
-                  );
-
-                  // Trigger Cloud Upload
-                  final selectedDirectoryId = await _confirmCloudUpload();
-                  if (selectedDirectoryId != null) {
-                    await _uploadToCloud(file, service.jobNumber, selectedDirectoryId);
-                  }
-                }
-              },
-              icon: const Icon(Icons.code),
-              label: const Text('GAEB XML exportieren'),
-            ),
-            const VerticalDivider(),
-            TextButton.icon(
               onPressed: () => _handleJobDownload(_selectedInspectionIds.toList()),
               icon: const Icon(Icons.download_for_offline, color: Colors.green),
               label: const Text(

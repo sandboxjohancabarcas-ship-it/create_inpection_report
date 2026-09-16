@@ -242,7 +242,7 @@ class DoorValidator {
       issues.add(const DoorValidationIssue(
         field: 'doorNumber',
         ruleCode: 'V11',
-        message: 'Türnummer fehlt. Pflichtfeld für Identifikation und GAEB-Export.',
+        message: 'Türnummer fehlt. Pflichtfeld für Identifikation.',
         severity: ValidationSeverity.error,
       ));
     }

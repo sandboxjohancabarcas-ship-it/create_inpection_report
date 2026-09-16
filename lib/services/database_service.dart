@@ -1970,6 +1970,15 @@ class DatabaseService {
     }
   }
 
+  static String _cleanCatalogDesc(String text) {
+    return text
+        .replaceFirst(RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^[xX]\s+'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
+  }
+
   static Future<ImportResult> mergeErrorCatalog(
     List<ErrorCatalog> errors, {
     bool autoResolve = false,
@@ -1983,8 +1992,11 @@ class DatabaseService {
 
       for (final row in existingRows) {
         final item = ErrorCatalog.fromMap(row);
-        existingByCode[item.code] = item;
-        existingByDescription[item.description.toLowerCase()] = item;
+        existingByCode[item.code.toLowerCase()] = item;
+        final cleanDesc = _cleanCatalogDesc(item.description);
+        if (cleanDesc.isNotEmpty) {
+          existingByDescription[cleanDesc] = item;
+        }
       }
 
       int insertedCount = 0;
@@ -1992,14 +2004,16 @@ class DatabaseService {
       final conflicts = <ImportConflict>[];
 
       for (final error in errors) {
-        final existingForCode = existingByCode[error.code];
+        final cleanIncomingDesc = _cleanCatalogDesc(error.description);
+        final existingForCode = existingByCode[error.code.toLowerCase()];
+        
         if (existingForCode != null) {
-          if (existingForCode.isSameContent(error)) {
+          final cleanExistingDesc = _cleanCatalogDesc(existingForCode.description);
+          if (cleanExistingDesc == cleanIncomingDesc) {
             duplicateCount++;
             continue;
           }
           if (autoResolve) {
-            // Auto-update catalog details if code exists but has new info
             await txn.update(
               'error_catalog',
               {
@@ -2018,13 +2032,15 @@ class DatabaseService {
             description: error.description,
             incoming: error,
             existing: existingForCode,
-            reason: 'Existing entry with same code has different data',
+            reason: 'Bestehender Eintrag mit Code "${error.code}" hat andere Beschreibung ("${existingForCode.description}")',
           ));
           continue;
         }
 
-        final existingForDescription = existingByDescription[error.description.toLowerCase()];
-        if (existingForDescription != null && existingForDescription.code != error.code) {
+        final existingForDescription = cleanIncomingDesc.isNotEmpty ? existingByDescription[cleanIncomingDesc] : null;
+        if (existingForDescription != null &&
+            existingForDescription.code.toLowerCase() != error.code.toLowerCase() &&
+            cleanIncomingDesc.length > 5) {
           if (autoResolve) {
             await txn.insert(
               'error_catalog',
@@ -2039,7 +2055,7 @@ class DatabaseService {
             description: error.description,
             incoming: error,
             existing: existingForDescription,
-            reason: 'Existing entry with same description has a different code (${existingForDescription.code})',
+            reason: 'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDescription.code})',
           ));
           continue;
         }
@@ -2050,8 +2066,10 @@ class DatabaseService {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
         insertedCount++;
-        existingByCode[error.code] = error;
-        existingByDescription[error.description.toLowerCase()] = error;
+        existingByCode[error.code.toLowerCase()] = error;
+        if (cleanIncomingDesc.isNotEmpty) {
+          existingByDescription[cleanIncomingDesc] = error;
+        }
       }
 
       return ImportResult(
@@ -2105,7 +2123,7 @@ class DatabaseService {
     });
   }
 
-  /// Deletes specific inspections and their associated data (junctions, errors, API records).
+  /// Deletes specific inspections and their associated data (junctions, errors, API records, and orphaned doors).
   static Future<void> deleteInspections(List<int> ids) async {
     if (ids.isEmpty) return;
     final db = await getDb();
@@ -2123,16 +2141,23 @@ class DatabaseService {
 
       // 3. Delete the job records themselves
       await txn.delete('inspections', where: 'inspectionId IN ($idString)');
+
+      // 4. Clean up orphaned doors that no longer belong to any remaining inspection
+      await txn.execute('''
+        DELETE FROM doors 
+        WHERE id NOT IN (SELECT DISTINCT doorId FROM inspection_doors WHERE doorId IS NOT NULL)
+      ''');
     });
   }
 
-  /// Clears all inspection data from the database while preserving Doors and Error Catalog.
+  /// Clears all inspection data and doors from the database while preserving Error Catalog.
   static Future<void> purgeAllInspections() async {
     final db = await getDb();
     await db.transaction((txn) async {
       await txn.delete('inspection_door_errors');
       await txn.delete('inspection_doors');
       await txn.delete('inspections');
+      await txn.delete('doors');
     });
   }
 
@@ -2549,20 +2574,21 @@ class DatabaseService {
 
       // Step 3 — Record exists: compare field by field
       final fieldConflicts = DoorValidator.detectConflicts(incoming, existingDoor!);
+      final DateTime? dbInspectionDate = await getMostRecentInspectionDateForDoor(existingDoor.id!);
+      final DateTime incomingDate = DateTime.tryParse(currentInspectionDate) ?? DateTime.now();
 
       if (fieldConflicts.isEmpty) {
-        // Identical or trivially different — update without review
-        await db.update(
-          'doors',
-          incoming.toMap()..remove('id'),
-          where: 'doorAlias = ?',
-          whereArgs: [alias],
-        );
+        // Only update master door record if incoming inspection is SAME OR NEWER than DB record
+        if (dbInspectionDate == null || !incomingDate.isBefore(dbInspectionDate)) {
+          await db.update(
+            'doors',
+            incoming.toMap()..remove('id'),
+            where: 'doorAlias = ?',
+            whereArgs: [alias],
+          );
+        }
         cleanDoors.add(existingDoor);
       } else {
-        // Discrepancies exist. Determine sliding chronological window:
-        final DateTime? dbInspectionDate = await getMostRecentInspectionDateForDoor(existingDoor.id!);
-        final DateTime incomingDate = DateTime.tryParse(currentInspectionDate) ?? DateTime.now();
 
         if (dbInspectionDate == null) {
           // No previous inspection date in DB. Treat incoming as newest. Auto-update without conflicts.

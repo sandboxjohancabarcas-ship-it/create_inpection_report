@@ -30,6 +30,7 @@ class ExcelImportResult {
   });
 
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
+  bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
 }
 
 class ExcelDataImporter {
@@ -41,6 +42,7 @@ class ExcelDataImporter {
     final logs = <String>[];
     final warnings = <String>[];
     final allDoorConflicts = <DoorConflict>[];
+    final allCatalogConflicts = <ImportConflict>[];
 
     logs.add('Starte Excel-Import für Datei: ${excelFile.path}');
 
@@ -73,60 +75,117 @@ class ExcelDataImporter {
     final allSheets = decoder.tables.keys.toList();
     logs.add('Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
 
-    // 1. Process Fehlerübersicht and populate error_catalog
-    final fehlerSheet = decoder.tables['Fehlerübersicht'];
+    // 1. Process Fehlerübersicht / Fehlercode and populate error_catalog
+    final fehlerSheetKey = decoder.tables.keys.where((k) {
+      final l = k.trim().toLowerCase();
+      return l == 'fehlerübersicht' ||
+             l == 'fehleruebersicht' ||
+             l == 'fehler-übersicht' ||
+             l == 'fehlercode' ||
+             l == 'fehlerkatalog' ||
+             l.startsWith('fehler');
+    }).firstOrNull;
+
+    final fehlerSheet = fehlerSheetKey != null ? decoder.tables[fehlerSheetKey] : null;
     final Map<String, String> resolvedCodes = {};
     final Set<String> skippedCodes = {};
 
+    // Process Manager conflict resolutions if provided
+    if (resolutions != null) {
+      for (final res in resolutions) {
+        if (res.action == ResolutionAction.skip) {
+          skippedCodes.add(res.conflict.code);
+          skippedCodes.add(res.conflict.description);
+          skippedCodes.add(res.conflict.incoming.description);
+        } else if (res.action == ResolutionAction.addAsNew) {
+          final newCode = res.newCode ?? res.conflict.code;
+          resolvedCodes[res.conflict.code] = newCode;
+          resolvedCodes[res.conflict.description] = newCode;
+          resolvedCodes[res.conflict.incoming.description] = newCode;
+          await DatabaseService.insertErrorCatalog(res.conflict.incoming.copyWith(
+            code: newCode,
+            status: 'Approved',
+          ));
+        } else if (res.action == ResolutionAction.replaceExisting || res.action == ResolutionAction.keepExisting) {
+          if (res.newCode != null && res.newCode!.isNotEmpty) {
+            resolvedCodes[res.conflict.code] = res.newCode!;
+            resolvedCodes[res.conflict.description] = res.newCode!;
+            resolvedCodes[res.conflict.incoming.description] = res.newCode!;
+          }
+        }
+      }
+    }
+
     if (fehlerSheet == null) {
-      final msg = 'Das Arbeitsblatt "Fehlerübersicht" fehlt in der Excel-Datei. Verwende bestehenden Fehlerkatalog.';
+      final msg = 'Kein Arbeitsblatt "Fehlerübersicht" / "Fehlercode" in der Excel-Datei gefunden. Verwende bestehenden Fehlerkatalog.';
       warnings.add(msg);
       logs.add('WARNUNG: $msg');
     } else {
       final List<ErrorCatalog> parsedCatalogErrors = [];
       for (int r = 1; r < fehlerSheet.maxRows; r++) {
         final row = fehlerSheet.rows[r];
-        if (row.length > 2) {
-          final codeVal = row[1];
-          final descVal = row[2];
-          if (codeVal != null && descVal != null) {
-            final code = codeVal.toString().trim();
-            final desc = descVal.toString().trim();
-            if (code.isNotEmpty && desc.isNotEmpty) {
-              final isNotice = code.startsWith('0.');
-              final cat = isNotice ? 'Hinweis' : 'Mangel';
-              final sev = isNotice ? 'low' : 'medium';
-              
-              parsedCatalogErrors.add(ErrorCatalog(
-                code: code,
-                description: desc,
-                category: cat,
-                severity: sev,
-                status: 'Approved',
-              ));
-            }
+        if (row.isEmpty) continue;
+
+        String? code;
+        String? desc;
+
+        // Format 1: Column 1 = Code, Column 2 = Description (Fehlerübersicht)
+        if (row.length > 2 && row[1] != null && row[2] != null) {
+          final c = row[1].toString().trim();
+          final d = row[2].toString().trim();
+          if (c.isNotEmpty && d.isNotEmpty && RegExp(r'^\d+(\.\d+)?').hasMatch(c)) {
+            code = c;
+            desc = d;
           }
+        }
+
+        // Format 2: Column 1 = "Code Description" (Fehlercode)
+        if (code == null && row.length > 1 && row[1] != null) {
+          final text = row[1].toString().trim();
+          final m = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(text);
+          if (m != null) {
+            code = m.group(1)!;
+            desc = m.group(2)!;
+          }
+        }
+
+        // Format 3: Column 0 = Code, Column 1 = Description
+        if (code == null && row.length > 1 && row[0] != null && row[1] != null) {
+          final c = row[0].toString().trim();
+          final d = row[1].toString().trim();
+          if (RegExp(r'^\d+(\.\d+)?$').hasMatch(c) && d.isNotEmpty) {
+            code = c;
+            desc = d;
+          }
+        }
+
+        if (code != null && desc != null && code.isNotEmpty && desc.isNotEmpty) {
+          final isNotice = code.startsWith('0.') ||
+              desc.toLowerCase().startsWith('hinweis') ||
+              desc.toLowerCase().contains('hinweis');
+          final cat = isNotice ? 'Hinweis' : 'Mangel';
+          final sev = isNotice ? 'low' : 'medium';
+
+          parsedCatalogErrors.add(ErrorCatalog(
+            code: code,
+            description: desc,
+            category: cat,
+            severity: sev,
+            status: 'Approved',
+          ));
         }
       }
 
-      // Build the resolved codes and skipped codes map/set
-      if (resolutions != null) {
-        for (final res in resolutions) {
-          if (res.action == ResolutionAction.skip) {
-            skippedCodes.add(res.conflict.code);
-          } else if (res.action == ResolutionAction.addAsNew && res.newCode != null) {
-            resolvedCodes[res.conflict.code] = res.newCode!;
-          }
-        }
-      }
+      logs.add('Arbeitsblatt "$fehlerSheetKey" erkannt: ${parsedCatalogErrors.length} Fehlerdefinitionen extrahiert.');
 
       // Merge error catalog
       if (resolutions == null) {
         final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors, autoResolve: false);
         if (mergeResult.conflicts.isNotEmpty) {
-          logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} Konflikte.');
+          allCatalogConflicts.addAll(mergeResult.conflicts);
+          logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} echte Konflikte in $fehlerSheetKey.');
         } else {
-          logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge importiert, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
+          logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge automatisch hinzugefügt, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
         }
       } else {
         logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
@@ -257,29 +316,124 @@ class ExcelDataImporter {
       }
       final headerRow = sheet.rows.isNotEmpty ? sheet.rows[headerRowIndex] : [];
       final errorColumns = <int, String>{}; // colIndex -> code
+      int notesColumnIndex = -1;
+
+      // 1. Scan Row 2 of Excel (Dart index 1) for explicit "Anmerkung" header column
+      if (sheet.maxRows > 1) {
+        final row2 = sheet.rows[1];
+        for (int c = 0; c < row2.length; c++) {
+          final val = _cell(row2, c);
+          if (val == null) continue;
+          final headerStr = val.toString().trim().toLowerCase();
+          if (headerStr == 'anmerkung' || headerStr.startsWith('anmerkung')) {
+            notesColumnIndex = c;
+            break;
+          }
+        }
+      }
+
+      // Fallback: If not found in Row 2, check Row 1 (Dart index 0)
+      if (notesColumnIndex == -1 && sheet.maxRows > 0) {
+        final row1 = sheet.rows[0];
+        for (int c = 0; c < row1.length; c++) {
+          final val = _cell(row1, c);
+          if (val == null) continue;
+          final headerStr = val.toString().trim().toLowerCase();
+          if (headerStr == 'anmerkung' || headerStr.startsWith('anmerkung')) {
+            notesColumnIndex = c;
+            break;
+          }
+        }
+      }
+
+      // 2. Fallback: If header cell is unnamed or blank, scan data rows for column >= 27 containing text notes
+      if (notesColumnIndex == -1) {
+        final textCountPerCol = <int, int>{};
+        for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
+          final row = sheet.rows[r];
+          for (int c = 27; c < row.length; c++) {
+            final cell = row[c];
+            if (cell != null) {
+              final str = cell.toString().trim();
+              if (str.isNotEmpty && str != '1' && str != '0' && double.tryParse(str) == null && str.length > 2) {
+                textCountPerCol[c] = (textCountPerCol[c] ?? 0) + 1;
+              }
+            }
+          }
+        }
+
+        if (textCountPerCol.isNotEmpty) {
+          final sorted = textCountPerCol.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          notesColumnIndex = sorted.first.key;
+        }
+      }
       
-      // Scan from column 27 (AB) onwards for error headers
+      // 3. Scan from column 27 (AB) onwards for error headers
       for (int c = 27; c < headerRow.length; c++) {
+        if (c == notesColumnIndex) continue;
         final val = _cell(headerRow, c);
         if (val == null) continue;
         final headerStr = val.toString().trim();
-        if (headerStr.toLowerCase() == 'anmerkung') {
+        if (headerStr.isEmpty) continue;
+        if (headerStr.toLowerCase() == 'anmerkung' || headerStr.toLowerCase().startsWith('anmerkung')) {
           break; // Stop at notes column
         }
         
         // Try to parse code (e.g. "0.32 Das Brand-...")
         final match = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(headerStr);
+        String code;
         if (match != null) {
-          final code = match.group(1)!;
-          errorColumns[c] = code;
+          code = match.group(1)!;
         } else {
-          final warn = 'Spaltenkopf "$headerStr" in "$sheetName" enthält keinen Mängelcode und wird übersprungen.';
-          warnings.add('Konnte Mängelcode aus Spaltenkopf "$headerStr" nicht lesen. Übersprungen.');
-          logs.add('HINWEIS: $warn');
+          // Check if header matches an existing catalog item by description
+          final exactCatalogMatch = catalog.where((e) =>
+            e.description.trim().toLowerCase() == headerStr.toLowerCase() ||
+            e.description.trim().toLowerCase() == headerStr.replaceFirst(RegExp(r'^Hinweis:\s*', caseSensitive: false), '').trim().toLowerCase()
+          ).firstOrNull;
+
+          if (exactCatalogMatch != null) {
+            code = exactCatalogMatch.code;
+            logs.add('Spaltenkopf "$headerStr" in "$sheetName" zu bestehendem Katalogcode "${exactCatalogMatch.code}" zugeordnet.');
+          } else {
+            code = headerStr;
+          }
         }
+
+        // Check if code exists in catalog or was resolved by Manager
+        final existsInCatalog = catalog.any((e) => e.code.toLowerCase() == code.toLowerCase() || e.description.trim().toLowerCase() == code.toLowerCase());
+        final isResolved = resolvedCodes.containsKey(code) || skippedCodes.contains(code);
+
+        if (!existsInCatalog && !isResolved) {
+          // Raise catalog conflict for Manager review
+          final alreadyConflict = allCatalogConflicts.any((cf) => cf.code.toLowerCase() == code.toLowerCase() || cf.description.toLowerCase() == code.toLowerCase());
+          if (!alreadyConflict) {
+            final isNotice = code.toLowerCase().startsWith('0.') || code.toLowerCase().startsWith('hinweis') || code.toLowerCase().contains('hinweis');
+            final cat = isNotice ? 'Hinweis' : 'Mangel';
+            final sev = isNotice ? 'low' : 'medium';
+
+            allCatalogConflicts.add(ImportConflict(
+              code: code,
+              description: headerStr,
+              incoming: ErrorCatalog(
+                code: code,
+                description: headerStr,
+                category: cat,
+                severity: sev,
+                status: 'Proposed',
+              ),
+              reason: 'Unbekannter Mangel-/Hinweis-Spaltenkopf in "$sheetName" (weder im Fehlerkatalog noch in Fehlerübersicht vorhanden).',
+            ));
+
+            final msg = '[KATALOG-KONFLIKT] Unbekannter Mangel/Hinweis "$headerStr" in Blatt "$sheetName" erfordert Überprüfung durch den Manager.';
+            warnings.add(msg);
+            logs.add(msg);
+          }
+        }
+
+        errorColumns[c] = code;
       }
 
-      logs.add('Mängelspalten für "$sheetName": ${errorColumns.length} Mängelcodes erkannt.');
+      logs.add('Mängelspalten für "$sheetName": ${errorColumns.length} Mängelcodes erkannt. (Anmerkung: ${notesColumnIndex >= 0 ? "Spalte $notesColumnIndex" : "Standard"})');
 
       int sheetDoorsCount = 0;
       int sheetErrorsCount = 0;
@@ -337,6 +491,15 @@ class ExcelDataImporter {
         final fullPanicStandWing = _toBool(_cell(row, 25));
         final doorFunctionOK = _toBool(_cell(row, 26));
 
+        // Read & format notes from "Anmerkung" column for Door properties
+        String rawNotes = '';
+        if (notesColumnIndex >= 0 && notesColumnIndex < row.length) {
+          rawNotes = _toStr(_cell(row, notesColumnIndex));
+        } else if (row.length > 37) {
+          rawNotes = _toStr(_cell(row, 37));
+        }
+        final notes = _formatNotes(rawNotes);
+
         // Handle door alias creation (format: [Projektnummer (without P-)]-[Pos]-[Floor]-[DoorNumber])
         final alias = Door.generateAlias(
           projectNumber: meta['projectNumber'] ?? '',
@@ -376,6 +539,7 @@ class ExcelDataImporter {
           escapeDirectionRespected: escapeDirectionRespected,
           fullPanicStandWing: fullPanicStandWing,
           doorFunctionOK: doorFunctionOK,
+          notes: notes,
         );
 
         sheetDoors.add(door);
@@ -421,18 +585,13 @@ class ExcelDataImporter {
 
         final doorFunctionOK = door.doorFunctionOK;
         final row = sheetDoorRows[di] ?? [];
-
-        // Notes column is Col 37 (AL)
-        String notes = 'Importiert aus Excel';
-        if (row.length > 37 && row[37] != null) {
-          notes = row[37].toString().trim();
-        }
+        final doorNote = door.notes.isNotEmpty ? door.notes : 'Importiert aus Excel';
 
         final junctionId = await DatabaseService.insertInspectionDoor({
           'inspectionId': inspectionId,
           'doorId': doorId,
           'status': doorFunctionOK ? 'Passed' : 'Failed',
-          'notes': notes,
+          'notes': doorNote,
         });
         totalDoorsImported++;
         sheetDoorsCount++;
@@ -449,34 +608,37 @@ class ExcelDataImporter {
           final targetCode = resolvedCodes[code] ?? code;
 
           if (cIndex < row.length && row[cIndex] != null) {
-            final qty = _toInt(row[cIndex]);
+            final qty = _toErrorQty(row[cIndex]);
             if (qty > 0) {
-              // Find in catalog using the mapped targetCode
-              final catalogItem = catalog.firstWhere(
-                (e) => e.code == targetCode,
-                orElse: () => ErrorCatalog(code: targetCode, description: 'Excel-Fehler $targetCode', category: 'Allgemein'),
-              );
-              
-              // If it's a fallback item not in catalog, insert it
-              int errorId;
-              if (catalogItem.errorId == null) {
-                await DatabaseService.insertErrorCatalog(catalogItem);
-                final newlyInserted = await DatabaseService.searchErrorCatalog(targetCode);
-                errorId = newlyInserted.first.errorId!;
-              } else {
-                errorId = catalogItem.errorId!;
+              // Find in catalog using the mapped targetCode or description
+              final catalogItem = catalog.where(
+                (e) => e.code.toLowerCase() == targetCode.toLowerCase() ||
+                       e.description.trim().toLowerCase() == targetCode.toLowerCase(),
+              ).firstOrNull;
+
+              int? errorId = catalogItem?.errorId;
+              if (errorId == null) {
+                final dbItem = await DatabaseService.searchErrorCatalog(targetCode);
+                if (dbItem.isNotEmpty && dbItem.first.errorId != null) {
+                  errorId = dbItem.first.errorId;
+                }
               }
 
-              await DatabaseService.insertInspectionDoorError(InspectionDoorError(
-                inspectionDoorId: junctionId,
-                errorId: errorId,
-                errorCode: catalogItem.code,
-                quantity: qty,
-                severity: catalogItem.severity,
-                notes: 'Excel-Spalte $code',
-              ));
-              totalErrorsLinked++;
-              sheetErrorsCount++;
+              if (errorId != null) {
+                await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                  inspectionDoorId: junctionId,
+                  errorId: errorId,
+                  errorCode: catalogItem?.code ?? targetCode,
+                  quantity: qty,
+                  severity: catalogItem?.severity ?? 'medium',
+                  notes: 'Keine Notizen für Fehler',
+                ));
+                totalErrorsLinked++;
+                sheetErrorsCount++;
+              } else {
+                // No auto-registration: unapproved errors are skipped until Manager resolves conflict
+                logs.add('Mangel "$targetCode" für Tür ${door.doorNumber} in "$sheetName" nicht verknüpft (wartet auf Konfliktlösung durch Manager).');
+              }
             }
           }
         }
@@ -485,7 +647,7 @@ class ExcelDataImporter {
       logs.add('Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen importiert, $sheetErrorsCount Mängel verknüpft.');
     }
 
-    logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte zur Überprüfung.');
+    logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte, ${allCatalogConflicts.length} Katalogkonflikte zur Überprüfung.');
 
     // Write full logs to migration_protocol.log in project root
     try {
@@ -500,6 +662,8 @@ class ExcelDataImporter {
       sb.writeln('  - Doors Imported: $totalDoorsImported');
       sb.writeln('  - Errors Linked: $totalErrorsLinked');
       sb.writeln('  - Warnings: ${warnings.length}');
+      sb.writeln('  - Door Conflicts: ${allDoorConflicts.length}');
+      sb.writeln('  - Catalog Conflicts: ${allCatalogConflicts.length}');
       sb.writeln('----------------------------------------------------------------------');
       sb.writeln('MIGRATION LOGS:');
       for (final logLine in logs) {
@@ -526,7 +690,7 @@ class ExcelDataImporter {
       warnings: warnings,
       logs: logs,
       doorConflicts: allDoorConflicts,
-      catalogConflicts: const [],
+      catalogConflicts: allCatalogConflicts,
     );
   }
 
@@ -646,6 +810,16 @@ class ExcelDataImporter {
     return parsed ?? defaultValue;
   }
 
+  static int _toErrorQty(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is double) return val.toInt();
+    final str = val.toString().trim().toLowerCase();
+    if (str == 'x' || str == 'j' || str == 'ja' || str == 'true') return 1;
+    final parsed = int.tryParse(str);
+    return parsed ?? 0;
+  }
+
   static bool _toBool(dynamic val) {
     if (val == null) return false;
     if (val is bool) return val;
@@ -685,5 +859,40 @@ class ExcelDataImporter {
     }
 
     return cleaned;
+  }
+
+  /// Formats raw notes from Excel for clean readability.
+  /// Normalizes line endings (\r\n -> \n), trims line whitespace, cleans redundant internal spaces,
+  /// and removes duplicate empty lines.
+  @visibleForTesting
+  static String formatNotesForTest(String raw) => _formatNotes(raw);
+
+  static String _formatNotes(String raw) {
+    if (raw.trim().isEmpty) return '';
+    String text = raw.replaceAll(RegExp(r'_x000[dD]_?'), '\n')
+                     .replaceAll('\r\n', '\n')
+                     .replaceAll('\r', '\n');
+    final lines = text.split('\n');
+    final cleaned = <String>[];
+    bool previousEmpty = false;
+
+    for (var line in lines) {
+      final trimmedLine = line.trim().replaceAll(RegExp(r'[ \t]+'), ' ');
+      if (trimmedLine.isEmpty) {
+        if (!previousEmpty && cleaned.isNotEmpty) {
+          cleaned.add('');
+          previousEmpty = true;
+        }
+      } else {
+        cleaned.add(trimmedLine);
+        previousEmpty = false;
+      }
+    }
+
+    while (cleaned.isNotEmpty && cleaned.last.isEmpty) {
+      cleaned.removeLast();
+    }
+
+    return cleaned.join('\n');
   }
 }

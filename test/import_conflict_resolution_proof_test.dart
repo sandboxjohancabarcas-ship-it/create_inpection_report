@@ -6,7 +6,6 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/door_options_service.dart';
-import 'package:wartungstool/services/door_validator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

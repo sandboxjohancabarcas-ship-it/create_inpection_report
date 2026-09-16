@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:wartungstool/pages/door_conflict_review_page.dart';
+import 'package:wartungstool/pages/error_conflict_review_page.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
 import 'package:wartungstool/widgets/import_report_dialog.dart';
 
@@ -110,7 +111,22 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
 
     widget.onMigrationCompleted?.call();
 
-    // Route door conflicts (property/datatype mismatch) to review page first if present
+    // Route error/catalog conflicts (unlisted defect headers or code collisions) to review page first if present
+    if (result.catalogConflicts.isNotEmpty && mounted) {
+      final catalogResolutions = await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ErrorConflictReviewPage(
+            conflicts: result.catalogConflicts,
+            sourceFiles: files,
+          ),
+        ),
+      );
+      if (catalogResolutions != null && mounted) {
+        widget.onMigrationCompleted?.call();
+      }
+    }
+
+    // Route door conflicts (property/datatype mismatch) to review page if present
     if (result.doorConflicts.isNotEmpty && mounted) {
       await Navigator.of(context).push(
         MaterialPageRoute(

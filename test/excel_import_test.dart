@@ -368,5 +368,69 @@ void main() {
       final sanitized = ExcelDataImporter.sanitizeDoorNumberForTest('Gesamtzahl Türen: 45');
       expect(sanitized.startsWith('TÜR-'), isTrue);
     });
+
+    test('formatNotesForTest cleans and formats raw Excel notes properly', () {
+      final rawInput = "  Tür schließt schwer.\r\n   Schließblech nachstellen.  \r\n\r\n\r\nDichtung defekt.  ";
+      final formatted = ExcelDataImporter.formatNotesForTest(rawInput);
+      expect(formatted, equals("Tür schließt schwer.\nSchließblech nachstellen.\n\nDichtung defekt."));
+    });
+
+    test('Importing Tesdorpfstraße file raises catalog conflicts for unlisted error headers and applies resolutions', () async {
+      final file = File(r'C:\Users\cabarcas\Projects\WartungsTool\test\test_data\26-14332-AB P-000600 Tesdorpfstraße 8 Türliste final.xlsm');
+      if (!file.existsSync()) return;
+
+      // 1. Initial import without resolutions -> Must raise catalog conflicts for unknown headers
+      final result1 = await ExcelDataImporter.importFromFile(file);
+      expect(result1.catalogConflicts, isNotEmpty);
+      final conflictCodes = result1.catalogConflicts.map((c) => c.code).toList();
+      expect(conflictCodes.any((c) => c.contains('Mehrfachverriegelung')), isTrue);
+      expect(conflictCodes.any((c) => c.contains('Fingerschutz')), isTrue);
+
+      final db = await DatabaseService.getDb();
+
+      // Master Door 34 note is from the latest inspection (2026-03-24)
+      final doors34 = await db.query('doors', where: "doorNumber = '34' OR doorAlias LIKE '%-34'");
+      expect(doors34, isNotEmpty);
+      final door34 = doors34.first;
+      expect(door34['notes'], contains('Es macht keinen Sinn das Raucherkennungsteil zu tauschen'));
+
+      // 2. Re-import with Manager Resolutions:
+      // - Add "Mehrfachverriegelung" as a new catalog item with code "0.40"
+      // - Map "Kraftbetätigte Tür ohne Fingerschutz" to existing code "11.5"
+      final resolutions = <ConflictResolution>[];
+      for (final conflict in result1.catalogConflicts) {
+        if (conflict.code.contains('Mehrfachverriegelung')) {
+          resolutions.add(ConflictResolution(
+            conflict: conflict,
+            action: ResolutionAction.addAsNew,
+            newCode: '0.40',
+          ));
+        } else if (conflict.code.contains('Fingerschutz')) {
+          resolutions.add(ConflictResolution(
+            conflict: conflict,
+            action: ResolutionAction.replaceExisting,
+            newCode: '11.5',
+          ));
+        }
+      }
+
+      await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
+
+      // Verify Door 3 errors on 2025-03-31 inspection now have resolved catalog codes
+      final door3Errors = await db.rawQuery('''
+        SELECT ide.errorCode, ec.code, ec.description, ec.category
+        FROM inspection_door_errors ide
+        JOIN inspection_doors id ON ide.inspectionDoorId = id.id
+        JOIN inspections i ON id.inspectionId = i.inspectionId
+        JOIN doors d ON id.doorId = d.id
+        LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
+        WHERE (d.doorNumber = '3' OR d.doorAlias LIKE '%-3' OR d.pos = 3)
+          AND i.date = '2025-03-31'
+      ''');
+      expect(door3Errors.length, greaterThanOrEqualTo(2));
+      final errorCodes = door3Errors.map((e) => (e['code'] ?? e['errorCode']).toString()).toList();
+      expect(errorCodes.contains('0.40') || errorCodes.any((c) => c.contains('Mehrfachverriegelung')), isTrue);
+      expect(errorCodes.contains('11.5') || errorCodes.any((c) => c.contains('Fingerschutz')), isTrue);
+    });
   });
 }

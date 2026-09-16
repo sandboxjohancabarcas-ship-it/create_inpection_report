@@ -754,18 +754,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         tooltip: 'Auswahl löschen',
                       ),
                       const VerticalDivider(),
-                      TextButton.icon(
-                        onPressed: _isProcessing ? null : () => _handleGaebExport(isXml: false),
-                        icon: const Icon(Icons.description),
-                        label: const Text('GAEB 90'),
-                      ),
-                      const VerticalDivider(),
-                      TextButton.icon(
-                        onPressed: _isProcessing ? null : () => _handleGaebExport(isXml: true),
-                        icon: const Icon(Icons.code),
-                        label: const Text('GAEB XML'),
-                      ),
-                      const VerticalDivider(),
                       Tooltip(
                         message: 'Paket für Techniker exportieren',
                         child: TextButton.icon(
@@ -1018,16 +1006,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           await DatabaseService.setInspectionLockStatus(id, !locked);
                           _loadData();
                         },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.description, color: Colors.teal),
-                        tooltip: 'GAEB 90 exportieren',
-                        onPressed: _isProcessing ? null : () => _handleGaebExport(isXml: false, targetInspectionIds: [id]),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.code, color: Colors.deepPurple),
-                        tooltip: 'GAEB XML exportieren',
-                        onPressed: _isProcessing ? null : () => _handleGaebExport(isXml: true, targetInspectionIds: [id]),
                       ),
                       IconButton(
                         icon: const Icon(Icons.edit_outlined, color: Colors.grey),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:wartungstool/models/door_conflict.dart';
+import 'package:wartungstool/models/error_catalog.dart';
 import 'package:wartungstool/models/import_report.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/excel_data_importer.dart';
@@ -7,6 +8,7 @@ import 'package:wartungstool/services/excel_data_importer.dart';
 class BatchMigrationResult {
   final ImportReport aggregatedReport;
   final List<DoorConflict> doorConflicts;
+  final List<ImportConflict> catalogConflicts;
   final int totalFilesFound;
   final int compliantFilesProcessed;
   final int skippedFilesCount;
@@ -16,12 +18,15 @@ class BatchMigrationResult {
   BatchMigrationResult({
     required this.aggregatedReport,
     this.doorConflicts = const [],
+    this.catalogConflicts = const [],
     required this.totalFilesFound,
     required this.compliantFilesProcessed,
     required this.skippedFilesCount,
     required this.processedFileNames,
     required this.skippedFileNames,
   });
+
+  bool get hasConflicts => doorConflicts.isNotEmpty || catalogConflicts.isNotEmpty;
 }
 
 class BatchMigrationService {
@@ -71,6 +76,7 @@ class BatchMigrationService {
     final List<String> newCatalogProposals = [];
     final List<InspectionFileReportItem> fileReports = [];
     final List<DoorConflict> doorConflicts = [];
+    final List<ImportConflict> catalogConflicts = [];
 
     int compliantProcessed = 0;
     int skippedCount = 0;
@@ -133,6 +139,9 @@ class BatchMigrationService {
           if (excelResult.hasDoorConflicts) {
             doorConflicts.addAll(excelResult.doorConflicts);
           }
+          if (excelResult.hasCatalogConflicts) {
+            catalogConflicts.addAll(excelResult.catalogConflicts);
+          }
 
           final excelDoorItems = [
             DoorChangeItem(
@@ -144,14 +153,25 @@ class BatchMigrationService {
           ];
 
           doorChanges.addAll(excelDoorItems);
+
+          String statusStr = 'Erfolgreich';
+          final conflictParts = <String>[];
+          if (excelResult.hasDoorConflicts) {
+            conflictParts.add('${excelResult.doorConflicts.length} Türkonflikte');
+          }
+          if (excelResult.hasCatalogConflicts) {
+            conflictParts.add('${excelResult.catalogConflicts.length} Katalogkonflikte');
+          }
+          if (conflictParts.isNotEmpty) {
+            statusStr = 'Konflikte zur Überprüfung (${conflictParts.join(", ")})';
+          }
+
           fileReports.add(InspectionFileReportItem(
             fileName: fileName,
             newDoorsCount: doorCount,
             defectsRecordedCount: excelResult.errorsLinked,
             doorChanges: excelDoorItems,
-            status: excelResult.hasDoorConflicts
-                ? 'Konflikte zur Überprüfung (${excelResult.doorConflicts.length})'
-                : 'Erfolgreich',
+            status: statusStr,
           ));
           compliantProcessed++;
           processedNames.add(fileName);
@@ -183,6 +203,7 @@ class BatchMigrationService {
     return BatchMigrationResult(
       aggregatedReport: aggregatedReport,
       doorConflicts: doorConflicts,
+      catalogConflicts: catalogConflicts,
       totalFilesFound: files.length,
       compliantFilesProcessed: compliantProcessed,
       skippedFilesCount: skippedCount,

@@ -395,5 +395,64 @@ void main() {
       expect(storedErrors.length, 1);
       expect(storedErrors.first.notes, 'Hinge is loose and needs immediate repair');
     });
+
+    test('deleteInspections cleans up orphaned doors so inventory stays synchronized', () async {
+      final doorId = await DatabaseService.insertDoor(Door(
+        id: null,
+        pos: 1,
+        doorAlias: 'TEST-DEL-01',
+        doorNumber: 'DEL-01',
+        floor: 'EG',
+        roomNumber: '101',
+        roomDesignation: 'Test',
+        doorType: 'T30',
+        wingCount: 1,
+        material: 'Stahl',
+        manufacturer: 'Dorma',
+        dinConfiguration: 'DIN L',
+        closerType: 'TS93',
+        closingSequenceSystem: '',
+        lockDimensions: '',
+        closerOnHingeSide: false,
+        closerOnOppositeSide: false,
+        lintelHeightInsideOver1m: false,
+        escapeDoorControl: false,
+        accessControl: '',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: false,
+        fittingType: '',
+        panicFunction: '',
+        escapeDirectionRespected: false,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
+      ));
+
+      final inspId = await DatabaseService.insertInspection({
+        'clientName': 'Delete Test Corp',
+        'objectAddress': 'Delete Street 1',
+        'date': '2026-09-16',
+        'jobNumber': 'DEL-2026',
+      });
+
+      await DatabaseService.insertInspectionDoor({
+        'inspectionId': inspId,
+        'doorId': doorId,
+        'status': 'Passed',
+        'notes': 'Delete test',
+      });
+
+      // Verify door and inspection exist initially
+      expect((await DatabaseService.getAllDoors()).any((d) => d.doorAlias == 'TEST-DEL-01'), isTrue);
+
+      // Delete the inspection
+      await DatabaseService.deleteInspections([inspId]);
+
+      // Verify orphaned door is purged and no longer appears in door inventory
+      final remainingDoors = await DatabaseService.getAllDoors();
+      expect(remainingDoors.any((d) => d.doorAlias == 'TEST-DEL-01'), isFalse,
+          reason: 'Orphaned doors should be purged when their inspection is deleted');
+    });
   });
 }

@@ -654,58 +654,6 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             ),
             const VerticalDivider(),
             TextButton.icon(
-              onPressed: () async {
-                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
-                final service = GaebExportService(
-                  customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['objectAddress'] ?? 'Unbekannt',
-                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
-                );
-                
-                final data = await _prepareExportData();
-                final file = await service.exportToD83(data);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('GAEB 90 exportiert nach: ${file.path}')),
-                  );
-                  
-                  final result = await _confirmCloudUpload();
-                  if (result != null && mounted) {
-                    await _uploadToCloud(file, service.jobNumber, result);
-                  }
-                }
-              },
-              icon: const Icon(Icons.description),
-              label: const Text('GAEB 90'),
-            ),
-            const VerticalDivider(),
-            TextButton.icon(
-              onPressed: () async {
-                final inspection = _currentVisibleResults.firstWhere((i) => _selectedInspectionIds.contains(i['inspectionId']));
-                final service = GaebExportService(
-                  customer: inspection['clientName'] ?? 'Unbekannt',
-                  projectName: inspection['objectAddress'] ?? 'Unbekannt',
-                  jobNumber: inspection['jobNumber'] ?? 'MultiJob',
-                );
-
-                final data = await _prepareExportData();
-                final file = await service.exportToXml(data);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('GAEB XML exportiert nach: ${file.path}')),
-                  );
-
-                  final result = await _confirmCloudUpload();
-                  if (result != null && mounted) {
-                    await _uploadToCloud(file, service.jobNumber, result);
-                  }
-                }
-              },
-              icon: const Icon(Icons.code),
-              label: const Text('GAEB XML'),
-            ),
-            const VerticalDivider(),
-            TextButton.icon(
               onPressed: () => _handleJobDownload(_selectedInspectionIds.toList()),
               icon: const Icon(Icons.download_for_offline, color: Colors.green),
               label: const Text('Paket laden', style: TextStyle(color: Colors.green)),

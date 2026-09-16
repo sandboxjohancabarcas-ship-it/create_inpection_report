@@ -51,3 +51,4 @@ flutter.zip
 flutter_setup_backup.bat
 lib/models/settings.json
 *.db
+~$*
