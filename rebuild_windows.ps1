@@ -14,8 +14,8 @@ Write-Host "[2/4] Fetching dependencies..." -ForegroundColor Gray
 flutter pub get
 
 # 3. Asset Verification
-if (!(Test-Path "error_catalog.csv")) {
-    Write-Host "Warning: error_catalog.csv not found in root. Windows build may fail to bundle assets." -ForegroundColor Yellow
+if (!(Test-Path "error_catalog.json")) {
+    Write-Host "Warning: error_catalog.json not found in root. Windows build may fail to bundle assets." -ForegroundColor Yellow
 }
 
 # 4. Run Application

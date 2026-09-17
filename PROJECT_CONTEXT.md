@@ -120,7 +120,7 @@ The application successfully generates validator-compliant GAEB reports and can 
 
 ## Session Log: 2024-06-15 (Error Catalog Refactoring & CSV Strategy)
 - **Hardcoded Data Removal:** Completely removed the static `DoorErrorCatalog` from `error_catalog.dart` to separate data from code and reduce binary size.
-- **CSV-Based Initialization:** Implemented `DatabaseService.checkAndInitializeCatalog()` which follows a waterfall logic: DB Check -> CSV File Check (`error_catalog.csv`) -> User Warning. This establishes an external "Source of Truth" for the Master DB.
+- **JSON-Based Initialization:** Implemented `DatabaseService.checkAndInitializeCatalog()` which follows a waterfall logic: DB Check -> JSON File Check (`error_catalog.json`) -> Asset Fallback. This establishes an external "Source of Truth" for the Master DB.
 - **Database De-seeding:** Removed automatic seeding logic from `DatabaseService` and `LocalDatabaseService` to ensure the system strictly follows the external CSV/Import strategy and prevents stale data.
 - **Dynamic Test Generation:** Updated `TestDataGenerator` to dynamically fetch available `error_catalog` entries from the database instead of using hardcoded IDs, preventing SQL constraint violations.
 - **Migration Planning:** Initiated Phase 1 of the migration module, preparing the structure for Excel-based door and historical error importing.

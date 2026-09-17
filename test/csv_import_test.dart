@@ -18,7 +18,7 @@ void main() {
     });
 
     test('checkAndInitializeCatalog should populate DB from bundled asset when empty', () async {
-      // Catalog table is empty after setUp — initialize from bundled error_catalog.csv asset
+      // Catalog table is empty after setUp — initialize from bundled error_catalog.json asset
       await DatabaseService.checkAndInitializeCatalog();
 
       final catalog = await DatabaseService.getAllErrorCatalog();

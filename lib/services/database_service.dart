@@ -2214,7 +2214,6 @@ class DatabaseService {
 
     final dbPath = await getDatabasesPath();
     final jsonFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.json'));
-    final csvFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.csv'));
     List<ErrorCatalog> errors = [];
 
     if (await jsonFile.exists()) {
@@ -2227,26 +2226,11 @@ class DatabaseService {
       }
     }
 
-    if (errors.isEmpty && await csvFile.exists()) {
-      print('[Catalog] Found CSV at ${csvFile.path}. Importing...');
-      try {
-        final content = await csvFile.readAsString();
-        errors = _parseCsv(content);
-      } catch (e) {
-        print('[Catalog] CSV Read/Parse Error: $e');
-      }
-    }
-
     if (errors.isEmpty) {
-      print('[Catalog] No external files found. Loading from internal assets...');
+      print('[Catalog] No external file found. Loading from internal asset (error_catalog.json)...');
       try {
-        try {
-          final content = await rootBundle.loadString('error_catalog.json');
-          errors = _parseJsonCatalog(content);
-        } catch (_) {
-          final content = await rootBundle.loadString('error_catalog.csv');
-          errors = _parseCsv(content);
-        }
+        final content = await rootBundle.loadString('error_catalog.json');
+        errors = _parseJsonCatalog(content);
       } catch (e) {
         print('[Catalog] Asset Load Error: $e');
         return;
@@ -2317,35 +2301,6 @@ class DatabaseService {
     return results;
   }
 
-  /// RFC 4180 compliant CSV line parser supporting quoted fields and embedded commas
-  static List<String> _parseCsvLine(String line) {
-    final List<String> fields = [];
-    final StringBuffer currentField = StringBuffer();
-    bool inQuotes = false;
-
-    for (int i = 0; i < line.length; i++) {
-      final char = line[i];
-
-      if (char == '"') {
-        if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-          // Escaped double quotes inside quotes: "" -> "
-          currentField.write('"');
-          i++;
-        } else {
-          // Toggle quote state
-          inQuotes = !inQuotes;
-        }
-      } else if (char == ',' && !inQuotes) {
-        fields.add(currentField.toString().trim());
-        currentField.clear();
-      } else {
-        currentField.write(char);
-      }
-    }
-    fields.add(currentField.toString().trim());
-    return fields;
-  }
-
   /// Normalizes severity strings to one of: 'low', 'medium', 'high', 'critical'
   static String normalizeSeverity(String? raw) {
     if (raw == null || raw.trim().isEmpty) return 'medium';
@@ -2368,40 +2323,6 @@ class DatabaseService {
       default:
         return 'medium';
     }
-  }
-
-  /// Simple CSV parser for Error Catalog items with robust quote handling
-  static List<ErrorCatalog> _parseCsv(String csv) {
-    final List<ErrorCatalog> results = [];
-    final lines = csv.split('\n');
-    bool isHeader = true;
-
-    for (var rawLine in lines) {
-      final line = rawLine.trim();
-      if (line.isEmpty) continue;
-
-      if (isHeader) {
-        isHeader = false;
-        // Skip header if line starts with code column
-        if (line.toLowerCase().startsWith('code,') || line.toLowerCase().startsWith('"code"')) {
-          continue;
-        }
-      }
-
-      final parts = _parseCsvLine(line);
-      if (parts.length >= 2 && parts[0].isNotEmpty) {
-        final rawSeverity = parts.length > 3 && parts[3].isNotEmpty ? parts[3] : 'medium';
-        results.add(ErrorCatalog(
-          code: parts[0],
-          description: parts[1],
-          category: parts.length > 2 && parts[2].isNotEmpty ? parts[2] : 'Allgemein',
-          severity: normalizeSeverity(rawSeverity),
-          recommendation: parts.length > 4 ? parts[4] : '',
-          normReference: parts.length > 5 ? parts[5] : '',
-        ));
-      }
-    }
-    return results;
   }
 
   // ─────────────────────────────────────────────────────────────
