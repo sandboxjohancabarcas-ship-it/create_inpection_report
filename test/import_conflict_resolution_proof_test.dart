@@ -89,7 +89,8 @@ void main() {
             lintelHeightInsideValue TEXT,
             lintelHeightOutsideValue TEXT,
             manufactureYear TEXT,
-            fsaDriveAcceptanceDate TEXT
+            fsaDriveAcceptanceDate TEXT,
+            notes TEXT
           )
         ''');
         await db.execute('''

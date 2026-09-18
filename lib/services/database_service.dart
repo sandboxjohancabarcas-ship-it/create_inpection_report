@@ -2614,21 +2614,6 @@ class DatabaseService {
                     resolution: conflict.resolution,
                   ));
                 }
-              } else {
-                processedConflicts.add(DoorConflict(
-                  existingDoor: conflict.existingDoor,
-                  incomingDoor: conflict.incomingDoor,
-                  type: conflict.type,
-                  fieldName: conflict.fieldName,
-                  fieldLabel: conflict.fieldLabel,
-                  existingValue: conflict.existingValue,
-                  incomingValue: conflict.incomingValue,
-                  ruleCode: conflict.ruleCode,
-                  message: conflict.message,
-                  sourceContext: sourceContext,
-                  compliance: conflict.compliance,
-                  resolution: conflict.resolution,
-                ));
               }
             }
             conflicts.addAll(processedConflicts);
@@ -2646,93 +2631,98 @@ class DatabaseService {
   }
 
   /// Applies the Manager's conflict resolutions from [DoorConflictReviewPage]
-  /// in a single atomic DB transaction.
+  /// in a single atomic DB transaction. Supports granular per-property resolutions.
   static Future<void> applyDoorConflictResolutions(
       List<DoorConflict> conflicts) async {
     final db = await getDb();
     await db.transaction((txn) async {
+      // Group conflicts by door (doorAlias)
+      final Map<String, List<DoorConflict>> grouped = {};
       for (final conflict in conflicts) {
-        switch (conflict.resolution) {
-          case DoorResolutionAction.keepExisting:
-          case DoorResolutionAction.skip:
-            // Nothing to write
-            break;
+        final alias = conflict.incomingDoor.doorAlias?.trim() ?? '';
+        final key = alias.isNotEmpty
+            ? alias
+            : 'NO-ALIAS-${conflict.incomingDoor.doorNumber}-${conflict.incomingDoor.floor}';
+        grouped.putIfAbsent(key, () => []).add(conflict);
+      }
 
-          case DoorResolutionAction.acceptIncoming:
-            if (conflict.type == DoorConflictType.logicalViolation) break;
-            // Overwrite the existing record with incoming data
-            final alias = conflict.incomingDoor.doorAlias?.trim();
-            if (alias != null && alias.isNotEmpty) {
-              await txn.update(
-                'doors',
-                conflict.incomingDoor.toMap()..remove('id'),
-                where: 'doorAlias = ?',
-                whereArgs: [alias],
-              );
-            }
-            final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(conflict.incomingDoor);
-            for (final dc in dropdownConflicts) {
-              DoorOptionsService.addOption(dc.fieldName, dc.incomingValue);
-            }
-            break;
+      for (final entry in grouped.entries) {
+        final doorConflicts = entry.value;
 
-          case DoorResolutionAction.keepBoth:
-            // Identity collision: save incoming under a new alias chosen by Manager
-            final newAlias = conflict.newAlias?.trim();
-            if (newAlias != null && newAlias.isNotEmpty) {
-              final newDoorMap = conflict.incomingDoor.toMap()
-                ..remove('id')
-                ..['doorAlias'] = newAlias;
-              await txn.insert(
-                'doors',
-                newDoorMap,
-                conflictAlgorithm: ConflictAlgorithm.ignore,
-              );
-            }
-            break;
+        // Skip if entire door was marked as skipped
+        if (doorConflicts.any((c) => c.resolution == DoorResolutionAction.skip)) {
+          continue;
+        }
 
-          case DoorResolutionAction.customInput:
-            if (conflict.type == DoorConflictType.logicalViolation) break;
-            final alias = conflict.incomingDoor.doorAlias?.trim();
-            final fieldName = conflict.fieldName;
-            final customVal = conflict.customValue?.trim();
+        final alias = doorConflicts.first.incomingDoor.doorAlias?.trim();
 
-            if (alias != null && alias.isNotEmpty && fieldName.isNotEmpty && customVal != null) {
-              await txn.update(
-                'doors',
-                {fieldName: customVal},
-                where: 'doorAlias = ?',
-                whereArgs: [alias],
-              );
-              DoorOptionsService.addOption(fieldName, customVal);
-            }
-            break;
+        // Handle keepBoth action for identity collisions
+        final keepBothConflict = doorConflicts.where((c) => c.resolution == DoorResolutionAction.keepBoth).firstOrNull;
+        if (keepBothConflict != null) {
+          final newAlias = keepBothConflict.newAlias?.trim();
+          if (newAlias != null && newAlias.isNotEmpty) {
+            final newDoorMap = keepBothConflict.incomingDoor.toMap()
+              ..remove('id')
+              ..['doorAlias'] = newAlias;
+            await txn.insert(
+              'doors',
+              newDoorMap,
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+          continue;
+        }
 
-          case DoorResolutionAction.addToMasterOptions:
-            DoorOptionsService.addOption(conflict.fieldName, conflict.incomingValue);
-            final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(conflict.incomingDoor);
-            for (final dc in dropdownConflicts) {
-              DoorOptionsService.addOption(dc.fieldName, dc.incomingValue);
-            }
-            final alias = conflict.incomingDoor.doorAlias?.trim();
-            if (alias != null && alias.isNotEmpty) {
-              final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
-              if (existing.isNotEmpty) {
-                await txn.update(
-                  'doors',
-                  conflict.incomingDoor.toMap()..remove('id'),
-                  where: 'doorAlias = ?',
-                  whereArgs: [alias],
-                );
-              } else {
-                await txn.insert(
-                  'doors',
-                  conflict.incomingDoor.toMap()..remove('id'),
-                  conflictAlgorithm: ConflictAlgorithm.replace,
-                );
+        // Granular field-level updates map
+        final Map<String, dynamic> propertyUpdates = {};
+
+        for (final conflict in doorConflicts) {
+          final fieldName = conflict.fieldName;
+
+          switch (conflict.resolution) {
+            case DoorResolutionAction.acceptIncoming:
+              if (conflict.type == DoorConflictType.logicalViolation) break;
+              if (fieldName.isNotEmpty) {
+                final val = conflict.incomingDoor.toMap()[fieldName];
+                propertyUpdates[fieldName] = val;
               }
-            }
-            break;
+              if (conflict.type == DoorConflictType.newDropdownOption && conflict.incomingValue.isNotEmpty) {
+                DoorOptionsService.addOption(conflict.fieldName, conflict.incomingValue);
+              }
+              break;
+
+            case DoorResolutionAction.customInput:
+              if (conflict.type == DoorConflictType.logicalViolation) break;
+              final customVal = conflict.customValue?.trim();
+              if (fieldName.isNotEmpty && customVal != null) {
+                propertyUpdates[fieldName] = customVal;
+                DoorOptionsService.addOption(fieldName, customVal);
+              }
+              break;
+
+            case DoorResolutionAction.addToMasterOptions:
+              if (fieldName.isNotEmpty) {
+                DoorOptionsService.addOption(fieldName, conflict.incomingValue);
+                final val = conflict.incomingDoor.toMap()[fieldName];
+                propertyUpdates[fieldName] = val;
+              }
+              break;
+
+            case DoorResolutionAction.keepExisting:
+            case DoorResolutionAction.skip:
+            case DoorResolutionAction.keepBoth:
+              // Omit field from updates map (preserves existing DB value)
+              break;
+          }
+        }
+
+        if (alias != null && alias.isNotEmpty && propertyUpdates.isNotEmpty) {
+          await txn.update(
+            'doors',
+            propertyUpdates,
+            where: 'doorAlias = ?',
+            whereArgs: [alias],
+          );
         }
       }
     });
