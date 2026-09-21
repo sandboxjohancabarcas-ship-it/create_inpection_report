@@ -195,7 +195,8 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "GSR+RMZ+2HM+1HAT"
+      "GSR+RMZ+2HM+1HAT",
+      "Do ED100"
     ],
     "default": "?"
   },
@@ -222,7 +223,8 @@
       "MfV-35/92/10-24 U",
       "SVP",
       "Motorschloss",
-      "40/97/9/50x305/F"
+      "40/97/9/50x305/F",
+      "65/72/9/20/310"
     ],
     "default": "?"
   },

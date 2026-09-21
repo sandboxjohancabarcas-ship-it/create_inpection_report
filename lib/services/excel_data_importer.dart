@@ -347,11 +347,21 @@ class ExcelDataImporter {
       }
 
       // 2. Fallback: If header cell is unnamed or blank, scan data rows for column >= 27 containing text notes
+      // Determine fixed column count for door specs (34 for new standard, 28 for legacy)
+      int fixedColumnCount = 28;
+      if (headerRow.length >= 34) {
+        final col7 = _toStr(_cell(headerRow, 7)).toLowerCase();
+        final col21 = _toStr(_cell(headerRow, 21)).toLowerCase();
+        if (col7.contains('zulassung') || col21.contains('sturzhöhe innen')) {
+          fixedColumnCount = 34;
+        }
+      }
+
       if (notesColumnIndex == -1) {
         final textCountPerCol = <int, int>{};
         for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
           final row = sheet.rows[r];
-          for (int c = 27; c < row.length; c++) {
+          for (int c = fixedColumnCount; c < row.length; c++) {
             final cell = row[c];
             if (cell != null) {
               final str = cell.toString().trim();
@@ -368,8 +378,8 @@ class ExcelDataImporter {
         }
       }
       
-      // 3. Scan from column 27 (AB) onwards for error headers
-      for (int c = 27; c < headerRow.length; c++) {
+      // 3. Scan from fixedColumnCount onwards for error headers
+      for (int c = fixedColumnCount; c < headerRow.length; c++) {
         if (c == notesColumnIndex) continue;
         final val = _cell(headerRow, c);
         if (val == null) continue;
@@ -466,37 +476,127 @@ class ExcelDataImporter {
         final roomNumber = _toStr(_cell(row, 3));
         final roomDesignation = _toStr(_cell(row, 4));
         
-        // Normalization check on physical properties
-        final doorType = _toStr(_cell(row, 5));
-        final wingCount = _toInt(_cell(row, 6), defaultValue: 1);
-        final material = _toStr(_cell(row, 7));
-        final manufacturer = _toStr(_cell(row, 8));
-        final dinConfig = _toStr(_cell(row, 9));
-        final closerType = _toStr(_cell(row, 10));
-        final closingSeq = _toStr(_cell(row, 11));
-        final lockDim = _toStr(_cell(row, 12));
-        
-        final closerHinge = _toBool(_cell(row, 13));
-        final closerOpposite = _toBool(_cell(row, 14));
-        final lintelInsideOver1m = _toBool(_cell(row, 15));
-        final escapeDoorControl = _toBool(_cell(row, 16));
-        final accessControl = _toStr(_cell(row, 17));
-        final escapeRouteSituation = _toBool(_cell(row, 18));
-        final escapeRouteSignage = _toBool(_cell(row, 19));
-        final blindCyl = _toBool(_cell(row, 20));
-        final pzCyl = _toBool(_cell(row, 21));
-        final fittingType = _toStr(_cell(row, 22));
-        final panicFunc = _toStr(_cell(row, 23));
-        final escapeDirectionRespected = _toBool(_cell(row, 24));
-        final fullPanicStandWing = _toBool(_cell(row, 25));
-        final doorFunctionOK = _toBool(_cell(row, 26));
+        String doorType = '';
+        String approvalNumber = '?';
+        String manufacturer = '';
+        String manufacturerNumber = '?';
+        String dopNumber = '?';
+        String manufactureYear = '?';
+        int wingCount = 1;
+        String material = '';
+        String dinConfig = '';
+        String closerType = '';
+        String closingSeq = '';
+        String lockDim = '';
+        String? fsaDriveAcceptanceDate;
+        bool closerHinge = false;
+        bool closerOpposite = false;
+        bool lintelInsideOver1m = false;
+        String? lintelInsideValue;
+        bool lintelOutsideOver1m = false;
+        String? lintelOutsideValue;
+        String accessControl = '';
+        bool escapeDoorControl = false;
+        bool escapeRouteSituation = false;
+        bool escapeRouteSignage = false;
+        bool blindCyl = false;
+        bool pzCyl = false;
+        String fittingType = '';
+        String panicFunc = '';
+        bool escapeDirectionRespected = false;
+        bool fullPanicStandWing = false;
+        bool doorFunctionOK = false;
+
+        if (fixedColumnCount == 34) {
+          // New standard 34-column layout
+          doorType = _toStr(_cell(row, 6));
+          final appStr = _toStr(_cell(row, 7));
+          approvalNumber = appStr.isNotEmpty ? appStr : '?';
+          manufacturer = _toStr(_cell(row, 8));
+          final mfgNumStr = _toStr(_cell(row, 9));
+          manufacturerNumber = mfgNumStr.isNotEmpty ? mfgNumStr : '?';
+          final dopStr = _toStr(_cell(row, 10));
+          dopNumber = dopStr.isNotEmpty ? dopStr : '?';
+          final yrStr = _toStr(_cell(row, 11));
+          manufactureYear = yrStr.isNotEmpty ? yrStr : '?';
+          wingCount = _toInt(_cell(row, 12), defaultValue: 1);
+          material = _toStr(_cell(row, 13));
+          dinConfig = _toStr(_cell(row, 14));
+          closerType = _toStr(_cell(row, 15));
+          closingSeq = _toStr(_cell(row, 16));
+          lockDim = _toStr(_cell(row, 17));
+          final fsaStr = _toStr(_cell(row, 18));
+          if (fsaStr.isNotEmpty && fsaStr != '?') fsaDriveAcceptanceDate = fsaStr;
+          closerHinge = _toBool(_cell(row, 19));
+          closerOpposite = _toBool(_cell(row, 20));
+
+          final insideRaw = _toStr(_cell(row, 21));
+          if (insideRaw.isNotEmpty) {
+            lintelInsideOver1m = _toBool(insideRaw) || insideRaw.contains('m') || insideRaw == 'X' || insideRaw == 'Ja' || insideRaw == 'J';
+            if (insideRaw.contains('m') || RegExp(r'\d').hasMatch(insideRaw)) {
+              lintelInsideValue = insideRaw;
+            }
+          }
+
+          final outsideRaw = _toStr(_cell(row, 22));
+          if (outsideRaw.isNotEmpty) {
+            lintelOutsideOver1m = _toBool(outsideRaw) || outsideRaw.contains('m') || outsideRaw == 'X' || outsideRaw == 'Ja' || outsideRaw == 'J';
+            if (outsideRaw.contains('m') || RegExp(r'\d').hasMatch(outsideRaw)) {
+              lintelOutsideValue = outsideRaw;
+            }
+          }
+
+          accessControl = _toStr(_cell(row, 23));
+          escapeDoorControl = _toBool(_cell(row, 24));
+          escapeRouteSituation = _toBool(_cell(row, 25));
+          escapeRouteSignage = _toBool(_cell(row, 26));
+          blindCyl = _toBool(_cell(row, 27));
+          pzCyl = _toBool(_cell(row, 28));
+          fittingType = _toStr(_cell(row, 29));
+          panicFunc = _toStr(_cell(row, 30));
+          escapeDirectionRespected = _toBool(_cell(row, 31));
+          fullPanicStandWing = _toBool(_cell(row, 32));
+          doorFunctionOK = _toBool(_cell(row, 33));
+        } else {
+          // Legacy 28-column layout
+          doorType = _toStr(_cell(row, 5));
+          wingCount = _toInt(_cell(row, 6), defaultValue: 1);
+          material = _toStr(_cell(row, 7));
+          manufacturer = _toStr(_cell(row, 8));
+          dinConfig = _toStr(_cell(row, 9));
+          closerType = _toStr(_cell(row, 10));
+          closingSeq = _toStr(_cell(row, 11));
+          lockDim = _toStr(_cell(row, 12));
+          closerHinge = _toBool(_cell(row, 13));
+          closerOpposite = _toBool(_cell(row, 14));
+
+          final insideRaw = _toStr(_cell(row, 15));
+          if (insideRaw.isNotEmpty) {
+            lintelInsideOver1m = _toBool(insideRaw) || insideRaw.contains('m') || insideRaw == 'X' || insideRaw == 'Ja' || insideRaw == 'J';
+            if (insideRaw.contains('m') || RegExp(r'\d').hasMatch(insideRaw)) {
+              lintelInsideValue = insideRaw;
+            }
+          }
+
+          escapeDoorControl = _toBool(_cell(row, 16));
+          accessControl = _toStr(_cell(row, 17));
+          escapeRouteSituation = _toBool(_cell(row, 18));
+          escapeRouteSignage = _toBool(_cell(row, 19));
+          blindCyl = _toBool(_cell(row, 20));
+          pzCyl = _toBool(_cell(row, 21));
+          fittingType = _toStr(_cell(row, 22));
+          panicFunc = _toStr(_cell(row, 23));
+          escapeDirectionRespected = _toBool(_cell(row, 24));
+          fullPanicStandWing = _toBool(_cell(row, 25));
+          doorFunctionOK = _toBool(_cell(row, 26));
+        }
 
         // Read & format notes from "Anmerkung" column for Door properties
         String rawNotes = '';
         if (notesColumnIndex >= 0 && notesColumnIndex < row.length) {
           rawNotes = _toStr(_cell(row, notesColumnIndex));
-        } else if (row.length > 37) {
-          rawNotes = _toStr(_cell(row, 37));
+        } else if (row.length > fixedColumnCount + 9) {
+          rawNotes = _toStr(_cell(row, fixedColumnCount + 9));
         }
         final notes = _formatNotes(rawNotes);
 
@@ -518,16 +618,24 @@ class ExcelDataImporter {
           roomNumber: roomNumber,
           roomDesignation: roomDesignation,
           doorType: doorType,
+          approvalNumber: approvalNumber.isNotEmpty ? approvalNumber : '?',
+          manufacturer: manufacturer,
+          manufacturerNumber: manufacturerNumber.isNotEmpty ? manufacturerNumber : '?',
+          dopNumber: dopNumber.isNotEmpty ? dopNumber : '?',
+          manufactureYear: manufactureYear.isNotEmpty ? manufactureYear : '?',
           wingCount: wingCount,
           material: material,
-          manufacturer: manufacturer,
           dinConfiguration: dinConfig,
           closerType: closerType,
           closingSequenceSystem: closingSeq,
           lockDimensions: lockDim,
+          fsaDriveAcceptanceDate: fsaDriveAcceptanceDate,
           closerOnHingeSide: closerHinge,
           closerOnOppositeSide: closerOpposite,
           lintelHeightInsideOver1m: lintelInsideOver1m,
+          lintelHeightInsideValue: lintelInsideValue,
+          lintelHeightOutsideOver1m: lintelOutsideOver1m,
+          lintelHeightOutsideValue: lintelOutsideValue,
           escapeDoorControl: escapeDoorControl,
           accessControl: accessControl,
           escapeRouteSituation: escapeRouteSituation,

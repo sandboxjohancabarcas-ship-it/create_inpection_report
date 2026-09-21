@@ -38,6 +38,14 @@ class PdfExportService {
     return 'N';
   }
 
+  static String _formatLintelHeight(dynamic isOver1m, dynamic heightValue) {
+    final valStr = heightValue?.toString().trim() ?? '';
+    final bool isTrue = (isOver1m == true || isOver1m == 1 || isOver1m == '1' || isOver1m == 'true' || isOver1m == 'Ja' || isOver1m == 'ja');
+    if (valStr.isNotEmpty) return valStr;
+    if (isTrue) return 'X';
+    return '';
+  }
+
   /// Exports a single inspection report to a formatted PDF document
   static Future<File> exportSingleInspectionPdf(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
@@ -108,18 +116,24 @@ class PdfExportService {
       'Raum Nr.',
       'Raumbezeichnung',
       'Türtyp',
+      'Zulassung',
+      'Hersteller',
+      'Herstellernr',
+      'DoP-Nr',
+      'Baujahr',
       'Flügel',
       'Material',
-      'Hersteller',
       'DIN',
       'Schließer',
       'Schließfolge',
       'Schlossmaß',
+      'Abnahme FSA',
       'Bandseite',
       'Bandgegenseite',
-      'Sturz >1m',
-      'Fluchttürst.',
+      'Sturz in >1m',
+      'Sturz aus >1m',
       'Zutritt',
+      'Fluchttürst.',
       'Fluchtwegsit.',
       'Beschilderung',
       'Blindzyl.',
@@ -190,18 +204,24 @@ class PdfExportService {
         d['roomNumber'] as String? ?? '',
         d['roomDesignation'] as String? ?? '',
         d['doorType'] as String? ?? '',
+        d['approvalNumber'] as String? ?? '?',
+        d['manufacturer'] as String? ?? '',
+        d['manufacturerNumber'] as String? ?? '?',
+        d['dopNumber'] as String? ?? '?',
+        d['manufactureYear'] as String? ?? '?',
         '${d['wingCount'] ?? 1}',
         d['material'] as String? ?? '',
-        d['manufacturer'] as String? ?? '',
         d['dinConfiguration'] as String? ?? '',
         d['closerType'] as String? ?? '',
         d['closingSequenceSystem'] as String? ?? '',
         d['lockDimensions'] as String? ?? '',
+        d['fsaDriveAcceptanceDate'] as String? ?? '?',
         _xStr(d['closerOnHingeSide']),
         _xStr(d['closerOnOppositeSide']),
-        _xStr(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m']),
-        d['escapeDoorControl'] == true ? 'Ja' : 'Nein',
+        _formatLintelHeight(d['lintelHeightInsideOver1m'], d['lintelHeightInsideValue']),
+        _formatLintelHeight(d['lintelHeightOutsideOver1m'], d['lintelHeightOutsideValue']),
         d['accessControl'] as String? ?? 'Nein',
+        d['escapeDoorControl'] == true ? 'Ja' : 'Nein',
         _xStr(d['escapeRouteSituation']),
         _xStr(d['escapeRouteSignage']),
         _xStr(d['blindCylinder']),
@@ -309,22 +329,22 @@ class PdfExportService {
         'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
         'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
-        'Sturzhöhe auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Sturzhöhe auf Gegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_boolToStr(door['lintelHeightInsideOver1m'])} (${door['lintelHeightInsideValue'] ?? ''})  |  Sturzhöhe außen > 1m: ${_boolToStr(door['lintelHeightOutsideOver1m'])} (${door['lintelHeightOutsideValue'] ?? ''})\n'
-        'Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
+        'Sturzhöhe auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Sturzhöhe auf Gegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue'])}  |  Sturzhöhe außen > 1m: ${_formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])}\n'
+        'Abnahme FSA / Antrieb: ${door['fsaDriveAcceptanceDate'] ?? '?'}  |  Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
         'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
         'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';
 
     page.graphics.drawString(
       doorSpecsText,
       bodyFont,
-      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 115),
+      bounds: Rect.fromLTWH(0, 30, page.getClientSize().width, 125),
     );
 
     page.graphics.drawString(
       'INSPEKTIONSHISTORIE & VERLAUF',
       subTitleFont,
       brush: PdfSolidBrush(PdfColor(27, 94, 32)),
-      bounds: Rect.fromLTWH(0, 150, page.getClientSize().width, 20),
+      bounds: Rect.fromLTWH(0, 160, page.getClientSize().width, 20),
     );
 
     final PdfGrid grid = PdfGrid();
@@ -371,7 +391,7 @@ class PdfExportService {
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 175, page.getClientSize().width, page.getClientSize().height - 185),
+      bounds: Rect.fromLTWH(0, 185, page.getClientSize().width, page.getClientSize().height - 195),
     );
 
     final file = File(outputPath);
