@@ -224,7 +224,8 @@
       "SVP",
       "Motorschloss",
       "40/97/9/50x305/F",
-      "65/72/9/20/310"
+      "65/72/9/20/310",
+      "65/72/9/20x235/FR"
     ],
     "default": "?"
   },
@@ -287,7 +288,8 @@
   "manufacturerNumber": {
     "options": [
       "?",
-      "Hers-007"
+      "Hers-007",
+      "Hersteller123"
     ],
     "default": "?"
   },

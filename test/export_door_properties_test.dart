@@ -95,7 +95,7 @@ void main() {
 
     final doorId = await db.insert('doors', {
       'pos': 1,
-      'doorAlias': 'P-PDF-100-1-EG-101',
+      'doorAlias': 'P-PDF-100-1-EG-${DateTime.now().microsecondsSinceEpoch}',
       'doorNumber': '101',
       'floor': 'EG',
       'roomNumber': '0.01',

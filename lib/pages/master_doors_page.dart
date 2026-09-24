@@ -10,6 +10,8 @@ import '../widgets/import_report_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/migration_log_dialog.dart';
 import '../services/customer_normalizer.dart';
+import '../services/app_version_service.dart';
+import '../widgets/app_version_dialog.dart';
 import '../utils/inspection_year_utils.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
@@ -549,7 +551,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         ),
                         onChanged: (val) => _loadData(),
                       )
-                    : const Text('Master-Portal (Manager)'),
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Master-Portal (Manager)', style: TextStyle(fontSize: 18)),
+                          Text(
+                            AppVersionService.getCompactVersionInfo(isManager: true),
+                            style: const TextStyle(fontSize: 11, color: Colors.white70),
+                          ),
+                        ],
+                      ),
         leading: (isDoorSelectionMode || isInspectionSelectionMode)
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -612,6 +624,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   }
                 });
               },
+            ),
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              tooltip: 'App-Info & Version',
+              onPressed: () => AppVersionDialog.show(context, isManager: true),
             ),
             IconButton(
               icon: const Icon(Icons.refresh),

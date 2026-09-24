@@ -84,7 +84,7 @@ void main() {
       expect(table.rows[1][6]?.toString(), 'Tür Spezifikationen');
       expect(table.rows[1][18]?.toString(), 'Installation');
       expect(table.rows[1][23]?.toString(), 'Sicherheit & Zugang');
-      expect(table.rows[1][33]?.toString(), 'Bewertung');
+      expect(table.rows[1][33]?.toString(), 'Okay');
 
       // Row 2: Column Headers
       expect(table.rows[2][0]?.toString(), 'Pos.');

@@ -6,6 +6,8 @@ import 'error_consolidation_page.dart';
 import 'door_options_manager_page.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/export_center_dialog.dart';
+import '../services/app_version_service.dart';
+import '../widgets/app_version_dialog.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -251,7 +253,17 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Manager Dashboard - Fehlerkatalog'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Katalog & Freigaben (Manager)', style: TextStyle(fontSize: 18)),
+            Text(
+              AppVersionService.getCompactVersionInfo(isManager: true),
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.drive_file_move_outlined),
@@ -288,6 +300,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               );
             },
             tooltip: 'Fehlerkatalog neu laden',
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'App-Info & Version',
+            onPressed: () => AppVersionDialog.show(context, isManager: true),
           ),
         ],
       ),

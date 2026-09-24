@@ -26,9 +26,10 @@ void main() {
         'isLocked': 0,
       });
 
+      final uniqueAlias = 'P-000999-1-EG-T01-${DateTime.now().microsecondsSinceEpoch}';
       final doorId = await db.insert('doors', {
         'pos': 1,
-        'doorAlias': 'P-000999-1-EG-T01',
+        'doorAlias': uniqueAlias,
         'doorNumber': 'T01',
         'floor': 'EG',
         'roomNumber': '0.01',

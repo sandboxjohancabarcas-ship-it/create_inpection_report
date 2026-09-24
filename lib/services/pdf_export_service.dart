@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' show Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:wartungstool/models/models.dart';
@@ -46,6 +47,15 @@ class PdfExportService {
     return '';
   }
 
+  static String _formatFloor(dynamic val) {
+    if (val == null) return '';
+    final s = val.toString().trim();
+    if (s.isEmpty || s == 'null') return '';
+    return s
+        .replaceAllMapped(RegExp(r'^(\d+)\s*\.\s*(OG|UG)', caseSensitive: false), (m) => '${m[1]}.${m[2]?.toUpperCase()}')
+        .replaceAllMapped(RegExp(r'^(EG|UG|KG|DG)$', caseSensitive: false), (m) => m[1]!.toUpperCase());
+  }
+
   /// Exports a single inspection report to a formatted PDF document
   static Future<File> exportSingleInspectionPdf(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
@@ -84,18 +94,34 @@ class PdfExportService {
 
     final document = PdfDocument();
     document.pageSettings.orientation = PdfPageOrientation.landscape;
+    document.pageSettings.margins.all = 12; // Snug margins maximizing usable landscape printable width
     final page = document.pages.add();
+    final pageWidth = page.getClientSize().width;
 
     final PdfFont titleFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
     final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
     final PdfFont bodyFont = PdfStandardFont(PdfFontFamily.helvetica, 5);
+
+    final centerFormat = PdfStringFormat(
+      alignment: PdfTextAlignment.center,
+      lineAlignment: PdfVerticalAlignment.middle,
+    );
+    final leftFormat = PdfStringFormat(
+      alignment: PdfTextAlignment.left,
+      lineAlignment: PdfVerticalAlignment.middle,
+    );
+    final noWrapCenterFormat = PdfStringFormat(
+      alignment: PdfTextAlignment.center,
+      lineAlignment: PdfVerticalAlignment.middle,
+      wordWrap: PdfWordWrapType.none,
+    );
 
     // Title
     page.graphics.drawString(
       'INSPEKTIONSBERICHT',
       titleFont,
       brush: PdfSolidBrush(PdfColor(13, 71, 161)),
-      bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 16),
+      bounds: Rect.fromLTWH(0, 0, pageWidth, 16),
     );
 
     // Metadata Block
@@ -104,86 +130,257 @@ class PdfExportService {
     page.graphics.drawString(
       metaText,
       PdfStandardFont(PdfFontFamily.helvetica, 7),
-      bounds: Rect.fromLTWH(0, 18, page.getClientSize().width, 18),
+      bounds: Rect.fromLTWH(0, 18, pageWidth, 18),
     );
 
-    // Table Column Headers
+    final totalCols = 34 + sortedDefectKeys.length + 1; // 34 fixed + defects + 1 for Anmerkung
+    final notesColIdx = 34 + sortedDefectKeys.length;
+
+    final PdfGrid grid = PdfGrid();
+    grid.style.cellPadding = PdfPaddings(left: 0.6, right: 0.6, top: 1.2, bottom: 1.2);
+
+    grid.columns.add(count: totalCols);
+
+    // Fixed Headers matching Excel export (0..33)
     final fixedHeaders = [
-      'Pos',
+      'Pos.',
       'Barcode',
       'Tür Nr.',
       'Etage',
       'Raum Nr.',
       'Raumbezeichnung',
-      'Türtyp',
-      'Zulassung',
-      'Hersteller',
-      'Herstellernr',
-      'DoP-Nr',
+      'Türtyp (T30/RS/T90/Panik P/WK/usw.)',
+      'Zulassungsnummer',
+      'Türhersteller / Türsystem',
+      'Herstellernummer',
+      'DoP-Nummer (Leistungserklärung)',
       'Baujahr',
-      'Flügel',
-      'Material',
-      'DIN',
-      'Schließer',
-      'Schließfolge',
-      'Schlossmaß',
-      'Abnahme FSA',
-      'Bandseite',
-      'Bandgegenseite',
-      'Sturz in >1m',
-      'Sturz aus >1m',
-      'Zutritt',
-      'Fluchttürst.',
-      'Fluchtwegsit.',
-      'Beschilderung',
-      'Blindzyl.',
-      'PZ-Zyl.',
-      'Beschlag',
-      'Panikfkt',
-      'Fluchtricht.OK',
-      'Vollpanik',
-      'Funktion OK',
+      'Flügelanzahl',
+      'Türmaterial / Türart',
+      'DIN L/R',
+      'Türschließer / Automatikantrieb',
+      'GSR / EMF / EMR',
+      'Schloßmaße',
+      'Abnahme FSA / Antrieb',
+      'Türschließer auf Bandseite',
+      'Türschließer auf Bandgegenseite',
+      'Sturzhöhe innen über 1m',
+      'Sturzhöhe außen über 1m',
+      'Zutrittskontrolle',
+      'Fluchtürsteuerung / Türwächter',
+      'Fluchtwegsituation',
+      'Fluchwegbeschilderung',
+      'Blindzylinder',
+      'PZ-Zylinder',
+      'Garnitur',
+      'Panikfunktion',
+      'Fluchtrichtung eingehalten',
+      'Vollpanik (Standflügel)',
+      'Tür einschl. Komponenten in ordentlicher Funktion',
     ];
 
-    final totalCols = fixedHeaders.length + sortedDefectKeys.length + 1; // +1 for Anmerkung
-    final PdfGrid grid = PdfGrid();
-    grid.style.cellPadding = PdfPaddings(left: 1.5, right: 1.5, top: 2, bottom: 2);
-
-    grid.columns.add(count: totalCols);
-    grid.headers.add(1);
-
-    final PdfGridRow headerRow = grid.headers[0];
-    final headerBorderPen = PdfPen(PdfColor(0, 0, 0), width: 1.0);
-
-    for (int col = 0; col < fixedHeaders.length; col++) {
-      final cell = headerRow.cells[col];
-      cell.value = fixedHeaders[col];
-      cell.style.font = headerFont;
-      cell.style.backgroundBrush = PdfSolidBrush(PdfColor(217, 225, 242));
-      cell.style.borders.all = headerBorderPen;
+    int maxHeaderChars = 20;
+    for (final h in fixedHeaders) {
+      if (h.length > maxHeaderChars) maxHeaderChars = h.length;
     }
+    for (final k in sortedDefectKeys) {
+      final label = defectMap[k]!;
+      if (label.length > maxHeaderChars) maxHeaderChars = label.length;
+    }
+
+    // Base proportional weights for snug column sizing (matching Excel dynamic widths)
+    final Map<int, double> baseColWidths = {
+      0: 16.0,  // Pos.
+      1: 22.0,  // Barcode
+      2: 22.0,  // Tür Nr.
+      3: 18.0,  // Etage
+      4: 16.0,  // Raum Nr.
+      5: 38.0,  // Raumbezeichnung
+      6: 24.0,  // Türtyp
+      7: 22.0,  // Zulassung
+      8: 24.0,  // Hersteller
+      9: 18.0,  // Herstellernr
+      10: 18.0, // DoP-Nr
+      11: 16.0, // Baujahr
+      12: 12.0, // Flügel
+      13: 20.0, // Material
+      14: 12.0, // DIN
+      15: 22.0, // Schließer
+      16: 20.0, // Schließfolge
+      17: 18.0, // Schlossmaß
+      18: 20.0, // Abnahme FSA
+      19: 12.0, // Bandseite
+      20: 12.0, // Bandgegenseite
+      21: 14.0, // Sturz in >1m
+      22: 14.0, // Sturz aus >1m
+      23: 18.0, // Zutritt
+      24: 18.0, // Fluchttürst.
+      25: 12.0, // Fluchtwegsit.
+      26: 12.0, // Beschilderung
+      27: 12.0, // Blindzyl.
+      28: 12.0, // PZ-Zyl.
+      29: 18.0, // Beschlag
+      30: 18.0, // Panikfkt
+      31: 12.0, // Fluchtricht.OK
+      32: 12.0, // Vollpanik
+      33: 12.0, // Okay
+    };
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
-      final colIdx = fixedHeaders.length + i;
-      final cell = headerRow.cells[colIdx];
-      cell.value = defectMap[sortedDefectKeys[i]]!;
-      cell.style.font = headerFont;
-      cell.style.backgroundBrush = PdfSolidBrush(PdfColor(252, 228, 214));
-      cell.style.borders.all = headerBorderPen;
+      baseColWidths[34 + i] = 12.0; // Defect columns (compact)
+    }
+    baseColWidths[notesColIdx] = 36.0; // Anmerkung
+
+    double totalBaseWidth = 0.0;
+    for (int c = 0; c < totalCols; c++) {
+      totalBaseWidth += (baseColWidths[c] ?? 16.0);
+    }
+    final scale = pageWidth / totalBaseWidth;
+    for (int c = 0; c < totalCols; c++) {
+      grid.columns[c].width = (baseColWidths[c] ?? 16.0) * scale;
     }
 
-    final notesColIdx = fixedHeaders.length + sortedDefectKeys.length;
-    final notesCell = headerRow.cells[notesColIdx];
-    notesCell.value = 'Anmerkung';
-    notesCell.style.font = headerFont;
-    notesCell.style.backgroundBrush = PdfSolidBrush(PdfColor(226, 239, 218));
-    notesCell.style.borders.all = headerBorderPen;
+    // ── 2 HEADER ROWS (Matching Excel Structure) ───────────────────────────
+    grid.headers.add(2);
 
+    final PdfGridRow categoryRow = grid.headers[0];
+    final PdfGridRow colHeaderRow = grid.headers[1];
+
+    final catBg = PdfSolidBrush(PdfColor(31, 73, 125)); // #1F497D Dark Blue
+    final catFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
+    final catBorderPen = PdfPen(PdfColor(31, 73, 125), width: 0.5);
+    final whiteCenterFormat = PdfStringFormat(
+      alignment: PdfTextAlignment.center,
+      lineAlignment: PdfVerticalAlignment.middle,
+    );
+
+    categoryRow.height = 16.0;
+    for (int c = 0; c < totalCols; c++) {
+      categoryRow.cells[c].style.backgroundBrush = catBg;
+      categoryRow.cells[c].style.borders.all = catBorderPen;
+      categoryRow.cells[c].style.font = catFont;
+      categoryRow.cells[c].style.textBrush = PdfSolidBrush(PdfColor(255, 255, 255));
+      categoryRow.cells[c].style.stringFormat = whiteCenterFormat;
+      categoryRow.cells[c].value = '';
+    }
+
+    // Row 1 Grouped Categories (Merged Spans)
+    categoryRow.cells[0].columnSpan = 6;
+    categoryRow.cells[0].value = 'Grundinformationen';
+
+    categoryRow.cells[6].columnSpan = 12;
+    categoryRow.cells[6].value = 'Tür Spezifikationen';
+
+    categoryRow.cells[18].columnSpan = 5;
+    categoryRow.cells[18].value = 'Installation';
+
+    categoryRow.cells[23].columnSpan = 10;
+    categoryRow.cells[23].value = 'Sicherheit & Zugang';
+
+    // Col 33: Okay (single cell, drawn rotated in beginCellLayout)
+    categoryRow.cells[33].columnSpan = 1;
+    categoryRow.cells[33].value = '';
+
+    if (sortedDefectKeys.isNotEmpty) {
+      categoryRow.cells[34].columnSpan = sortedDefectKeys.length;
+      categoryRow.cells[34].value = 'Mängelhinweise [${insp['jobNumber'] ?? ''}]';
+    }
+
+    // Notes Col: Anmerkung (single cell, drawn rotated in beginCellLayout)
+    categoryRow.cells[notesColIdx].columnSpan = 1;
+    categoryRow.cells[notesColIdx].value = '';
+
+    // Row 2 Rotated Column Headers Setup
+    final dynamicHeaderHeight = (max(75.0, min(140.0, maxHeaderChars * 2.9)));
+    colHeaderRow.height = dynamicHeaderHeight;
+
+    final headerBorderPen = PdfPen(PdfColor(0, 0, 0), width: 0.6);
+    final fixedHeaderBg = PdfSolidBrush(PdfColor(217, 225, 242)); // #D9E1F2
+    final defectHeaderBg = PdfSolidBrush(PdfColor(252, 228, 214)); // #FCE4D6
+    final notesHeaderBg = PdfSolidBrush(PdfColor(226, 239, 218)); // #E2EFDA
+
+    final allColumnHeaders = <String>[
+      ...fixedHeaders,
+      ...sortedDefectKeys.map((k) => defectMap[k]!),
+      'Anmerkung',
+    ];
+
+    for (int c = 0; c < totalCols; c++) {
+      colHeaderRow.cells[c].value = ''; // Clean so default layout does not draw horizontal text
+      colHeaderRow.cells[c].style.borders.all = headerBorderPen;
+      if (c < 34) {
+        colHeaderRow.cells[c].style.backgroundBrush = fixedHeaderBg;
+      } else if (c < notesColIdx) {
+        colHeaderRow.cells[c].style.backgroundBrush = defectHeaderBg;
+      } else {
+        colHeaderRow.cells[c].style.backgroundBrush = notesHeaderBg;
+      }
+    }
+
+    // Register custom drawing for 90-degree rotated headers on endCellLayout (drawn on top of cell backgrounds)
+    grid.endCellLayout = (Object sender, PdfGridEndCellLayoutArgs args) {
+      final bounds = args.bounds;
+      final cellIdx = args.cellIndex;
+
+      // Category Header Row 0 (Y from ~36.0 to ~52.0)
+      if (bounds.top >= 36.0 && bounds.top < 52.0) {
+        if (cellIdx == 33) {
+          final g = args.graphics;
+          g.save();
+          g.translateTransform(bounds.left + (bounds.width / 2) + 1.8, bounds.bottom - 2.5);
+          g.rotateTransform(-90);
+          g.drawString(
+            'Okay',
+            PdfStandardFont(PdfFontFamily.helvetica, 5.0, style: PdfFontStyle.bold),
+            brush: PdfSolidBrush(PdfColor(255, 255, 255)),
+          );
+          g.restore();
+        } else if (cellIdx == notesColIdx) {
+          final g = args.graphics;
+          g.save();
+          g.translateTransform(bounds.left + (bounds.width / 2) + 1.8, bounds.bottom - 2.5);
+          g.rotateTransform(-90);
+          g.drawString(
+            'Anmerkung',
+            PdfStandardFont(PdfFontFamily.helvetica, 5.0, style: PdfFontStyle.bold),
+            brush: PdfSolidBrush(PdfColor(255, 255, 255)),
+          );
+          g.restore();
+        }
+      }
+      // Column Header Row 1 (Y from ~52.0 to ~52.0 + dynamicHeaderHeight)
+      else if (bounds.top >= 52.0 && bounds.top < (54.0 + dynamicHeaderHeight / 2)) {
+        if (cellIdx < allColumnHeaders.length) {
+          final text = allColumnHeaders[cellIdx];
+          final g = args.graphics;
+          g.save();
+          g.translateTransform(bounds.left + (bounds.width / 2) + 1.8, bounds.bottom - 3.0);
+          g.rotateTransform(-90);
+          g.drawString(
+            text,
+            PdfStandardFont(PdfFontFamily.helvetica, 4.6, style: PdfFontStyle.bold),
+            brush: PdfSolidBrush(PdfColor(0, 0, 0)),
+          );
+          g.restore();
+        }
+      }
+    };
+
+    // ── DATA ROWS ──────────────────────────────────────────────────────────
     int posCounter = 1;
     final Map<String, int> defectTotals = {};
+    final centerCols = {0, 2, 3, 12, 14, 19, 20, 21, 22, 25, 26, 27, 28, 31, 32, 33};
 
-    for (final d in doors) {
+    final rowBorderPen = PdfPen(PdfColor(217, 217, 217), width: 0.5); // #D9D9D9 thin border
+    final evenRowBg = PdfSolidBrush(PdfColor(255, 255, 255)); // #FFFFFF
+    final oddRowBg = PdfSolidBrush(PdfColor(248, 250, 252)); // #F8FAFC
+
+    for (int r = 0; r < doors.length; r++) {
+      final d = doors[r];
       final PdfGridRow row = grid.rows.add();
+      final isEven = (r % 2 == 0);
+      final currentBg = isEven ? evenRowBg : oddRowBg;
+
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       final Map<String, int> doorDefectQtyMap = {};
       for (final e in errors) {
@@ -196,11 +393,13 @@ class PdfExportService {
         }
       }
 
+      final floorVal = _formatFloor(d['floor']);
+
       final rowValues = [
         '${d['pos'] ?? posCounter}',
         d['doorAlias'] as String? ?? '',
         d['doorNumber'] as String? ?? '',
-        d['floor'] as String? ?? '',
+        floorVal,
         d['roomNumber'] as String? ?? '',
         d['roomDesignation'] as String? ?? '',
         d['doorType'] as String? ?? '',
@@ -236,54 +435,73 @@ class PdfExportService {
       for (int c = 0; c < rowValues.length; c++) {
         row.cells[c].value = rowValues[c];
         row.cells[c].style.font = bodyFont;
+        row.cells[c].style.backgroundBrush = currentBg;
+        row.cells[c].style.borders.all = rowBorderPen;
+
+        if (c == 0 || c == 2 || c == 3) {
+          row.cells[c].style.stringFormat = noWrapCenterFormat;
+        } else {
+          row.cells[c].style.stringFormat = centerCols.contains(c) ? centerFormat : leftFormat;
+        }
       }
 
       for (int i = 0; i < sortedDefectKeys.length; i++) {
         final key = sortedDefectKeys[i];
-        final colIdx = fixedHeaders.length + i;
+        final colIdx = 34 + i;
         if (doorDefectQtyMap.containsKey(key)) {
           final qty = doorDefectQtyMap[key]!;
           row.cells[colIdx].value = '$qty';
-          row.cells[colIdx].style.font = bodyFont;
           defectTotals[key] = (defectTotals[key] ?? 0) + qty;
         } else {
           row.cells[colIdx].value = '';
-          row.cells[colIdx].style.font = bodyFont;
         }
+        row.cells[colIdx].style.font = bodyFont;
+        row.cells[colIdx].style.stringFormat = centerFormat;
+        row.cells[colIdx].style.backgroundBrush = currentBg;
+        row.cells[colIdx].style.borders.all = rowBorderPen;
       }
 
       final doorNotes = (d['notes'] ?? d['junctionNotes'] ?? '').toString();
       row.cells[notesColIdx].value = doorNotes;
       row.cells[notesColIdx].style.font = bodyFont;
+      row.cells[notesColIdx].style.stringFormat = leftFormat;
+      row.cells[notesColIdx].style.backgroundBrush = currentBg;
+      row.cells[notesColIdx].style.borders.all = rowBorderPen;
 
       posCounter++;
     }
 
-    // Bottom total sum row
+    // ── SUMMARY ROW (Totals) ───────────────────────────────────────────────
     final PdfGridRow summaryRow = grid.rows.add();
-    final summaryBorderPen = PdfPen(PdfColor(0, 0, 0), width: 1.2);
-    final summaryBg = PdfSolidBrush(PdfColor(226, 239, 218));
+    final summaryBorderPen = PdfPen(PdfColor(0, 0, 0), width: 1.0);
+    final summaryBg = PdfSolidBrush(PdfColor(226, 239, 218)); // #E2EFDA
 
     for (int c = 0; c < totalCols; c++) {
       summaryRow.cells[c].style.backgroundBrush = summaryBg;
       summaryRow.cells[c].style.borders.top = summaryBorderPen;
       summaryRow.cells[c].style.borders.bottom = summaryBorderPen;
+      summaryRow.cells[c].style.borders.left = rowBorderPen;
+      summaryRow.cells[c].style.borders.right = rowBorderPen;
     }
 
+    // Merge columns 0 to 33 for the summary label on this special row
+    summaryRow.cells[0].columnSpan = 34;
     summaryRow.cells[0].value = 'Summe für Mängelbeseitigung';
     summaryRow.cells[0].style.font = headerFont;
+    summaryRow.cells[0].style.stringFormat = leftFormat;
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final key = sortedDefectKeys[i];
-      final colIdx = fixedHeaders.length + i;
+      final colIdx = 34 + i;
       final total = defectTotals[key] ?? 0;
       summaryRow.cells[colIdx].value = '$total';
       summaryRow.cells[colIdx].style.font = headerFont;
+      summaryRow.cells[colIdx].style.stringFormat = centerFormat;
     }
 
     grid.draw(
       page: page,
-      bounds: Rect.fromLTWH(0, 40, page.getClientSize().width, page.getClientSize().height - 45),
+      bounds: Rect.fromLTWH(0, 38, pageWidth, page.getClientSize().height - 42),
     );
 
     final file = File(outputPath);
@@ -324,7 +542,7 @@ class PdfExportService {
 
     // Door Info Card with All Door Properties
     final doorSpecsText = 'Barcode: $alias  |  Alias: $provAlias  |  Türnummer: $doorNum  |  Pos: ${door['pos'] ?? 0}\n'
-        'Geschoss: ${door['floor'] ?? ''}  |  Raumnr.: ${door['roomNumber'] ?? ''}  |  Raum: ${door['roomDesignation'] ?? ''}\n'
+        'Geschoss: ${_formatFloor(door['floor'])}  |  Raumnr.: ${door['roomNumber'] ?? ''}  |  Raum: ${door['roomDesignation'] ?? ''}\n'
         'Türart: ${door['doorType'] ?? ''}  |  Flügelanzahl: ${door['wingCount'] ?? 1}  |  Material: ${door['material'] ?? ''}  |  Hersteller: ${door['manufacturer'] ?? ''}\n'
         'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'

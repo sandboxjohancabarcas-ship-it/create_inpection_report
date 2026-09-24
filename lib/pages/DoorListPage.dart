@@ -8,6 +8,8 @@ import '../models/models.dart';
 import '../services/local_database_service.dart';
 import '../widgets/inspection_summary_card.dart';
 import '../widgets/import_report_dialog.dart';
+import '../services/app_version_service.dart';
+import '../widgets/app_version_dialog.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
 import 'door_conflict_review_page.dart';
@@ -258,7 +260,17 @@ class _DoorListPageState extends State<DoorListPage> {
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                     onChanged: (value) => loadInspections(),
                   )
-                : const Text("Prüfpakete (Techniker)"),
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text("Prüfpakete (Techniker)", style: TextStyle(fontSize: 18)),
+                      Text(
+                        AppVersionService.getCompactVersionInfo(isManager: false),
+                        style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                      ),
+                    ],
+                  ),
         leading: isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -292,6 +304,11 @@ class _DoorListPageState extends State<DoorListPage> {
                   icon: const Icon(Icons.file_open),
                   tooltip: 'Paket importieren',
                   onPressed: _isSyncing ? null : _handleImportPaket,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.info_outline),
+                  tooltip: 'App-Info & Version',
+                  onPressed: () => AppVersionDialog.show(context, isManager: false),
                 ),
               ],
       ),

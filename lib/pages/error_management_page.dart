@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/database_service.dart';
 import '../widgets/master_portal_home_button.dart';
+import '../widgets/full_screen_photo_viewer.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
@@ -1195,43 +1197,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  void _viewPhotoFullScreen(String base64Str) {
+  void _viewPhotoFullScreen(List<String> photos, int initialIndex) {
+    if (photos.isEmpty) return;
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.black,
-                child: InteractiveViewer(
-                  panEnabled: true,
-                  boundaryMargin: EdgeInsets.all(20),
-                  minScale: 0.5,
-                  maxScale: 4.0,
-                  child: Image.memory(
-                    base64Decode(base64Str),
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 40,
-              right: 20,
-              child: IconButton(
-                icon: Icon(Icons.close, color: Colors.white, size: 30),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
+      builder: (context) => FullScreenPhotoGalleryViewer(
+        photos: photos,
+        initialIndex: initialIndex,
       ),
     );
   }
@@ -1305,7 +1277,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 return Stack(
                   children: [
                     GestureDetector(
-                      onTap: () => _viewPhotoFullScreen(photoBase64),
+                      onTap: () => _viewPhotoFullScreen(photos, index),
                       child: Container(
                         width: 60,
                         height: 60,
