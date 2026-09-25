@@ -58,7 +58,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   // Boolean states
   bool escapeSignage = false;
-  bool escapeDoorControl = false;
   bool properFunction = false;
   bool blindCylinder = false;
   bool pzCylinder = false;
@@ -73,6 +72,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   bool fullPanicStandWing = false;
 
   // Dropdowns
+  String? escapeDoorControl;
   String? accessControl;
   String? panicFunction;
   String? doorType;
@@ -90,6 +90,13 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   DateTime inspectionDate = DateTime.now();
   int? currentInspectionId;
   bool _isLoadingOptions = true;
+  int _errorCount = 0;
+
+  bool get _canSave {
+    if (_isFormReadOnly) return false;
+    if (!properFunction && _errorCount == 0) return false;
+    return true;
+  }
 
   @override
   void initState() {
@@ -161,7 +168,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     // Initialize booleans
     escapeSignage = d?.escapeRouteSignage ?? false;
-    escapeDoorControl = d?.escapeDoorControl ?? false;
     properFunction = d?.doorFunctionOK ?? false;
     blindCylinder = d?.blindCylinder ?? false;
     pzCylinder = d?.pzCylinder ?? false;
@@ -183,6 +189,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     fsaDriveAcceptanceDate = d?.fsaDriveAcceptanceDate;
 
     // Initialize dropdowns (use defaults from config file if creating a new door)
+    escapeDoorControl = d?.escapeDoorControl ?? DoorOptionsService.getDefault('escapeDoorControl') ?? 'Nein';
     accessControl = d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
     panicFunction = d?.panicFunction ?? DoorOptionsService.getDefault('panicFunction');
     doorType = d?.doorType ?? DoorOptionsService.getDefault('doorType');
@@ -276,7 +283,14 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   Future<void> _syncErrorNotes() async {
     final doorId = widget.door?.id;
-    if (doorId == null || currentInspectionId == null) return;
+    if (doorId == null || currentInspectionId == null) {
+      if (mounted) {
+        setState(() {
+          _errorCount = 0;
+        });
+      }
+      return;
+    }
     try {
       final db = widget.isManagerMode 
           ? await DatabaseService.getDb() 
@@ -309,17 +323,27 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           }
         }
 
-        if (formattedEntries.isNotEmpty) {
-          final newNotesText = formattedEntries.join('\n');
-          if (mounted) {
-            setState(() {
+        if (mounted) {
+          setState(() {
+            _errorCount = errors.length;
+            if (errors.isNotEmpty) {
+              properFunction = false;
+            }
+            if (formattedEntries.isNotEmpty) {
+              final newNotesText = formattedEntries.join('\n');
               if (notesController.text.trim().isEmpty || _isAutoSyncedErrorNotes(notesController.text.trim(), formattedEntries)) {
                 notesController.text = newNotesText;
               } else if (!notesController.text.contains(newNotesText)) {
                 notesController.text = '${notesController.text.trim()}\n$newNotesText';
               }
-            });
-          }
+            }
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _errorCount = 0;
+          });
         }
       }
     } catch (e) {
@@ -499,7 +523,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       closerOnHingeSide: closerOnHingeSide,
       closerOnOppositeSide: closerOnOppositeSide,
       lintelHeightInsideOver1m: lintelHeightInsideOver1m,
-      escapeDoorControl: escapeDoorControl,
+      escapeDoorControl: escapeDoorControl ?? DoorOptionsService.getDefault('escapeDoorControl') ?? 'Nein',
       accessControl: accessControl ?? DoorOptionsService.getDefault('accessControl') ?? 'Nein',
       escapeRouteSituation: escapeRouteSituation,
       escapeRouteSignage: escapeSignage,
@@ -531,13 +555,22 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   }
 
   Future<void> saveDoor() async {
-    if (_isFormReadOnly) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Gesperrte Inspektionen können vom Inspektor nicht bearbeitet oder gespeichert werden.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
+    if (!_canSave) {
+      if (_isFormReadOnly) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Gesperrte Inspektionen können vom Inspektor nicht bearbeitet oder gespeichert werden.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      } else if (!properFunction && _errorCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Wenn Bewertung auf "Nein" steht, müssen Mängel über "Fehler verwalten" erfasst werden, um speichern zu können.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
     final door = buildDoor();
@@ -746,11 +779,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isFormReadOnly ? null : () async {
+                    onPressed: _canSave ? () async {
                       await saveDoor();
-                    },
+                    } : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _isFormReadOnly ? Colors.grey : Colors.orange,
+                      backgroundColor: _canSave ? Colors.orange : Colors.grey.shade400,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -789,6 +822,29 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 ),
               ],
             ),
+            if (!_isFormReadOnly && !properFunction && _errorCount == 0) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  border: Border.all(color: Colors.amber.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Bewertung ist "Nein": Bitte fügen Sie mindestens einen Fehler über "Fehler verwalten" hinzu, um speichern zu können.',
+                        style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
 
             // Inspection Metadata Section
@@ -1186,14 +1242,14 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
             // Lintel height / Closer position on hinge side
             SwitchListTile(
-              title: const Text("Sturzhöhe auf Bandseite"),
+              title: const Text("Türschließer auf Bandseite"),
               value: closerOnHingeSide,
               onChanged: (val) => setState(() => closerOnHingeSide = val),
             ),
 
             // Lintel height / Closer position on opposite side
             SwitchListTile(
-              title: const Text("Sturzhöhe auf Gegenseite"),
+              title: const Text("Türschließer auf Bandgegenseite"),
               value: closerOnOppositeSide,
               onChanged: (val) => setState(() => closerOnOppositeSide = val),
             ),
@@ -1283,9 +1339,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             ),
 
             // Escape door control
-            SwitchListTile(
-              title: const Text("Fluchttürsteuerung"),
-              value: escapeDoorControl,
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: "Fluchttürsteuerung / Türwächter"),
+              initialValue: _getDropdownValue('escapeDoorControl', escapeDoorControl),
+              items: _getDropdownItems('escapeDoorControl', escapeDoorControl)
+                  .map((val) => DropdownMenuItem(value: val, child: Text(val)))
+                  .toList(),
               onChanged: (val) => setState(() => escapeDoorControl = val),
             ),
 
@@ -1360,9 +1419,31 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Door function OK
             SwitchListTile(
               title: const Text("Tür inkl. Komponenten in ordentlicher Funktion"),
+              subtitle: Text(
+                properFunction
+                    ? "Ja (Keine Mängel)"
+                    : (_errorCount > 0 ? "Nein ($_errorCount Mängel erfasst)" : "Nein (Mängel müssen erfasst werden)"),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: properFunction ? Colors.green.shade700 : (_errorCount > 0 ? Colors.orange.shade800 : Colors.red.shade700),
+                ),
+              ),
               value: properFunction,
               onChanged: (val) => setState(() => properFunction = val),
             ),
+            if (!_isFormReadOnly && !properFunction && _errorCount == 0) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+                child: Text(
+                  'Hinweis: Da die Tür nicht als ordnungsgemäß bewertet ist, muss mindestens ein Fehler hinzugefügt werden, um zu speichern.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
           ],
         ),

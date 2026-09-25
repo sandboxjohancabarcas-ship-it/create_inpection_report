@@ -18,6 +18,7 @@ class _DoorOptionsManagerPageState extends State<DoorOptionsManagerPage> {
     'closerType': 'Schließerart',
     'closingSequenceSystem': 'Schließfolgesystem',
     'lockDimensions': 'Schlossabmessungen',
+    'escapeDoorControl': 'Fluchttürsteuerung / Türwächter',
     'accessControl': 'Zutrittskontrolle',
     'fittingType': 'Beschlagstyp',
     'panicFunction': 'Panikfunktion',

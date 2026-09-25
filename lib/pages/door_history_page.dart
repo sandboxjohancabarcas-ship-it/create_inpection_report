@@ -386,7 +386,7 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
                 _buildSpecItem('Beschlag', door.fittingType),
                 _buildSpecItem('Panikfunktion', door.panicFunction),
                 _buildSpecItem('Zutrittskontrolle', door.accessControl),
-                _buildSpecItem('Fluchtwegsteuerung', door.escapeDoorControl ? 'Ja' : 'Nein'),
+                _buildSpecItem('Fluchtwegsteuerung', door.escapeDoorControl),
                 _buildSpecItem('Fluchtwegbeschilderung', door.escapeRouteSignage ? 'Vorhanden' : 'Nein'),
               ],
             ),

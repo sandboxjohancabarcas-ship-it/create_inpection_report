@@ -649,7 +649,7 @@ class LocalDatabaseService {
       closerOnOppositeSide: false,
       lintelHeightInsideOver1m: false,
       lintelHeightOutsideOver1m: false,
-      escapeDoorControl: false,
+      escapeDoorControl: 'Nein',
       accessControl: '',
       escapeRouteSituation: false,
       escapeRouteSignage: false,

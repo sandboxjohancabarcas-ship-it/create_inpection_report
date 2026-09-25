@@ -75,18 +75,8 @@ class ExcelDataImporter {
     final allSheets = decoder.tables.keys.toList();
     logs.add('Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
 
-    // 1. Process Fehlerübersicht / Fehlercode and populate error_catalog
-    final fehlerSheetKey = decoder.tables.keys.where((k) {
-      final l = k.trim().toLowerCase();
-      return l == 'fehlerübersicht' ||
-             l == 'fehleruebersicht' ||
-             l == 'fehler-übersicht' ||
-             l == 'fehlercode' ||
-             l == 'fehlerkatalog' ||
-             l.startsWith('fehler');
-    }).firstOrNull;
-
-    final fehlerSheet = fehlerSheetKey != null ? decoder.tables[fehlerSheetKey] : null;
+    // 1. Ensure master error catalog is initialized from asset/db and apply any resolutions
+    await DatabaseService.checkAndInitializeCatalog();
     final Map<String, String> resolvedCodes = {};
     final Set<String> skippedCodes = {};
 
@@ -114,86 +104,16 @@ class ExcelDataImporter {
           }
         }
       }
-    }
-
-    if (fehlerSheet == null) {
-      final msg = 'Kein Arbeitsblatt "Fehlerübersicht" / "Fehlercode" in der Excel-Datei gefunden. Verwende bestehenden Fehlerkatalog.';
-      warnings.add(msg);
-      logs.add('WARNUNG: $msg');
-    } else {
-      final List<ErrorCatalog> parsedCatalogErrors = [];
-      for (int r = 1; r < fehlerSheet.maxRows; r++) {
-        final row = fehlerSheet.rows[r];
-        if (row.isEmpty) continue;
-
-        String? code;
-        String? desc;
-
-        // Format 1: Column 1 = Code, Column 2 = Description (Fehlerübersicht)
-        if (row.length > 2 && row[1] != null && row[2] != null) {
-          final c = row[1].toString().trim();
-          final d = row[2].toString().trim();
-          if (c.isNotEmpty && d.isNotEmpty && RegExp(r'^\d+(\.\d+)?').hasMatch(c)) {
-            code = c;
-            desc = d;
-          }
-        }
-
-        // Format 2: Column 1 = "Code Description" (Fehlercode)
-        if (code == null && row.length > 1 && row[1] != null) {
-          final text = row[1].toString().trim();
-          final m = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(text);
-          if (m != null) {
-            code = m.group(1)!;
-            desc = m.group(2)!;
-          }
-        }
-
-        // Format 3: Column 0 = Code, Column 1 = Description
-        if (code == null && row.length > 1 && row[0] != null && row[1] != null) {
-          final c = row[0].toString().trim();
-          final d = row[1].toString().trim();
-          if (RegExp(r'^\d+(\.\d+)?$').hasMatch(c) && d.isNotEmpty) {
-            code = c;
-            desc = d;
-          }
-        }
-
-        if (code != null && desc != null && code.isNotEmpty && desc.isNotEmpty) {
-          final isNotice = code.startsWith('0.') ||
-              desc.toLowerCase().startsWith('hinweis') ||
-              desc.toLowerCase().contains('hinweis');
-          final cat = isNotice ? 'Hinweis' : 'Mangel';
-          final sev = isNotice ? 'low' : 'medium';
-
-          parsedCatalogErrors.add(ErrorCatalog(
-            code: code,
-            description: desc,
-            category: cat,
-            severity: sev,
-            status: 'Approved',
-          ));
-        }
-      }
-
-      logs.add('Arbeitsblatt "$fehlerSheetKey" erkannt: ${parsedCatalogErrors.length} Fehlerdefinitionen extrahiert.');
-
-      // Merge error catalog
-      if (resolutions == null) {
-        final mergeResult = await DatabaseService.mergeErrorCatalog(parsedCatalogErrors, autoResolve: false);
-        if (mergeResult.conflicts.isNotEmpty) {
-          allCatalogConflicts.addAll(mergeResult.conflicts);
-          logs.add('KATALOGKONFLIKTE GEFUNDEN: ${mergeResult.conflicts.length} echte Konflikte in $fehlerSheetKey.');
-        } else {
-          logs.add('Fehlerkatalog verarbeitet: ${mergeResult.insertedCount} neue Einträge automatisch hinzugefügt, ${mergeResult.duplicateCount} identische Einträge übersprungen.');
-        }
-      } else {
-        logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
-      }
+      logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
     }
 
     // Refresh memory catalog list
     final catalog = await DatabaseService.getAllErrorCatalog();
+    final officialCatalog = catalog.where((e) =>
+      e.status == 'Approved' &&
+      e.category != 'Altdaten' &&
+      !e.code.toUpperCase().startsWith('ALT-')
+    ).toList();
     int sheetsProcessed = 0;
     int totalDoorsImported = 0;
     int totalErrorsLinked = 0;
@@ -267,6 +187,144 @@ class ExcelDataImporter {
 
     logs.add('Reihenfolge der verarbeiteten Blätter (neueste zuerst): ' + 
       doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', '));
+
+    // ── Evaluate Error Catalog Conflicts on the Latest Inspection Sheet ──
+    final latestSheetInfo = doorSheetsToProcess.firstOrNull;
+    if (latestSheetInfo != null && resolutions == null) {
+      final latestSheet = latestSheetInfo['sheet'] as dynamic;
+      final String latestSheetName = latestSheetInfo['sheetName'] as String;
+
+      int lHeaderRowIndex = 2;
+      for (int r = 0; r < latestSheet.maxRows && r < 10; r++) {
+        final rRow = latestSheet.rows[r];
+        if (rRow.isNotEmpty) {
+          bool foundHeader = false;
+          for (int c = 0; c < rRow.length && c < 5; c++) {
+            if (rRow[c] != null) {
+              final cellVal = rRow[c].toString().trim().toLowerCase();
+              if (cellVal == 'pos' || cellVal == 'pos.' || cellVal == 'lfd' || cellVal == 'nr' || cellVal == 'tür-nr' || cellVal == 'türnummer' || cellVal == 'tür nr') {
+                lHeaderRowIndex = r;
+                foundHeader = true;
+                break;
+              }
+            }
+          }
+          if (foundHeader) break;
+        }
+      }
+      if (lHeaderRowIndex >= latestSheet.rows.length) lHeaderRowIndex = 0;
+      final lHeaderRow = latestSheet.rows.isNotEmpty ? latestSheet.rows[lHeaderRowIndex] : [];
+
+      int lNotesCol = -1;
+      if (latestSheet.maxRows > 1) {
+        final row2 = latestSheet.rows[1];
+        for (int c = 0; c < row2.length; c++) {
+          final val = _cell(row2, c);
+          if (val != null && val.toString().trim().toLowerCase().startsWith('anmerkung')) {
+            lNotesCol = c;
+            break;
+          }
+        }
+      }
+
+      int lFixedColCount = 28;
+      if (lHeaderRow.length >= 34) {
+        final col7 = _toStr(_cell(lHeaderRow, 7)).toLowerCase();
+        final col21 = _toStr(_cell(lHeaderRow, 21)).toLowerCase();
+        if (col7.contains('zulassung') || col21.contains('sturzhöhe innen')) {
+          lFixedColCount = 34;
+        }
+      }
+
+      for (int c = lFixedColCount; c < lHeaderRow.length; c++) {
+        if (c == lNotesCol) continue;
+        final val = _cell(lHeaderRow, c);
+        if (val == null) continue;
+        final headerStr = val.toString().trim();
+        if (headerStr.isEmpty || headerStr.toLowerCase().startsWith('anmerkung')) break;
+
+        final match = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(headerStr);
+        String code;
+        String desc;
+        if (match != null) {
+          code = match.group(1)!;
+          desc = match.group(2)!;
+        } else {
+          final exactCatalogMatch = officialCatalog.where((e) =>
+            e.description.trim().toLowerCase() == headerStr.toLowerCase() ||
+            e.description.trim().toLowerCase() == headerStr.replaceFirst(RegExp(r'^Hinweis:\s*', caseSensitive: false), '').trim().toLowerCase()
+          ).firstOrNull;
+          code = exactCatalogMatch?.code ?? headerStr;
+          desc = exactCatalogMatch?.description ?? headerStr;
+        }
+
+        final existingForCode = officialCatalog.where((e) => e.code.toLowerCase() == code.toLowerCase()).firstOrNull;
+        final existingForDesc = officialCatalog.where((e) => _cleanCatalogDesc(e.description) == _cleanCatalogDesc(desc)).firstOrNull;
+
+        final isResolved = resolvedCodes.containsKey(code) ||
+            resolvedCodes.containsKey(desc) ||
+            resolvedCodes.containsKey(headerStr) ||
+            skippedCodes.contains(code) ||
+            skippedCodes.contains(desc) ||
+            skippedCodes.contains(headerStr);
+
+        if (!isResolved) {
+          bool isConflict = false;
+          String reason = '';
+          ErrorCatalog? existingMatch;
+
+          if (existingForCode == null && existingForDesc == null) {
+            isConflict = true;
+            reason = 'Unbekannter Mangel-/Hinweis-Spaltenkopf in neuester Inspektion "$latestSheetName".';
+          } else if (existingForCode != null && existingForDesc != null && existingForCode.code.toLowerCase() != existingForDesc.code.toLowerCase()) {
+            isConflict = true;
+            existingMatch = existingForCode;
+            reason = 'Mangel "$headerStr" hat Code "$code", aber die Beschreibung entspricht bestehendem Code "${existingForDesc.code}".';
+          } else if (existingForCode != null && _cleanCatalogDesc(existingForCode.description) != _cleanCatalogDesc(desc) && desc.length > 5 && !desc.toLowerCase().startsWith('fehler')) {
+            isConflict = true;
+            existingMatch = existingForCode;
+            reason = 'Bestehender Eintrag mit Code "$code" hat andere Beschreibung ("${existingForCode.description}").';
+          } else if (existingForDesc != null && existingForDesc.code.toLowerCase() != code.toLowerCase() && RegExp(r'^\d+(\.\d+)?$').hasMatch(code)) {
+            isConflict = true;
+            existingMatch = existingForDesc;
+            reason = 'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDesc.code}).';
+          }
+
+          if (isConflict) {
+            final alreadyInConflict = allCatalogConflicts.any((cf) =>
+              cf.code.toLowerCase() == code.toLowerCase() ||
+              cf.description.toLowerCase() == headerStr.toLowerCase());
+
+            if (!alreadyInConflict) {
+              final isNotice = code.toLowerCase().startsWith('0.') ||
+                  code.toLowerCase().startsWith('hinweis') ||
+                  headerStr.toLowerCase().contains('hinweis');
+              final cat = isNotice ? 'Hinweis' : 'Mangel';
+              final sev = isNotice ? 'low' : 'medium';
+
+              allCatalogConflicts.add(ImportConflict(
+                code: code,
+                description: headerStr,
+                incoming: ErrorCatalog(
+                  code: code,
+                  description: headerStr,
+                  category: cat,
+                  severity: sev,
+                  status: 'Proposed',
+                ),
+                existing: existingMatch ?? existingForCode ?? existingForDesc,
+                reason: reason,
+              ));
+
+              final msg = '[KATALOG-KONFLIKT] Unbekannter/abweichender Mangel "$headerStr" in neuester Inspektion "$latestSheetName" erfordert Überprüfung durch den Manager.';
+              warnings.add(msg);
+              logs.add(msg);
+            }
+          }
+        }
+      }
+      logs.add('Neueste Inspektion "$latestSheetName": ${allCatalogConflicts.length} Mängelkatalog-Konflikte erkannt.');
+    }
 
     for (final dsInfo in doorSheetsToProcess) {
       final String sheetName = dsInfo['sheetName'] as String;
@@ -409,37 +467,6 @@ class ExcelDataImporter {
           }
         }
 
-        // Check if code exists in catalog or was resolved by Manager
-        final existsInCatalog = catalog.any((e) => e.code.toLowerCase() == code.toLowerCase() || e.description.trim().toLowerCase() == code.toLowerCase());
-        final isResolved = resolvedCodes.containsKey(code) || skippedCodes.contains(code);
-
-        if (!existsInCatalog && !isResolved) {
-          // Raise catalog conflict for Manager review
-          final alreadyConflict = allCatalogConflicts.any((cf) => cf.code.toLowerCase() == code.toLowerCase() || cf.description.toLowerCase() == code.toLowerCase());
-          if (!alreadyConflict) {
-            final isNotice = code.toLowerCase().startsWith('0.') || code.toLowerCase().startsWith('hinweis') || code.toLowerCase().contains('hinweis');
-            final cat = isNotice ? 'Hinweis' : 'Mangel';
-            final sev = isNotice ? 'low' : 'medium';
-
-            allCatalogConflicts.add(ImportConflict(
-              code: code,
-              description: headerStr,
-              incoming: ErrorCatalog(
-                code: code,
-                description: headerStr,
-                category: cat,
-                severity: sev,
-                status: 'Proposed',
-              ),
-              reason: 'Unbekannter Mangel-/Hinweis-Spaltenkopf in "$sheetName" (weder im Fehlerkatalog noch in Fehlerübersicht vorhanden).',
-            ));
-
-            final msg = '[KATALOG-KONFLIKT] Unbekannter Mangel/Hinweis "$headerStr" in Blatt "$sheetName" erfordert Überprüfung durch den Manager.';
-            warnings.add(msg);
-            logs.add(msg);
-          }
-        }
-
         errorColumns[c] = code;
       }
 
@@ -496,7 +523,7 @@ class ExcelDataImporter {
         bool lintelOutsideOver1m = false;
         String? lintelOutsideValue;
         String accessControl = '';
-        bool escapeDoorControl = false;
+        String escapeDoorControl = 'Nein';
         bool escapeRouteSituation = false;
         bool escapeRouteSignage = false;
         bool blindCyl = false;
@@ -547,7 +574,7 @@ class ExcelDataImporter {
           }
 
           accessControl = _toStr(_cell(row, 23));
-          escapeDoorControl = _toBool(_cell(row, 24));
+          escapeDoorControl = _toEscapeDoorControl(_cell(row, 24));
           escapeRouteSituation = _toBool(_cell(row, 25));
           escapeRouteSignage = _toBool(_cell(row, 26));
           blindCyl = _toBool(_cell(row, 27));
@@ -578,7 +605,7 @@ class ExcelDataImporter {
             }
           }
 
-          escapeDoorControl = _toBool(_cell(row, 16));
+          escapeDoorControl = _toEscapeDoorControl(_cell(row, 16));
           accessControl = _toStr(_cell(row, 17));
           escapeRouteSituation = _toBool(_cell(row, 18));
           escapeRouteSignage = _toBool(_cell(row, 19));
@@ -705,6 +732,7 @@ class ExcelDataImporter {
         sheetDoorsCount++;
 
         // Process error quantities in error columns
+        final bool isLatestSheet = (dsInfo == doorSheetsToProcess.first);
         for (var entry in errorColumns.entries) {
           final cIndex = entry.key;
           final code = entry.value;
@@ -714,38 +742,85 @@ class ExcelDataImporter {
 
           // Map code based on catalog resolution
           final targetCode = resolvedCodes[code] ?? code;
+          final rawHeader = _toStr(_cell(headerRow, cIndex));
 
           if (cIndex < row.length && row[cIndex] != null) {
             final qty = _toErrorQty(row[cIndex]);
             if (qty > 0) {
-              // Find in catalog using the mapped targetCode or description
-              final catalogItem = catalog.where(
-                (e) => e.code.toLowerCase() == targetCode.toLowerCase() ||
-                       e.description.trim().toLowerCase() == targetCode.toLowerCase(),
-              ).firstOrNull;
+              if (isLatestSheet) {
+                // Find in catalog using the mapped targetCode or description
+                final catalogItem = catalog.where(
+                  (e) => e.code.toLowerCase() == targetCode.toLowerCase() ||
+                         e.description.trim().toLowerCase() == targetCode.toLowerCase(),
+                ).firstOrNull;
 
-              int? errorId = catalogItem?.errorId;
-              if (errorId == null) {
-                final dbItem = await DatabaseService.searchErrorCatalog(targetCode);
-                if (dbItem.isNotEmpty && dbItem.first.errorId != null) {
-                  errorId = dbItem.first.errorId;
+                int? errorId = catalogItem?.errorId;
+                if (errorId == null) {
+                  final dbItem = await DatabaseService.searchErrorCatalog(targetCode);
+                  if (dbItem.isNotEmpty && dbItem.first.errorId != null) {
+                    errorId = dbItem.first.errorId;
+                  }
                 }
-              }
 
-              if (errorId != null) {
-                await DatabaseService.insertInspectionDoorError(InspectionDoorError(
-                  inspectionDoorId: junctionId,
-                  errorId: errorId,
-                  errorCode: catalogItem?.code ?? targetCode,
-                  quantity: qty,
-                  severity: catalogItem?.severity ?? 'medium',
-                  notes: 'Keine Notizen für Fehler',
-                ));
-                totalErrorsLinked++;
-                sheetErrorsCount++;
+                if (errorId != null) {
+                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                    inspectionDoorId: junctionId,
+                    errorId: errorId,
+                    errorCode: catalogItem?.code ?? targetCode,
+                    quantity: qty,
+                    severity: catalogItem?.severity ?? 'medium',
+                    notes: 'Keine Notizen für Fehler',
+                  ));
+                  totalErrorsLinked++;
+                  sheetErrorsCount++;
+                } else {
+                  // No auto-registration: unapproved errors are skipped until Manager resolves conflict
+                  logs.add('Mangel "$targetCode" für Tür ${door.doorNumber} in "$sheetName" nicht verknüpft (wartet auf Konfliktlösung durch Manager).');
+                }
               } else {
-                // No auto-registration: unapproved errors are skipped until Manager resolves conflict
-                logs.add('Mangel "$targetCode" für Tür ${door.doorNumber} in "$sheetName" nicht verknüpft (wartet auf Konfliktlösung durch Manager).');
+                // Older inspection sheet (Alternative 1: Best-match without raising conflicts)
+                final catalogItemByCode = officialCatalog.where(
+                  (e) => e.code.toLowerCase() == targetCode.toLowerCase(),
+                ).firstOrNull;
+
+                final catalogItemByDesc = catalogItemByCode == null
+                    ? officialCatalog.where((e) => _cleanCatalogDesc(e.description) == _cleanCatalogDesc(rawHeader)).firstOrNull
+                    : null;
+
+                final catalogItem = catalogItemByCode ?? catalogItemByDesc;
+
+                if (catalogItem != null && catalogItem.errorId != null) {
+                  String errorNote = 'Keine Notizen für Fehler';
+                  if (rawHeader.isNotEmpty &&
+                      _cleanCatalogDesc(catalogItem.description) != _cleanCatalogDesc(rawHeader)) {
+                    errorNote = 'Historische Bezeichnung: $rawHeader';
+                  }
+
+                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                    inspectionDoorId: junctionId,
+                    errorId: catalogItem.errorId!,
+                    errorCode: catalogItem.code,
+                    quantity: qty,
+                    severity: catalogItem.severity,
+                    notes: errorNote,
+                  ));
+                  totalErrorsLinked++;
+                  sheetErrorsCount++;
+                } else {
+                  // Fallback to continuous legacy error entry under category "Altdaten" (e.g. ALT-001, ALT-002, ...)
+                  final legacyItem = await DatabaseService.getOrCreateLegacyError(rawHeader);
+
+                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                    inspectionDoorId: junctionId,
+                    errorId: legacyItem.errorId!,
+                    errorCode: legacyItem.code,
+                    quantity: qty,
+                    severity: legacyItem.severity,
+                    notes: 'Historischer Mangel: $rawHeader',
+                  ));
+                  totalErrorsLinked++;
+                  sheetErrorsCount++;
+                }
               }
             }
           }
@@ -941,6 +1016,18 @@ class ExcelDataImporter {
     return false;
   }
 
+  static String _toEscapeDoorControl(dynamic val) {
+    if (val == null) return 'Nein';
+    final str = _toStr(val).trim();
+    if (str.isEmpty || str == '0' || str.toLowerCase() == 'false' || str.toLowerCase() == 'nein') {
+      return 'Nein';
+    }
+    if (str == '1' || str.toLowerCase() == 'true' || str.toLowerCase() == 'ja' || str == 'X' || str == 'x') {
+      return 'Ja ?';
+    }
+    return str;
+  }
+
   /// Sanitizes door numbers by stripping unknown noise characters (commas, question marks, isolated dashes).
   /// Preserves valid alphanumeric formats like "21.A", "2202.5", "EG.01", "T-01".
   @visibleForTesting
@@ -1002,5 +1089,14 @@ class ExcelDataImporter {
     }
 
     return cleaned.join('\n');
+  }
+
+  static String _cleanCatalogDesc(String text) {
+    return text
+        .replaceFirst(RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^[xX]\s+'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .toLowerCase();
   }
 }

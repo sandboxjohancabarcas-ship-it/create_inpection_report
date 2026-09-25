@@ -10,27 +10,25 @@ void main() {
   databaseFactory = databaseFactoryFfi;
 
   setUp(() async {
-    // Ensure the database is closed before clearing files
-    await DatabaseService.closeDb();
-
-    final dbPath = await getDatabasesPath();
-    final path = '$dbPath/door_inspection.db';
-    if (await File(path).exists()) await File(path).delete();
-    
-    // Re-initialize Master DB
-    await DatabaseService.getDb();
+    final db = await DatabaseService.getDb();
+    await db.delete('inspection_door_errors');
+    await db.delete('inspection_doors');
+    await db.delete('inspections');
+    await db.delete('doors');
   });
 
   tearDown(() async {
-    await DatabaseService.closeDb();
+    // Clean up
   });
 
   tearDownAll(() async {
     final dbPath = await getDatabasesPath();
-    final mainDb = File('$dbPath/door_inspection.db');
     final pkgDb = File('$dbPath/test_package.db');
-    if (await mainDb.exists()) await mainDb.delete();
-    if (await pkgDb.exists()) await pkgDb.delete();
+    if (await pkgDb.exists()) {
+      try {
+        await pkgDb.delete();
+      } catch (_) {}
+    }
   });
 
   group('Merge & Conflict Logic Tests', () {
@@ -115,7 +113,7 @@ void main() {
           closerOnHingeSide: false,
           closerOnOppositeSide: false,
           lintelHeightInsideOver1m: false,
-          escapeDoorControl: false,
+          escapeDoorControl: 'Nein',
           accessControl: '',
           escapeRouteSituation: false,
           escapeRouteSignage: false,
@@ -188,7 +186,7 @@ void main() {
           closerOnHingeSide: false,
           closerOnOppositeSide: false,
           lintelHeightInsideOver1m: false,
-          escapeDoorControl: false,
+          escapeDoorControl: 'Nein',
           accessControl: '',
           escapeRouteSituation: false,
           escapeRouteSignage: false,

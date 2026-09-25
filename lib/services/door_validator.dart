@@ -102,16 +102,19 @@ class DoorValidator {
   // ───────────────────────────────────────────────────────────────
   // 1. LOGICAL CROSS-FIELD VALIDATION (V01–V13)
   // Validates a single door's own data for internal consistency.
-  // Returns a list of issues; empty = clean.
-  // ───────────────────────────────────────────────────────────────
+  static bool hasEscapeDoorControl(Door door) {
+    final v = door.escapeDoorControl.trim().toLowerCase();
+    return v.isNotEmpty && v != 'nein' && v != 'false' && v != '0' && v != '?' && v != 'keine';
+  }
 
   static List<DoorValidationIssue> validateDoor(Door door) {
     final issues = <DoorValidationIssue>[];
 
-    // V01: Panic function set → escapeDoorControl must be true
+    // V01: Panic function set → escapeDoorControl must be active
     if (door.panicFunction.isNotEmpty &&
         door.panicFunction.toLowerCase() != 'keine' &&
-        !door.escapeDoorControl) {
+        door.panicFunction.toLowerCase() != 'nein' &&
+        !hasEscapeDoorControl(door)) {
       issues.add(const DoorValidationIssue(
         field: 'escapeDoorControl',
         ruleCode: 'V01',
@@ -123,7 +126,7 @@ class DoorValidator {
     }
 
     // V02: escapeDoorControl → escapeRouteSituation should be true
-    if (door.escapeDoorControl && !door.escapeRouteSituation) {
+    if (hasEscapeDoorControl(door) && !door.escapeRouteSituation) {
       issues.add(const DoorValidationIssue(
         field: 'escapeRouteSituation',
         ruleCode: 'V02',
@@ -188,7 +191,7 @@ class DoorValidator {
             lowerType.contains('t60') ||
             lowerType.contains('t90') ||
             lowerType.contains('rs')) &&
-        !door.escapeDoorControl) {
+        !hasEscapeDoorControl(door)) {
       issues.add(DoorValidationIssue(
         field: 'escapeDoorControl',
         ruleCode: 'V07',
@@ -286,7 +289,7 @@ class DoorValidator {
   static List<DoorConflict> detectConflicts(Door incoming, Door existing) {
     final conflicts = <DoorConflict>[];
 
-    // ── Safety boolean fields (compliance-relevant) ──────────────
+    // ── Safety boolean & string fields (compliance-relevant) ──────
     void checkSafety(String field, String label, bool inVal, bool exVal) {
       if (inVal == exVal) return;
       conflicts.add(DoorConflict(
@@ -305,7 +308,28 @@ class DoorValidator {
       ));
     }
 
-    checkSafety('escapeDoorControl', 'Fluchttürsteuerung',
+    void checkSafetyString(String field, String label, String inVal, String exVal) {
+      final cleanIn = inVal.trim();
+      final cleanEx = exVal.trim();
+      if (cleanIn == cleanEx || cleanIn.toLowerCase() == cleanEx.toLowerCase()) return;
+      if (cleanIn.isEmpty && cleanEx.isEmpty) return;
+      conflicts.add(DoorConflict(
+        existingDoor: existing,
+        incomingDoor: incoming,
+        type: DoorConflictType.safetyFlagChange,
+        fieldName: field,
+        fieldLabel: label,
+        existingValue: cleanEx.isEmpty ? '(leer)' : cleanEx,
+        incomingValue: cleanIn.isEmpty ? '(leer)' : cleanIn,
+        ruleCode: 'SAFETY',
+        message:
+            'Sicherheitsrelevantes Feld geändert. ${_safetyFieldCompliance[field]?.riskNote ?? ''}',
+        compliance: _safetyFieldCompliance[field],
+        resolution: DoorResolutionAction.keepExisting, // Always default to safe
+      ));
+    }
+
+    checkSafetyString('escapeDoorControl', 'Fluchttürsteuerung',
         incoming.escapeDoorControl, existing.escapeDoorControl);
     checkSafety('escapeRouteSituation', 'Fluchtwegsituation',
         incoming.escapeRouteSituation, existing.escapeRouteSituation);
@@ -317,9 +341,9 @@ class DoorValidator {
         incoming.lintelHeightInsideOver1m, existing.lintelHeightInsideOver1m);
     checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 1m',
         incoming.lintelHeightOutsideOver1m, existing.lintelHeightOutsideOver1m);
-    checkSafety('closerOnHingeSide', 'Sturzhöhe auf Bandseite',
+    checkSafety('closerOnHingeSide', 'Türschließer auf Bandseite',
         incoming.closerOnHingeSide, existing.closerOnHingeSide);
-    checkSafety('closerOnOppositeSide', 'Sturzhöhe auf Gegenseite',
+    checkSafety('closerOnOppositeSide', 'Türschließer auf Bandgegenseite',
         incoming.closerOnOppositeSide, existing.closerOnOppositeSide);
     checkSafety('blindCylinder', 'Blindzylinder',
         incoming.blindCylinder, existing.blindCylinder);

@@ -29,7 +29,7 @@ void main() {
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
         lintelHeightInsideOver1m: false,
-        escapeDoorControl: false,
+        escapeDoorControl: 'Nein',
         accessControl: 'None',
         escapeRouteSituation: true,
         escapeRouteSignage: true,
@@ -68,7 +68,7 @@ void main() {
     test('XML should contain high-impact bold styling for error items', () {
       final exportData = [
         {
-          'door': Door(id: 1, pos: 1, doorNumber: 'T-01', floor: 'EG', roomNumber: '101', roomDesignation: 'X', doorType: 'T30', wingCount: 1, material: 'S', manufacturer: 'D', dinConfiguration: 'L', closerType: 'C', closingSequenceSystem: 'N', lockDimensions: 'L', closerOnHingeSide: true, closerOnOppositeSide: false, lintelHeightInsideOver1m: false, escapeDoorControl: false, accessControl: 'N', escapeRouteSituation: true, escapeRouteSignage: true, blindCylinder: false, pzCylinder: true, fittingType: 'F', panicFunction: 'P', escapeDirectionRespected: true, fullPanicStandWing: false, doorFunctionOK: false),
+          'door': Door(id: 1, pos: 1, doorNumber: 'T-01', floor: 'EG', roomNumber: '101', roomDesignation: 'X', doorType: 'T30', wingCount: 1, material: 'S', manufacturer: 'D', dinConfiguration: 'L', closerType: 'C', closingSequenceSystem: 'N', lockDimensions: 'L', closerOnHingeSide: true, closerOnOppositeSide: false, lintelHeightInsideOver1m: false, escapeDoorControl: 'Nein', accessControl: 'N', escapeRouteSituation: true, escapeRouteSignage: true, blindCylinder: false, pzCylinder: true, fittingType: 'F', panicFunction: 'P', escapeDirectionRespected: true, fullPanicStandWing: false, doorFunctionOK: false),
           'errors': [{'code': 'ERR01', 'description': 'Defect A'}]
         }
       ];

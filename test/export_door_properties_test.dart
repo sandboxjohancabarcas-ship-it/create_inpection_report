@@ -41,7 +41,7 @@ void main() {
       lintelHeightInsideOver1m: false,
       lintelHeightOutsideOver1m: true,
       lintelHeightOutsideValue: '3m',
-      escapeDoorControl: true,
+      escapeDoorControl: 'Ja ?',
       escapeRouteSituation: true,
       escapeRouteSignage: true,
       blindCylinder: false,

@@ -73,7 +73,7 @@ void main() {
         closerOnHingeSide: false,
         closerOnOppositeSide: false,
         lintelHeightInsideOver1m: false,
-        escapeDoorControl: false,
+        escapeDoorControl: 'Nein',
         accessControl: '',
         escapeRouteSituation: false,
         escapeRouteSignage: false,

@@ -122,10 +122,14 @@ class ExcelExportService {
     return _wrapText(s, 40);
   }
 
-  /// Formats escape door control representation ('Ja' / 'Nein').
+  /// Formats escape door control representation ('Nein', 'Ja ?', or specific system description).
   static String _formatEscapeDoorControl(dynamic val) {
-    if (val == true || val == 1 || val == '1' || val == 'true' || val == 'Ja' || val == 'ja') return 'Ja';
-    return 'Nein';
+    if (val == null) return 'Nein';
+    if (val is bool) return val ? 'Ja ?' : 'Nein';
+    final s = _cleanText(val);
+    if (s.isEmpty || s.toLowerCase() == 'nein' || s == '0' || s.toLowerCase() == 'false') return 'Nein';
+    if (s.toLowerCase() == 'ja' || s == '1' || s.toLowerCase() == 'true') return 'Ja ?';
+    return _wrapText(s, 40);
   }
 
   /// Computes the statistical mode of character lengths for values in a column.
@@ -360,6 +364,7 @@ class ExcelExportService {
       backgroundColorHex: ExcelColor.fromHexString('#FCE4D6'),
       horizontalAlign: HorizontalAlign.Center,
       verticalAlign: VerticalAlign.Bottom,
+      textWrapping: TextWrapping.WrapText,
       topBorder: borderThin,
       bottomBorder: borderMedium,
       leftBorder: borderThin,
@@ -676,22 +681,44 @@ class ExcelExportService {
       );
     }
 
+    // Calculate mode allowance for defect column headers so long error descriptions wrap dynamically
+    final defectHeaderAllowance = _computeColumnModeAllowance(
+      defectMap.values.toList(),
+      defaultAllowance: 25,
+      minAllowance: 15,
+      maxAllowance: 32,
+    );
+
     // Dynamic Defect Column Headers (Col 34 to 34 + N - 1, 90-degree rotated)
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = 34 + i;
       final rawDefectLabel = defectMap[sortedDefectKeys[i]]!;
-      if (rawDefectLabel.length > maxHeaderChars) {
-        maxHeaderChars = rawDefectLabel.length;
+      final wrappedDefectLabel = (rawDefectLabel.length > defectHeaderAllowance)
+          ? _wrapText(rawDefectLabel, defectHeaderAllowance)
+          : rawDefectLabel;
+
+      final labelLines = wrappedDefectLabel.split('\n');
+      for (final line in labelLines) {
+        if (line.trim().length > maxHeaderChars) {
+          maxHeaderChars = line.trim().length;
+        }
       }
+
+      // Proportional column width for multi-line rotated defect header
+      final neededWidth = max(2.5, labelLines.length * 2.2);
+      if (neededWidth > (colWidths[colIdx] ?? 0.0)) {
+        colWidths[colIdx] = neededWidth;
+      }
+
       _setCell(
         sheet,
         colWidths,
         rowLineCounts,
         col: colIdx,
         row: 2,
-        text: rawDefectLabel,
+        text: wrappedDefectLabel,
         style: colHeaderDefectStyle,
-        trackWidth: false, // 90° rotated headers do not define column width
+        trackWidth: false, // 90° rotated headers width tracked via labelLines count
       );
     }
 
@@ -1161,7 +1188,7 @@ class ExcelExportService {
             _formatLintelHeight(d['lintelHeightInsideOver1m'], d['lintelHeightInsideValue']),
             _formatLintelHeight(d['lintelHeightOutsideOver1m'], d['lintelHeightOutsideValue']),
             _formatAccessControl(d['accessControl']),
-            _xStr(d['escapeDoorControl']),
+            _formatEscapeDoorControl(d['escapeDoorControl']),
             _xStr(d['escapeRouteSituation']), _xStr(d['escapeRouteSignage']),
             _xStr(d['blindCylinder']), _xStr(d['pzCylinder']),
             _wrapText(d['fittingType'], 40), _wrapText(d['panicFunction'], 40),
@@ -1333,8 +1360,8 @@ class ExcelExportService {
       ['Flügelanzahl', '${door['wingCount'] ?? 1}', 'Türmaterial', _wrapText(door['material'], 40), 'DIN-Richtung', _cleanText(door['dinConfiguration'])],
       ['Schließertyp', _wrapText(door['closerType'], 40), 'Schließfolgeregler', _wrapText(door['closingSequenceSystem'], 40), 'Schlossmaße', _cleanText(door['lockDimensions'])],
       ['Abnahme FSA/Antrieb', _cleanText(door['fsaDriveAcceptanceDate'] ?? '?'), 'Sturzhöhe innen > 1m', _formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue']), 'Sturzhöhe außen > 1m', _formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])],
-      ['Bandseite', _xStr(door['closerOnHingeSide']), 'Bandgegenseite', _xStr(door['closerOnOppositeSide']), 'Zutrittskontrolle', _formatAccessControl(door['accessControl'])],
-      ['Fluchttürsteuerung', _xStr(door['escapeDoorControl']), 'Fluchtwegsituation', _xStr(door['escapeRouteSituation']), 'Fluchtwegbeschilderung', _xStr(door['escapeRouteSignage'])],
+      ['Türschließer auf Bandseite', _xStr(door['closerOnHingeSide']), 'Türschließer auf Bandgegenseite', _xStr(door['closerOnOppositeSide']), 'Zutrittskontrolle', _formatAccessControl(door['accessControl'])],
+      ['Fluchttürsteuerung', _formatEscapeDoorControl(door['escapeDoorControl']), 'Fluchtwegsituation', _xStr(door['escapeRouteSituation']), 'Fluchtwegbeschilderung', _xStr(door['escapeRouteSignage'])],
       ['Blindzylinder', _xStr(door['blindCylinder']), 'PZ-Zylinder', _xStr(door['pzCylinder']), 'Garnitur', _wrapText(door['fittingType'], 40)],
       ['Panikfunktion', _wrapText(door['panicFunction'], 40), 'Fluchtrichtung OK', _xStr(door['escapeDirectionRespected']), 'Vollpanik Standflügel', _xStr(door['fullPanicStandWing'])],
       ['Türfunktion OK', _jnStr(door['doorFunctionOK']), 'Notizen', _cleanNoteText(door['notes'], 80), '', ''],

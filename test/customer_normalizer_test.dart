@@ -39,7 +39,7 @@ void main() {
         lockDimensions: '55/72',
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
-        escapeDoorControl: false,
+        escapeDoorControl: 'Nein',
         accessControl: '',
         escapeRouteSituation: false,
         escapeRouteSignage: false,

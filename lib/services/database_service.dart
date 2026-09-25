@@ -2112,6 +2112,74 @@ class DatabaseService {
     });
   }
 
+  /// Retrieves or creates a legacy defect entry under category 'Altdaten'
+  /// with continuous letter-prefixed numbering (ALT-001, ALT-002, ...)
+  /// and status 'Historical' so it does not interfere with the official catalog.
+  static Future<ErrorCatalog> getOrCreateLegacyError(String rawDescription) async {
+    final db = await getDb();
+    final cleanDesc = rawDescription.trim().isEmpty 
+        ? 'Sonstiger historischer Mangel / Altdaten' 
+        : rawDescription.trim();
+
+    // 1. Check if an entry with this exact description already exists under 'Altdaten'
+    final existing = await db.query(
+      'error_catalog',
+      where: "category = 'Altdaten' AND LOWER(TRIM(description)) = LOWER(?)",
+      whereArgs: [cleanDesc],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      return ErrorCatalog.fromMap(existing.first);
+    }
+
+    // 2. Query all existing ALT-xxx codes to compute the next continuous sequence number
+    final allLegacy = await db.query(
+      'error_catalog',
+      columns: ['code'],
+      where: "category = 'Altdaten' AND code LIKE 'ALT-%'",
+    );
+
+    int maxNum = 0;
+    final regex = RegExp(r'^ALT-(\d+)$', caseSensitive: false);
+    for (final row in allLegacy) {
+      final codeStr = row['code'] as String? ?? '';
+      final match = regex.firstMatch(codeStr);
+      if (match != null) {
+        final num = int.tryParse(match.group(1)!) ?? 0;
+        if (num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+
+    final nextNum = maxNum + 1;
+    final nextCode = 'ALT-${nextNum.toString().padLeft(3, '0')}';
+
+    final legacyError = ErrorCatalog(
+      code: nextCode,
+      description: cleanDesc,
+      category: 'Altdaten',
+      severity: 'medium',
+      status: 'Historical',
+    );
+
+    final id = await db.insert('error_catalog', legacyError.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+    if (id > 0) {
+      return legacyError.copyWith(errorId: id);
+    }
+
+    final retry = await db.query('error_catalog', where: 'code = ?', whereArgs: [nextCode], limit: 1);
+    if (retry.isNotEmpty) {
+      return ErrorCatalog.fromMap(retry.first);
+    }
+    return legacyError;
+  }
+
+  /// System fallback for generic unknown historical defect columns.
+  static Future<ErrorCatalog> getOrCreateFallbackLegacyError() async {
+    return getOrCreateLegacyError('Sonstiger historischer Mangel / Altdaten');
+  }
+
   /// Records a successful API upload for later reference/deletion
   static Future<void> recordApiUpload(String jobNumber, String fileName, int documentId) async {
     final db = await getDb();

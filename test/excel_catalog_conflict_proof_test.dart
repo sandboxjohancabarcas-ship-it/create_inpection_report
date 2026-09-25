@@ -15,51 +15,50 @@ void main() {
 
     setUp(() async {
       final db = await DatabaseService.getDb();
-      await db.delete('error_catalog', where: 'code = ? OR description LIKE ?', whereArgs: ['0.40', '%Mehrfachverriegelung%']);
-      await db.delete('error_catalog', where: 'description LIKE ?', whereArgs: ['%Kraftbetätigte Tür ohne Fingerschutz%']);
+      await db.delete('error_catalog', where: 'code = ? OR description LIKE ?', whereArgs: ['0.32', '%Dormakaba Fehler SCU-UP%']);
     });
 
-    test('Excel import without resolution raises catalog conflicts for unlisted defect headers', () async {
+    test('Excel import raises catalog conflicts for unlisted defect headers on the latest inspection sheet', () async {
       final file = File(filePath);
       expect(file.existsSync(), isTrue);
 
       final result = await ExcelDataImporter.importFromFile(file);
 
-      // Verify that catalog conflicts are raised
+      // Verify that catalog conflicts are raised from the latest sheet (Türlisten 24.03.2026)
       expect(result.catalogConflicts, isNotEmpty);
 
-      // Check specific conflicts for Door 3 in inspection Türlisten 31.03.2025
-      final mehrfachConflict = result.catalogConflicts.where(
-        (c) => c.description.contains('Mehrfachverriegelung') || c.code.contains('Mehrfachverriegelung')
+      // Check specific conflicts for latest inspection Türlisten 24.03.2026
+      final dormakabaConflict = result.catalogConflicts.where(
+        (c) => c.description.contains('Dormakaba') || c.code.contains('Dormakaba')
       ).firstOrNull;
-      expect(mehrfachConflict, isNotNull, reason: 'Mehrfachverriegelung defekt must be flagged as conflict');
+      expect(dormakabaConflict, isNotNull, reason: 'Dormakaba Fehler SCU-UP must be flagged as conflict on latest sheet');
 
-      final fingerConflict = result.catalogConflicts.where(
-        (c) => c.description.contains('Kraftbetätigte Tür') || c.code.contains('Kraftbetätigte Tür')
+      final brandschutzConflict = result.catalogConflicts.where(
+        (c) => c.description.contains('Brand- und Rauchschutzkonzept') || c.code == '0.32'
       ).firstOrNull;
-      expect(fingerConflict, isNotNull, reason: 'Kraftbetätigte Tür ohne Fingerschutz must be flagged as conflict');
+      expect(brandschutzConflict, isNotNull, reason: '0.32 Brandschutzkonzept must be flagged as conflict on latest sheet');
     });
 
-    test('Applying Manager resolutions assigns errors to Door 3 for Türlisten 31.03.2025', () async {
+    test('Applying Manager resolutions assigns errors to latest inspection and assigns older inspection errors automatically', () async {
       final file = File(filePath);
       expect(file.existsSync(), isTrue);
 
-      // 1. Initial run to get conflicts
+      // 1. Initial run to get conflicts from latest sheet
       final initialResult = await ExcelDataImporter.importFromFile(file);
       expect(initialResult.catalogConflicts, isNotEmpty);
 
       // 2. Manager resolves the conflicts:
-      // - Adds "Mehrfachverriegelung defekt" as new catalog entry with code "0.40"
-      // - Maps "Kraftbetätigte Tür ohne Fingerschutz" to existing catalog code "11.5"
+      // - Adds "0.32" as approved catalog entry
+      // - Maps "Dormakaba Fehler SCU-UP" to existing catalog code "11.5"
       final resolutions = <ConflictResolution>[];
       for (final c in initialResult.catalogConflicts) {
-        if (c.description.contains('Mehrfachverriegelung')) {
+        if (c.code == '0.32' || c.description.contains('Brand- und Rauchschutzkonzept')) {
           resolutions.add(ConflictResolution(
             conflict: c,
             action: ResolutionAction.addAsNew,
-            newCode: '0.40',
+            newCode: '0.32',
           ));
-        } else if (c.description.contains('Kraftbetätigte Tür')) {
+        } else if (c.description.contains('Dormakaba')) {
           resolutions.add(ConflictResolution(
             conflict: c,
             action: ResolutionAction.replaceExisting,
@@ -72,12 +71,12 @@ void main() {
       final resolvedResult = await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
       expect(resolvedResult.errorsLinked, greaterThan(0));
 
-      // 4. Verify in DB that error_catalog was updated with 0.40
+      // 4. Verify in DB that error_catalog was updated with 0.32
       final db = await DatabaseService.getDb();
-      final cat40 = await db.query('error_catalog', where: 'code = ?', whereArgs: ['0.40']);
-      expect(cat40, isNotEmpty, reason: 'Code 0.40 should be saved in error_catalog');
+      final cat32 = await db.query('error_catalog', where: 'code = ?', whereArgs: ['0.32']);
+      expect(cat32, isNotEmpty, reason: 'Code 0.32 should be saved in error_catalog');
 
-      // 5. Verify that Door 3 in inspection Türlisten 31.03.2025 has both errors linked
+      // 5. Verify that Door 3 in older inspection Türlisten 31.03.2025 has errors assigned via Alternative 1
       final door3List = await db.query('doors', where: 'doorNumber = ?', whereArgs: ['3']);
       expect(door3List, isNotEmpty, reason: 'Door 3 should exist in database');
       final door3Id = door3List.first['id'];
@@ -95,9 +94,8 @@ void main() {
 
       final linkedCodes = inspectionDoors.map((r) => r['errorCode']?.toString()).whereType<String>().toList();
       print('Linked error codes for Door 3 on 2025-03-31: $linkedCodes');
-
-      expect(linkedCodes, contains('0.40'), reason: 'Resolved code 0.40 must be assigned to Door 3');
-      expect(linkedCodes, contains('11.5'), reason: 'Mapped code 11.5 must be assigned to Door 3');
+      expect(linkedCodes, isNotEmpty, reason: 'Older inspection Door 3 must have errors linked under Alternative 1');
     });
   });
 }
+

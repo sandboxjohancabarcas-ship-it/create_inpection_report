@@ -56,6 +56,43 @@ class PdfExportService {
         .replaceAllMapped(RegExp(r'^(EG|UG|KG|DG)$', caseSensitive: false), (m) => m[1]!.toUpperCase());
   }
 
+  static String _wrapText(dynamic val, [int maxLineLength = 26]) {
+    if (val == null) return '';
+    final text = val.toString().trim();
+    if (text.length <= maxLineLength) return text;
+
+    final paragraphs = text.split('\n');
+    final List<String> resultParagraphs = [];
+
+    for (final paragraph in paragraphs) {
+      if (paragraph.length <= maxLineLength) {
+        resultParagraphs.add(paragraph);
+        continue;
+      }
+
+      final words = paragraph.split(RegExp(r'\s+'));
+      final List<String> lines = [];
+      String currentLine = '';
+
+      for (final word in words) {
+        if (currentLine.isEmpty) {
+          currentLine = word;
+        } else if (currentLine.length + 1 + word.length <= maxLineLength) {
+          currentLine += ' $word';
+        } else {
+          lines.add(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine.isNotEmpty) {
+        lines.add(currentLine);
+      }
+      resultParagraphs.add(lines.join('\n'));
+    }
+
+    return resultParagraphs.join('\n');
+  }
+
   /// Exports a single inspection report to a formatted PDF document
   static Future<File> exportSingleInspectionPdf(int inspectionId, String outputPath) async {
     final data = await DatabaseService.getSingleInspectionExportData(inspectionId);
@@ -183,9 +220,15 @@ class PdfExportService {
     for (final h in fixedHeaders) {
       if (h.length > maxHeaderChars) maxHeaderChars = h.length;
     }
+
+    final wrappedDefectHeaders = <String>[];
     for (final k in sortedDefectKeys) {
       final label = defectMap[k]!;
-      if (label.length > maxHeaderChars) maxHeaderChars = label.length;
+      final wrapped = _wrapText(label, 26);
+      wrappedDefectHeaders.add(wrapped);
+      for (final line in wrapped.split('\n')) {
+        if (line.trim().length > maxHeaderChars) maxHeaderChars = line.trim().length;
+      }
     }
 
     // Base proportional weights for snug column sizing (matching Excel dynamic widths)
@@ -227,7 +270,8 @@ class PdfExportService {
     };
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
-      baseColWidths[34 + i] = 12.0; // Defect columns (compact)
+      final lines = wrappedDefectHeaders[i].split('\n');
+      baseColWidths[34 + i] = max(12.0, lines.length * 6.5); // Proportional width for multi-line rotated defect header
     }
     baseColWidths[notesColIdx] = 36.0; // Anmerkung
 
@@ -240,11 +284,9 @@ class PdfExportService {
       grid.columns[c].width = (baseColWidths[c] ?? 16.0) * scale;
     }
 
-    // ── 2 HEADER ROWS (Matching Excel Structure) ───────────────────────────
-    grid.headers.add(2);
-
-    final PdfGridRow categoryRow = grid.headers[0];
-    final PdfGridRow colHeaderRow = grid.headers[1];
+    // ── 2 HEADER ROWS (Matching Excel Structure, rendered once on Page 1) ──────
+    final PdfGridRow categoryRow = grid.rows.add();
+    final PdfGridRow colHeaderRow = grid.rows.add();
 
     final catBg = PdfSolidBrush(PdfColor(31, 73, 125)); // #1F497D Dark Blue
     final catFont = PdfStandardFont(PdfFontFamily.helvetica, 5.5, style: PdfFontStyle.bold);
@@ -277,7 +319,7 @@ class PdfExportService {
     categoryRow.cells[23].columnSpan = 10;
     categoryRow.cells[23].value = 'Sicherheit & Zugang';
 
-    // Col 33: Okay (single cell, drawn rotated in beginCellLayout)
+    // Col 33: Okay (single cell, drawn rotated in endCellLayout)
     categoryRow.cells[33].columnSpan = 1;
     categoryRow.cells[33].value = '';
 
@@ -286,7 +328,7 @@ class PdfExportService {
       categoryRow.cells[34].value = 'Mängelhinweise [${insp['jobNumber'] ?? ''}]';
     }
 
-    // Notes Col: Anmerkung (single cell, drawn rotated in beginCellLayout)
+    // Notes Col: Anmerkung (single cell, drawn rotated in endCellLayout)
     categoryRow.cells[notesColIdx].columnSpan = 1;
     categoryRow.cells[notesColIdx].value = '';
 
@@ -301,7 +343,7 @@ class PdfExportService {
 
     final allColumnHeaders = <String>[
       ...fixedHeaders,
-      ...sortedDefectKeys.map((k) => defectMap[k]!),
+      ...wrappedDefectHeaders,
       'Anmerkung',
     ];
 
@@ -321,9 +363,10 @@ class PdfExportService {
     grid.endCellLayout = (Object sender, PdfGridEndCellLayoutArgs args) {
       final bounds = args.bounds;
       final cellIdx = args.cellIndex;
+      final rowIdx = args.rowIndex;
 
-      // Category Header Row 0 (Y from ~36.0 to ~52.0)
-      if (bounds.top >= 36.0 && bounds.top < 52.0) {
+      // Category Header Row (Row 0)
+      if (rowIdx == 0) {
         if (cellIdx == 33) {
           final g = args.graphics;
           g.save();
@@ -348,20 +391,27 @@ class PdfExportService {
           g.restore();
         }
       }
-      // Column Header Row 1 (Y from ~52.0 to ~52.0 + dynamicHeaderHeight)
-      else if (bounds.top >= 52.0 && bounds.top < (54.0 + dynamicHeaderHeight / 2)) {
+      // Column Header Row (Row 1)
+      else if (rowIdx == 1) {
         if (cellIdx < allColumnHeaders.length) {
           final text = allColumnHeaders[cellIdx];
+          final lines = text.split('\n');
           final g = args.graphics;
-          g.save();
-          g.translateTransform(bounds.left + (bounds.width / 2) + 1.8, bounds.bottom - 3.0);
-          g.rotateTransform(-90);
-          g.drawString(
-            text,
-            PdfStandardFont(PdfFontFamily.helvetica, 4.6, style: PdfFontStyle.bold),
-            brush: PdfSolidBrush(PdfColor(0, 0, 0)),
-          );
-          g.restore();
+          final lineSpacing = 5.2;
+          final startOffsetX = bounds.left + (bounds.width / 2) - ((lines.length - 1) * lineSpacing / 2);
+
+          for (int l = 0; l < lines.length; l++) {
+            final line = lines[l];
+            g.save();
+            g.translateTransform(startOffsetX + (l * lineSpacing) + 1.8, bounds.bottom - 3.0);
+            g.rotateTransform(-90);
+            g.drawString(
+              line,
+              PdfStandardFont(PdfFontFamily.helvetica, 4.4, style: PdfFontStyle.bold),
+              brush: PdfSolidBrush(PdfColor(0, 0, 0)),
+            );
+            g.restore();
+          }
         }
       }
     };
@@ -420,7 +470,7 @@ class PdfExportService {
         _formatLintelHeight(d['lintelHeightInsideOver1m'], d['lintelHeightInsideValue']),
         _formatLintelHeight(d['lintelHeightOutsideOver1m'], d['lintelHeightOutsideValue']),
         d['accessControl'] as String? ?? 'Nein',
-        d['escapeDoorControl'] == true ? 'Ja' : 'Nein',
+        d['escapeDoorControl'] as String? ?? 'Nein',
         _xStr(d['escapeRouteSituation']),
         _xStr(d['escapeRouteSignage']),
         _xStr(d['blindCylinder']),
@@ -547,8 +597,8 @@ class PdfExportService {
         'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
         'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
-        'Sturzhöhe auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Sturzhöhe auf Gegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue'])}  |  Sturzhöhe außen > 1m: ${_formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])}\n'
-        'Abnahme FSA / Antrieb: ${door['fsaDriveAcceptanceDate'] ?? '?'}  |  Fluchttürsteuerung: ${_boolToStr(door['escapeDoorControl'])}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
+        'Türschließer auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Türschließer auf Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue'])}  |  Sturzhöhe außen > 1m: ${_formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])}\n'
+        'Abnahme FSA / Antrieb: ${door['fsaDriveAcceptanceDate'] ?? '?'}  |  Fluchttürsteuerung: ${door['escapeDoorControl'] ?? 'Nein'}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
         'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
         'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';
 

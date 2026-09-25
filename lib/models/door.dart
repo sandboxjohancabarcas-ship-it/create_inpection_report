@@ -20,7 +20,7 @@ class Door {
   final bool closerOnOppositeSide;
   final bool lintelHeightInsideOver1m;
   final bool lintelHeightOutsideOver1m;
-  final bool escapeDoorControl;
+  final String escapeDoorControl;
   final String accessControl;
   final bool escapeRouteSituation;
   final bool escapeRouteSignage;
@@ -61,7 +61,7 @@ class Door {
     required this.closerOnOppositeSide,
     this.lintelHeightInsideOver1m = false,
     this.lintelHeightOutsideOver1m = false,
-    required this.escapeDoorControl,
+    this.escapeDoorControl = 'Nein',
     required this.accessControl,
     required this.escapeRouteSituation,
     required this.escapeRouteSignage,
@@ -107,7 +107,7 @@ class Door {
     bool? closerOnOppositeSide,
     bool? lintelHeightInsideOver1m,
     bool? lintelHeightOutsideOver1m,
-    bool? escapeDoorControl,
+    String? escapeDoorControl,
     String? accessControl,
     bool? escapeRouteSituation,
     bool? escapeRouteSignage,
@@ -200,7 +200,7 @@ class Door {
         'closerOnOppositeSide': closerOnOppositeSide ? 1 : 0,
         'lintelHeightInsideOver1m': lintelHeightInsideOver1m ? 1 : 0,
         'lintelHeightOutsideOver1m': lintelHeightOutsideOver1m ? 1 : 0,
-        'escapeDoorControl': escapeDoorControl ? 1 : 0,
+        'escapeDoorControl': escapeDoorControl,
         'accessControl': accessControl,
         'escapeRouteSituation': escapeRouteSituation ? 1 : 0,
         'escapeRouteSignage': escapeRouteSignage ? 1 : 0,
@@ -221,6 +221,16 @@ class Door {
         'fsaDriveAcceptanceDate': fsaDriveAcceptanceDate,
         'notes': notes,
       };
+
+  static String _parseEscapeDoorControl(dynamic val) {
+    if (val == null) return 'Nein';
+    if (val is bool) return val ? 'Ja ?' : 'Nein';
+    if (val is int) return val == 1 ? 'Ja ?' : 'Nein';
+    final str = val.toString().trim();
+    if (str.isEmpty || str == '0' || str.toLowerCase() == 'false' || str.toLowerCase() == 'nein') return 'Nein';
+    if (str == '1' || str.toLowerCase() == 'true' || str.toLowerCase() == 'ja') return 'Ja ?';
+    return str;
+  }
 
   factory Door.fromMap(Map<String, dynamic> map) => Door(
         // Door specifications
@@ -244,7 +254,7 @@ class Door {
         closerOnOppositeSide: map['closerOnOppositeSide'] == 1,
         lintelHeightInsideOver1m: map['lintelHeightInsideOver1m'] == 1,
         lintelHeightOutsideOver1m: map['lintelHeightOutsideOver1m'] == 1 || map['lintelHeightOver1m'] == 1,
-        escapeDoorControl: map['escapeDoorControl'] == 1,
+        escapeDoorControl: _parseEscapeDoorControl(map['escapeDoorControl']),
         accessControl: map['accessControl'] ?? '',
         escapeRouteSituation: map['escapeRouteSituation'] == 1,
         escapeRouteSignage: map['escapeRouteSignage'] == 1,
