@@ -1025,6 +1025,15 @@ class LocalDatabaseService {
     return await db.insert('inspection_doors', inspectionDoor, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  static Future<List<Map<String, dynamic>>> getInspectionDoorsByInspectionId(int inspectionId) async {
+    final db = await getDb();
+    return await db.query(
+      'inspection_doors',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+  }
+
   // ─────────────────────────────────────────────────────────────
   // INSPECTION DOOR ERRORS (LOCAL)
   // ─────────────────────────────────────────────────────────────

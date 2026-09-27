@@ -118,8 +118,8 @@ class PdfExportService {
     for (final d in doors) {
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       for (final e in errors) {
-        final code = (e['errorCode'] ?? e['code'] ?? '') as String;
-        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final code = (e['errorCode'] ?? e['code'] ?? '').toString();
+        final desc = (e['errorDesc'] ?? e['description'] ?? '').toString();
         final key = code.isNotEmpty ? code : desc;
         if (key.isNotEmpty) {
           final label = code.isNotEmpty ? (desc.isNotEmpty ? '$code $desc' : code) : desc;
@@ -201,8 +201,8 @@ class PdfExportService {
       'Abnahme FSA / Antrieb',
       'Türschließer auf Bandseite',
       'Türschließer auf Bandgegenseite',
-      'Sturzhöhe innen über 1m',
-      'Sturzhöhe außen über 1m',
+      'Sturzhöhe innen über 0,5m',
+      'Sturzhöhe außen über 0,5m',
       'Zutrittskontrolle',
       'Fluchtürsteuerung / Türwächter',
       'Fluchtwegsituation',
@@ -254,8 +254,8 @@ class PdfExportService {
       18: 20.0, // Abnahme FSA
       19: 12.0, // Bandseite
       20: 12.0, // Bandgegenseite
-      21: 14.0, // Sturz in >1m
-      22: 14.0, // Sturz aus >1m
+      21: 14.0, // Sturz in >0,5m
+      22: 14.0, // Sturz aus >0,5m
       23: 18.0, // Zutritt
       24: 18.0, // Fluchttürst.
       25: 12.0, // Fluchtwegsit.
@@ -434,8 +434,8 @@ class PdfExportService {
       final errors = d['errors'] as List<Map<String, dynamic>>? ?? [];
       final Map<String, int> doorDefectQtyMap = {};
       for (final e in errors) {
-        final code = (e['errorCode'] ?? e['code'] ?? '') as String;
-        final desc = (e['errorDesc'] ?? e['description'] ?? '') as String;
+        final code = (e['errorCode'] ?? e['code'] ?? '').toString();
+        final desc = (e['errorDesc'] ?? e['description'] ?? '').toString();
         final key = code.isNotEmpty ? code : desc;
         final qty = (e['quantity'] as num?)?.toInt() ?? 1;
         if (key.isNotEmpty) {
@@ -447,36 +447,36 @@ class PdfExportService {
 
       final rowValues = [
         '${d['pos'] ?? posCounter}',
-        d['doorAlias'] as String? ?? '',
-        d['doorNumber'] as String? ?? '',
+        d['doorAlias']?.toString() ?? '',
+        d['doorNumber']?.toString() ?? '',
         floorVal,
-        d['roomNumber'] as String? ?? '',
-        d['roomDesignation'] as String? ?? '',
-        d['doorType'] as String? ?? '',
-        d['approvalNumber'] as String? ?? '?',
-        d['manufacturer'] as String? ?? '',
-        d['manufacturerNumber'] as String? ?? '?',
-        d['dopNumber'] as String? ?? '?',
-        d['manufactureYear'] as String? ?? '?',
+        d['roomNumber']?.toString() ?? '',
+        d['roomDesignation']?.toString() ?? '',
+        d['doorType']?.toString() ?? '',
+        d['approvalNumber']?.toString() ?? '?',
+        d['manufacturer']?.toString() ?? '',
+        d['manufacturerNumber']?.toString() ?? '?',
+        d['dopNumber']?.toString() ?? '?',
+        d['manufactureYear']?.toString() ?? '?',
         '${d['wingCount'] ?? 1}',
-        d['material'] as String? ?? '',
-        d['dinConfiguration'] as String? ?? '',
-        d['closerType'] as String? ?? '',
-        d['closingSequenceSystem'] as String? ?? '',
-        d['lockDimensions'] as String? ?? '',
-        d['fsaDriveAcceptanceDate'] as String? ?? '?',
+        d['material']?.toString() ?? '',
+        d['dinConfiguration']?.toString() ?? '',
+        d['closerType']?.toString() ?? '',
+        d['closingSequenceSystem']?.toString() ?? '',
+        d['lockDimensions']?.toString() ?? '',
+        d['fsaDriveAcceptanceDate']?.toString() ?? '?',
         _xStr(d['closerOnHingeSide']),
         _xStr(d['closerOnOppositeSide']),
         _formatLintelHeight(d['lintelHeightInsideOver1m'], d['lintelHeightInsideValue']),
         _formatLintelHeight(d['lintelHeightOutsideOver1m'], d['lintelHeightOutsideValue']),
-        d['accessControl'] as String? ?? 'Nein',
-        d['escapeDoorControl'] as String? ?? 'Nein',
+        d['accessControl'] == 1 || d['accessControl'] == true || d['accessControl'] == 'Ja' ? 'Ja' : (d['accessControl'] == 0 || d['accessControl'] == false || d['accessControl'] == 'Nein' ? 'Nein' : (d['accessControl']?.toString() ?? 'Nein')),
+        d['escapeDoorControl'] == 1 || d['escapeDoorControl'] == true || d['escapeDoorControl'] == 'Ja' ? 'Ja' : (d['escapeDoorControl'] == 0 || d['escapeDoorControl'] == false || d['escapeDoorControl'] == 'Nein' ? 'Nein' : (d['escapeDoorControl']?.toString() ?? 'Nein')),
         _xStr(d['escapeRouteSituation']),
         _xStr(d['escapeRouteSignage']),
         _xStr(d['blindCylinder']),
         _xStr(d['pzCylinder']),
-        d['fittingType'] as String? ?? '',
-        d['panicFunction'] as String? ?? '',
+        d['fittingType']?.toString() ?? '',
+        d['panicFunction']?.toString() ?? '',
         _xStr(d['escapeDirectionRespected']),
         _xStr(d['fullPanicStandWing']),
         _jnStr(d['doorFunctionOK']),
@@ -597,7 +597,7 @@ class PdfExportService {
         'Zulassungs-Nr.: ${door['approvalNumber'] ?? ''}  |  Hersteller-Nr.: ${door['manufacturerNumber'] ?? ''}  |  DoP-Nr.: ${door['dopNumber'] ?? ''}  |  Baujahr: ${door['manufactureYear'] ?? ''}\n'
         'DIN-Richtung: ${door['dinConfiguration'] ?? ''}  |  Schließertyp: ${door['closerType'] ?? ''}  |  Schließfolgeregler: ${door['closingSequenceSystem'] ?? ''}\n'
         'Schlossmaße: ${door['lockDimensions'] ?? ''}  |  Beschlagart: ${door['fittingType'] ?? ''}  |  Panikfunktion: ${door['panicFunction'] ?? ''}  |  Zutrittskontrolle: ${door['accessControl'] ?? ''}\n'
-        'Türschließer auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Türschließer auf Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 1m: ${_formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue'])}  |  Sturzhöhe außen > 1m: ${_formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])}\n'
+        'Türschließer auf Bandseite: ${_boolToStr(door['closerOnHingeSide'])}  |  Türschließer auf Bandgegenseite: ${_boolToStr(door['closerOnOppositeSide'])}  |  Sturzhöhe innen > 0,5m: ${_formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue'])}  |  Sturzhöhe außen > 0,5m: ${_formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])}\n'
         'Abnahme FSA / Antrieb: ${door['fsaDriveAcceptanceDate'] ?? '?'}  |  Fluchttürsteuerung: ${door['escapeDoorControl'] ?? 'Nein'}  |  Fluchtwegsituation: ${_boolToStr(door['escapeRouteSituation'])}  |  Beschilderung: ${_boolToStr(door['escapeRouteSignage'])}\n'
         'Blindzylinder: ${_boolToStr(door['blindCylinder'])}  |  PZ-Zylinder: ${_boolToStr(door['pzCylinder'])}  |  Fluchtrichtung beachtet: ${_boolToStr(door['escapeDirectionRespected'])}\n'
         'Vollpanik Standflügel: ${_boolToStr(door['fullPanicStandWing'])}  |  Türfunktion OK: ${_boolToStr(door['doorFunctionOK'])}';

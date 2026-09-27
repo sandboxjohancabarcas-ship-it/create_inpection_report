@@ -105,7 +105,7 @@ class ExcelExportService {
     return 'N';
   }
 
-  /// Formats Sturzhöhe values (> 1m), displaying either the custom dimension string or 'X'.
+  /// Formats Sturzhöhe values (> 0,5m), displaying either the custom dimension string or 'X'.
   static String _formatLintelHeight(dynamic isOver1m, dynamic heightValue) {
     final valStr = _cleanText(heightValue);
     final bool isTrue = (isOver1m == true || isOver1m == 1 || isOver1m == '1' || isOver1m == 'true' || isOver1m == 'Ja' || isOver1m == 'ja');
@@ -646,8 +646,8 @@ class ExcelExportService {
       'Abnahme FSA / Antrieb',
       'Türschließer auf Bandseite',
       'Türschließer auf Bandgegenseite',
-      'Sturzhöhe innen über 1m',
-      'Sturzhöhe außen über 1m',
+      'Sturzhöhe innen über 0,5m',
+      'Sturzhöhe außen über 0,5m',
       'Zutrittskontrolle',
       'Fluchtürsteuerung / Türwächter',
       'Fluchtwegsituation',
@@ -1359,7 +1359,7 @@ class ExcelExportService {
       ['Herstellernummer', _cleanText(door['manufacturerNumber'] ?? '?'), 'DoP-Nummer', _cleanText(door['dopNumber'] ?? '?'), 'Baujahr', _cleanText(door['manufactureYear'] ?? '?')],
       ['Flügelanzahl', '${door['wingCount'] ?? 1}', 'Türmaterial', _wrapText(door['material'], 40), 'DIN-Richtung', _cleanText(door['dinConfiguration'])],
       ['Schließertyp', _wrapText(door['closerType'], 40), 'Schließfolgeregler', _wrapText(door['closingSequenceSystem'], 40), 'Schlossmaße', _cleanText(door['lockDimensions'])],
-      ['Abnahme FSA/Antrieb', _cleanText(door['fsaDriveAcceptanceDate'] ?? '?'), 'Sturzhöhe innen > 1m', _formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue']), 'Sturzhöhe außen > 1m', _formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])],
+      ['Abnahme FSA/Antrieb', _cleanText(door['fsaDriveAcceptanceDate'] ?? '?'), 'Sturzhöhe innen > 0,5m', _formatLintelHeight(door['lintelHeightInsideOver1m'], door['lintelHeightInsideValue']), 'Sturzhöhe außen > 0,5m', _formatLintelHeight(door['lintelHeightOutsideOver1m'], door['lintelHeightOutsideValue'])],
       ['Türschließer auf Bandseite', _xStr(door['closerOnHingeSide']), 'Türschließer auf Bandgegenseite', _xStr(door['closerOnOppositeSide']), 'Zutrittskontrolle', _formatAccessControl(door['accessControl'])],
       ['Fluchttürsteuerung', _formatEscapeDoorControl(door['escapeDoorControl']), 'Fluchtwegsituation', _xStr(door['escapeRouteSituation']), 'Fluchtwegbeschilderung', _xStr(door['escapeRouteSignage'])],
       ['Blindzylinder', _xStr(door['blindCylinder']), 'PZ-Zylinder', _xStr(door['pzCylinder']), 'Garnitur', _wrapText(door['fittingType'], 40)],

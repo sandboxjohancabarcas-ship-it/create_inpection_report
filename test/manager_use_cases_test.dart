@@ -325,7 +325,7 @@ void main() {
         final door = Door(
           id: 1,
           pos: 1,
-          doorAlias: 'DOOR-XML-&<>\'\"',
+          doorAlias: 'DOOR-XML-&<>\'"',
           doorNumber: 'T-XML-<1>',
           floor: 'EG',
           roomNumber: '100',

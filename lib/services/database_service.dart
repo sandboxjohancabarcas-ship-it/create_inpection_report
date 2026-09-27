@@ -1396,13 +1396,15 @@ class DatabaseService {
     return rows;
   }
 
-  /// Exports an inspection package (.db) from Master DB to the Downloads folder
-  static Future<String> exportJobPackage(List<int> inspectionIds) async {
-    final String downloadPath = Platform.isAndroid 
-        ? '/storage/emulated/0/Download' 
-        : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final exportPath = join(downloadPath, 'inspektion_paket_$timestamp.db');
+  /// Exports an inspection package (.db) from Master DB to the specified or default destination folder
+  static Future<String> exportJobPackage(List<int> inspectionIds, {String? destinationPath}) async {
+    String exportPath = destinationPath ?? '';
+    if (exportPath.isEmpty) {
+      final Directory docDir = await getApplicationDocumentsDirectory();
+      final String downloadPath = (await getDownloadsDirectory())?.path ?? docDir.path;
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      exportPath = join(downloadPath, 'inspektion_paket_$timestamp.db');
+    }
     
     await LocalDatabaseService.downloadJobPackage(inspectionIds: inspectionIds);
     await LocalDatabaseService.exportWorkingDb(exportPath);
@@ -1410,7 +1412,7 @@ class DatabaseService {
   }
 
   /// Exports an inspection package (.db) for specific selected door IDs
-  static Future<String> exportDoorsPackage(List<int> doorIds) async {
+  static Future<String> exportDoorsPackage(List<int> doorIds, {String? destinationPath}) async {
     final db = await getDb();
     final idList = doorIds.join(',');
     final rows = await db.rawQuery('SELECT DISTINCT inspectionId FROM inspection_doors WHERE doorId IN ($idList)');
@@ -1418,7 +1420,7 @@ class DatabaseService {
     if (inspectionIds.isEmpty) {
       throw Exception('Keine zugeordneten Aufträge für diese Türen gefunden.');
     }
-    return await exportJobPackage(inspectionIds);
+    return await exportJobPackage(inspectionIds, destinationPath: destinationPath);
   }
 
   static Future<void> updateDoor(Door door) async {

@@ -10,6 +10,7 @@ import '../widgets/inspection_summary_card.dart';
 import '../widgets/import_report_dialog.dart';
 import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
+import '../utils/file_export_helper.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
 import 'door_conflict_review_page.dart';
@@ -179,6 +180,7 @@ class _DoorListPageState extends State<DoorListPage> {
     if (_selectedIds.isEmpty) return;
 
     setState(() => _isSyncing = true);
+    String? tempExportPath;
     try {
       // Resolve all Door IDs belonging to the selected inspections
       List<int> doorIdsToExport = [];
@@ -189,21 +191,27 @@ class _DoorListPageState extends State<DoorListPage> {
 
       if (doorIdsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
 
-      final String downloadPath = Platform.isAndroid 
-          ? '/storage/emulated/0/Download' 
-          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(downloadPath, 'inspektion_ergebnis_$timestamp.db');
+      final defaultFileName = 'inspektion_ergebnis_$timestamp.db';
+      tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 
       await LocalDatabaseService.exportSelectiveJobPackage(
         doorIdsToExport,
-        exportPath,
+        tempExportPath,
       );
 
-      if (mounted) {
+      final tempFile = File(tempExportPath);
+      final savedPath = await FileExportHelper.saveFileSafely(
+        defaultFileName: defaultFileName,
+        dialogTitle: 'Inspektions-Paket speichern unter',
+        sourceFile: tempFile,
+        allowedExtensions: ['db'],
+      );
+
+      if (savedPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ergebnis-Paket erstellt: $exportPath'),
+            content: Text('Ergebnis-Paket gespeichert: $savedPath'),
             backgroundColor: Colors.green,
           ),
         );
@@ -216,6 +224,12 @@ class _DoorListPageState extends State<DoorListPage> {
         );
       }
     } finally {
+      if (tempExportPath != null) {
+        try {
+          final tf = File(tempExportPath);
+          if (await tf.exists()) await tf.delete();
+        } catch (_) {}
+      }
       if (mounted) setState(() => _isSyncing = false);
     }
   }
@@ -449,11 +463,21 @@ class _DoorListPageState extends State<DoorListPage> {
         heroTag: 'fab_door_list',
         child: const Icon(Icons.add),
         onPressed: () async {
+          int? targetInspId;
+          if (_selectedIds.length == 1) {
+            targetInspId = _selectedIds.first;
+          } else if (_selectedClient != 'Alle' && inspections.isNotEmpty) {
+            targetInspId = inspections.first['inspectionId'] as int?;
+          } else if (inspections.length == 1) {
+            targetInspId = inspections.first['inspectionId'] as int?;
+          }
+
           await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => const DoorInspectionForm(
+              builder: (_) => DoorInspectionForm(
                 isManagerMode: false,
+                inspectionId: targetInspId,
               ),
             ),
           );

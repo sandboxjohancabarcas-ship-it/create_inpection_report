@@ -174,7 +174,7 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           await PdfExportService.exportSingleInspectionPdf(_selectedInspectionId!, targetPath);
         } else if (_selectedFormat == ExportFormat.dbPackage) {
           targetPath = p.join(exportDir, 'Inspektion_${safeJob}_$timestamp.db');
-          await DatabaseService.exportJobPackage([_selectedInspectionId!]);
+          await DatabaseService.exportJobPackage([_selectedInspectionId!], destinationPath: targetPath);
         }
       } else if (_selectedScope == ExportScope.clientAudit) {
         if (_selectedClient == null || _selectedClient!.isEmpty) {
@@ -197,7 +197,7 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
         } else if (_selectedFormat == ExportFormat.dbPackage) {
           targetPath = p.join(exportDir, 'Kunden_Audit_${safeClient}_$timestamp.db');
           final clientInsps = _inspections.where((i) => i['clientName'] == _selectedClient).map((i) => i['inspectionId'] as int).toList();
-          await DatabaseService.exportJobPackage(clientInsps);
+          await DatabaseService.exportJobPackage(clientInsps, destinationPath: targetPath);
         }
       } else if (_selectedScope == ExportScope.doorHistory) {
         if (_selectedDoorAlias == null || _selectedDoorAlias!.isEmpty) {
@@ -222,7 +222,7 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
               ? doorObj.id
               : (doorObj is Map ? doorObj['id'] as int? : null);
           if (doorId != null) {
-            await DatabaseService.exportDoorsPackage([doorId]);
+            await DatabaseService.exportDoorsPackage([doorId], destinationPath: targetPath);
           }
         }
       }

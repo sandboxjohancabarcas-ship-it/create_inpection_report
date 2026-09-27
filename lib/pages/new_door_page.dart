@@ -203,9 +203,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     wingCount = d?.wingCount ?? DoorOptionsService.getDefault('wingCount') ?? 1;
     pos = d?.pos ?? 0;
 
-    if (d != null) {
-      await _loadInspectionData();
-    }
+    // Always load inspection metadata, whether creating a new door or editing an existing one
+    await _loadInspectionData();
 
     if (mounted) {
       setState(() {
@@ -230,33 +229,50 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         ? await DatabaseService.getDb() 
         : await LocalDatabaseService.getDb();
         
-    List<Map<String, dynamic>> results;
-    if (widget.inspectionId != null) {
-      results = await db.rawQuery('''
-        SELECT i.* 
-        FROM inspections i
-        INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
-        WHERE id.doorId = ? AND i.inspectionId = ?
-        LIMIT 1
-      ''', [widget.door!.id!, widget.inspectionId!]);
+    List<Map<String, dynamic>> results = [];
+    if (widget.door != null && widget.door!.id != null) {
+      if (widget.inspectionId != null) {
+        results = await db.rawQuery('''
+          SELECT i.* 
+          FROM inspections i
+          INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+          WHERE id.doorId = ? AND i.inspectionId = ?
+          LIMIT 1
+        ''', [widget.door!.id!, widget.inspectionId!]);
 
-      if (results.isEmpty) {
-        results = await db.query(
-          'inspections',
-          where: 'inspectionId = ?',
-          whereArgs: [widget.inspectionId!],
-          limit: 1,
-        );
+        if (results.isEmpty) {
+          results = await db.query(
+            'inspections',
+            where: 'inspectionId = ?',
+            whereArgs: [widget.inspectionId!],
+            limit: 1,
+          );
+        }
+      } else {
+        results = await db.rawQuery('''
+          SELECT i.* 
+          FROM inspections i
+          INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
+          WHERE id.doorId = ?
+          ORDER BY i.date DESC
+          LIMIT 1
+        ''', [widget.door!.id!]);
       }
+    } else if (widget.inspectionId != null) {
+      results = await db.query(
+        'inspections',
+        where: 'inspectionId = ?',
+        whereArgs: [widget.inspectionId!],
+        limit: 1,
+      );
     } else {
-      results = await db.rawQuery('''
-        SELECT i.* 
-        FROM inspections i
-        INNER JOIN inspection_doors id ON i.inspectionId = id.inspectionId
-        WHERE id.doorId = ?
-        ORDER BY i.date DESC
-        LIMIT 1
-      ''', [widget.door!.id!]);
+      // If creating a new door without explicit inspectionId:
+      // Load the most recent inspection available in the database
+      results = await db.query(
+        'inspections',
+        orderBy: 'inspectionId DESC',
+        limit: 1,
+      );
     }
 
     if (results.isNotEmpty) {
@@ -272,6 +288,24 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         inspectorNameController.text = insp['inspectorName'] ?? '';
         inspectionDate = DateTime.tryParse(insp['date'] ?? '') ?? DateTime.now();
       });
+
+      // Calculate next available door position (pos) for this inspection if creating a new door
+      if (widget.door == null && currentInspectionId != null) {
+        final existingDoors = await db.rawQuery('''
+          SELECT MAX(d.pos) as maxPos, COUNT(d.id) as doorCount
+          FROM doors d
+          INNER JOIN inspection_doors id ON d.id = id.doorId
+          WHERE id.inspectionId = ?
+        ''', [currentInspectionId!]);
+
+        if (existingDoors.isNotEmpty) {
+          final maxPos = (existingDoors.first['maxPos'] as num?)?.toInt();
+          final count = (existingDoors.first['doorCount'] as num?)?.toInt() ?? 0;
+          setState(() {
+            pos = (maxPos != null && maxPos > 0) ? maxPos + 1 : count + 1;
+          });
+        }
+      }
     } else if (widget.inspectionId != null) {
       setState(() {
         currentInspectionId = widget.inspectionId;
@@ -636,6 +670,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     final list = DoorOptionsService.getStringOptions(key);
     if (currentValue != null && currentValue.isNotEmpty && !list.contains(currentValue)) {
       list.add(currentValue);
+    }
+    if (key.startsWith('lintelHeight')) {
+      list.removeWhere((e) => e == '0,5' || e == '0.5');
+      list.sort(DoorOptionsService.compareOptions);
     }
     return list;
   }
@@ -1124,10 +1162,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               onChanged: (val) => setState(() => closingSequenceSystem = val),
             ),
 
-            // Lock dimensions
-            TextField(
-              controller: lockDimensionsController,
-              decoration: const InputDecoration(labelText: "Schlossabmessungen"),
+            // Lock dimensions (Dynamic Combobox / Editable Dropdown)
+            EditableDropdownField(
+              label: "Schlossabmessungen",
+              currentValue: lockDimensionsController.text.isNotEmpty ? lockDimensionsController.text : '?',
+              options: DoorOptionsService.getStringOptions('lockDimensions'),
+              onChanged: (val) => setState(() => lockDimensionsController.text = val),
             ),
 
             // Notizen (Türspezifikation) - Pop-Up Window Integration
@@ -1254,16 +1294,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               onChanged: (val) => setState(() => closerOnOppositeSide = val),
             ),
 
-            // Lintel height inside over 1m
+            // Lintel height inside over 0,5m
             SwitchListTile(
-              title: const Text("Sturzhöhe innen über 1m"),
+              title: const Text("Sturzhöhe auf Bandseite innen über 0,5m"),
               value: lintelHeightInsideOver1m,
               onChanged: (val) => setState(() {
                 lintelHeightInsideOver1m = val;
                 if (!val) {
                   lintelHeightInsideValue = null;
                 } else if (lintelHeightInsideValue == null) {
-                  lintelHeightInsideValue = '1m';
+                  lintelHeightInsideValue = '0,5m';
                 }
               }),
             ),
@@ -1288,16 +1328,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 ),
               ),
 
-            // Lintel height outside over 1m
+            // Lintel height outside over 0,5m
             SwitchListTile(
-              title: const Text("Sturzhöhe außen über 1m"),
+              title: const Text("Sturzhöhe auf Bandgegenseite außen über 0,5m"),
               value: lintelHeightOutsideOver1m,
               onChanged: (val) => setState(() {
                 lintelHeightOutsideOver1m = val;
                 if (!val) {
                   lintelHeightOutsideValue = null;
                 } else if (lintelHeightOutsideValue == null) {
-                  lintelHeightOutsideValue = '1m';
+                  lintelHeightOutsideValue = '0,5m';
                 }
               }),
             ),
@@ -1328,23 +1368,19 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const Text("Sicherheit & Zugang", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
-            // Access control
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: "Zutrittskontrolle"),
-              initialValue: _getDropdownValue('accessControl', accessControl),
-              items: _getDropdownItems('accessControl', accessControl)
-                  .map((val) => DropdownMenuItem(value: val, child: Text(val)))
-                  .toList(),
+            // Access control (Dynamic Combobox / Editable Dropdown)
+            EditableDropdownField(
+              label: "Zutrittskontrolle",
+              currentValue: accessControl ?? 'Nein',
+              options: DoorOptionsService.getStringOptions('accessControl'),
               onChanged: (val) => setState(() => accessControl = val),
             ),
 
-            // Escape door control
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: "Fluchttürsteuerung / Türwächter"),
-              initialValue: _getDropdownValue('escapeDoorControl', escapeDoorControl),
-              items: _getDropdownItems('escapeDoorControl', escapeDoorControl)
-                  .map((val) => DropdownMenuItem(value: val, child: Text(val)))
-                  .toList(),
+            // Escape door control (Dynamic Combobox / Editable Dropdown)
+            EditableDropdownField(
+              label: "Fluchttürsteuerung / Türwächter",
+              currentValue: escapeDoorControl ?? 'Nein',
+              options: DoorOptionsService.getStringOptions('escapeDoorControl'),
               onChanged: (val) => setState(() => escapeDoorControl = val),
             ),
 

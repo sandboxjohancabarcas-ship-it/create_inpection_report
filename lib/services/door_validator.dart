@@ -337,9 +337,9 @@ class DoorValidator {
         incoming.escapeRouteSignage, existing.escapeRouteSignage);
     checkSafety('escapeDirectionRespected', 'Fluchtrichtung eingehalten',
         incoming.escapeDirectionRespected, existing.escapeDirectionRespected);
-    checkSafety('lintelHeightInsideOver1m', 'Sturzhöhe innen > 1m',
+    checkSafety('lintelHeightInsideOver1m', 'Sturzhöhe innen > 0,5m',
         incoming.lintelHeightInsideOver1m, existing.lintelHeightInsideOver1m);
-    checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 1m',
+    checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 0,5m',
         incoming.lintelHeightOutsideOver1m, existing.lintelHeightOutsideOver1m);
     checkSafety('closerOnHingeSide', 'Türschließer auf Bandseite',
         incoming.closerOnHingeSide, existing.closerOnHingeSide);
@@ -428,6 +428,7 @@ class DoorValidator {
       'closingSequenceSystem': 'Schließfolgesystem',
       'lockDimensions': 'Schlossabmessungen',
       'accessControl': 'Zutrittskontrolle',
+      'escapeDoorControl': 'Fluchttürsteuerung / Türwächter',
       'fittingType': 'Beschlagstyp',
       'panicFunction': 'Panikfunktion',
     };
@@ -444,6 +445,7 @@ class DoorValidator {
       'closingSequenceSystem': incoming.closingSequenceSystem,
       'lockDimensions': incoming.lockDimensions,
       'accessControl': incoming.accessControl,
+      'escapeDoorControl': incoming.escapeDoorControl,
       'fittingType': incoming.fittingType,
       'panicFunction': incoming.panicFunction,
     };
@@ -460,6 +462,7 @@ class DoorValidator {
       'closingSequenceSystem': existing.closingSequenceSystem,
       'lockDimensions': existing.lockDimensions,
       'accessControl': existing.accessControl,
+      'escapeDoorControl': existing.escapeDoorControl,
       'fittingType': existing.fittingType,
       'panicFunction': existing.panicFunction,
     } : {};

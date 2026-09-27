@@ -95,8 +95,8 @@ void main() {
       expect(row2Headers[10], 'DoP-Nummer (Leistungserklärung)');
       expect(row2Headers[11], 'Baujahr');
       expect(row2Headers[18], 'Abnahme FSA / Antrieb');
-      expect(row2Headers[21], 'Sturzhöhe innen über 1m');
-      expect(row2Headers[22], 'Sturzhöhe außen über 1m');
+      expect(row2Headers[21], 'Sturzhöhe innen über 0,5m');
+      expect(row2Headers[22], 'Sturzhöhe außen über 0,5m');
 
       // Verify Data Row (Row 3)
       final row3Data = table.rows[3].map((e) => e?.toString() ?? '').toList();

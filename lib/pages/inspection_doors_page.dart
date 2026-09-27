@@ -8,6 +8,7 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../utils/inspection_year_utils.dart';
+import '../utils/file_export_helper.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
@@ -132,23 +133,38 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   Future<void> _handleExportDoors() async {
     if (_selectedDoorIds.isEmpty) return;
     setState(() => _isSyncing = true);
+    String? tempExportPath;
     try {
-      final String downloadPath = Platform.isAndroid 
-          ? '/storage/emulated/0/Download' 
-          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(downloadPath, 'tueren_export_$timestamp.db');
+      final defaultFileName = 'tueren_export_$timestamp.db';
+      tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 
-      await LocalDatabaseService.exportSelectiveJobPackage(_selectedDoorIds.toList(), exportPath);
+      await LocalDatabaseService.exportSelectiveJobPackage(_selectedDoorIds.toList(), tempExportPath);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export erfolgreich: $exportPath'), backgroundColor: Colors.green));
+      final tempFile = File(tempExportPath);
+      final savedPath = await FileExportHelper.saveFileSafely(
+        defaultFileName: defaultFileName,
+        dialogTitle: 'Türen-Export speichern unter',
+        sourceFile: tempFile,
+        allowedExtensions: ['db'],
+      );
+
+      if (savedPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export erfolgreich gespeichert: $savedPath'), backgroundColor: Colors.green),
+        );
         setState(() => _selectedDoorIds.clear());
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red));
     } finally {
-      setState(() => _isSyncing = false);
+      if (tempExportPath != null) {
+        try {
+          final tf = File(tempExportPath);
+          if (await tf.exists()) await tf.delete();
+        } catch (_) {}
+      }
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 

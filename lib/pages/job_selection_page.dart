@@ -12,6 +12,7 @@ import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import '../utils/inspection_year_utils.dart';
+import '../utils/file_export_helper.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -361,24 +362,31 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   /// Orchestrates the data handoff from Main DB to Working DB.
   Future<void> _handleJobDownload(List<int> ids) async {
     setState(() => _isDownloading = true);
+    String? tempExportPath;
 
     try {
       await LocalDatabaseService.downloadJobPackage(
         inspectionIds: ids,
       );
 
-      final String downloadPath = Platform.isAndroid 
-          ? '/storage/emulated/0/Download' 
-          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(downloadPath, 'inspektion_paket_$timestamp.db');
+      final defaultFileName = 'inspektion_paket_$timestamp.db';
+      tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
       
-      await LocalDatabaseService.exportWorkingDb(exportPath);
+      await LocalDatabaseService.exportWorkingDb(tempExportPath);
 
-      if (mounted) {
+      final tempFile = File(tempExportPath);
+      final savedPath = await FileExportHelper.saveFileSafely(
+        defaultFileName: defaultFileName,
+        dialogTitle: 'Inspektionspaket speichern unter',
+        sourceFile: tempFile,
+        allowedExtensions: ['db'],
+      );
+
+      if (savedPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Paket erstellt: $exportPath'),
+            content: Text('Paket gespeichert: $savedPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -392,6 +400,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         );
       }
     } finally {
+      if (tempExportPath != null) {
+        try {
+          final tf = File(tempExportPath);
+          if (await tf.exists()) await tf.delete();
+        } catch (_) {}
+      }
       if (mounted) setState(() => _isDownloading = false);
     }
   }

@@ -145,13 +145,13 @@ void main() {
         dinConfiguration: 'DIN L',
         closerType: 'TS93',
         closingSequenceSystem: 'Nein',
-        lockDimensions: '35/92/9',
+        lockDimensions: 'Custom-Schloss-123', // NEW custom value!
         closerOnHingeSide: true,
         closerOnOppositeSide: false,
         lintelHeightInsideOver1m: false,
         lintelHeightOutsideOver1m: false,
-        escapeDoorControl: 'Nein',
-        accessControl: 'Nein',
+        escapeDoorControl: 'Custom-Fluchttuer-System', // NEW custom value!
+        accessControl: 'Custom-Zutritt-Keycard', // NEW custom value!
         escapeRouteSituation: false,
         escapeRouteSignage: false,
         blindCylinder: false,
@@ -168,8 +168,14 @@ void main() {
 
       final conflicts = DoorValidator.detectDropdownOptionConflicts(incoming);
 
-      expect(conflicts.length, 2);
-      expect(conflicts.map((c) => c.fieldName), containsAll(['approvalNumber', 'manufacturerNumber']));
+      expect(conflicts.length, 5);
+      expect(conflicts.map((c) => c.fieldName), containsAll([
+        'approvalNumber',
+        'manufacturerNumber',
+        'lockDimensions',
+        'accessControl',
+        'escapeDoorControl',
+      ]));
       expect(conflicts.every((c) => c.type == DoorConflictType.newDropdownOption), isTrue);
       expect(conflicts.every((c) => c.resolution == DoorResolutionAction.addToMasterOptions), isTrue);
     });

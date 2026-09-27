@@ -62,7 +62,40 @@ class DoorOptionsService {
       "default": "?"
     },
     "lockDimensions": {
-      "options": ["?", "30/92/9-20 U", "34/92/9-24 U", "35/92/9-20 U", "35/92/9-28 F", "35/72/9-20 U", "40/92/9-20 U", "30/92/9-20 F", "35/92/9-20 F", "40/92/9-20 F", "40/72/9", "45/72/9-24 FR", "45/92/9-24 F", "50/72/9-24 FR", "55/72/9-24 FR", "60/72/9-24 FR", "65/72/9", "65/92/9", "MfV-35/92/10-24 U", "SVP", "Motorschloss"],
+      "options": [
+        "?",
+        "30/92/9-20 U",
+        "34/92/9-24 U",
+        "35/92/9-20 U",
+        "35/92/9-28 F",
+        "35/72/9-20 U",
+        "40/92/9-20 U",
+        "30/92/9-20 F",
+        "35/92/9-20 F",
+        "40/92/9-20 F",
+        "40/72/9",
+        "45/72/9-24 FR",
+        "45/92/9-24 F",
+        "50/72/9-24 FR",
+        "55/72/9-24 FR",
+        "60/72/9-24 FR",
+        "65/72/9",
+        "65/92/9",
+        "Rollenschloß",
+        "235/24 - 72/65/50/9 FSR",
+        "270/24 - 92/35/65/9 FSE",
+        "245/24 - 72/35/60 U",
+        "235/20 - 72/65/50/9 FSR",
+        "30/92/9/24-245U",
+        "65/72/8/24-235FR",
+        "65/72/9/24-235FR",
+        "35/92/9/28-270F",
+        "30/72/9/24-245U",
+        "30/92/9/24-270Ff",
+        "35/92/9/24-270F",
+        "65/72/9/20-235FR",
+        "30/92/9/28-270F"
+      ],
       "default": "?"
     },
     "escapeDoorControl": {
@@ -90,15 +123,15 @@ class DoorOptionsService {
       "default": "?"
     },
     "lintelHeightValue": {
-      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     },
     "lintelHeightInsideValue": {
-      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     },
     "lintelHeightOutsideValue": {
-      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     }
   };
@@ -120,6 +153,7 @@ class DoorOptionsService {
         print('[DoorOptions] Found external JSON at ${externalFile.path}. Loading...');
         final content = await externalFile.readAsString();
         _options = json.decode(content) as Map<String, dynamic>;
+        _mergeFallbackDefaults();
         _loaded = true;
         return;
       }
@@ -129,6 +163,7 @@ class DoorOptionsService {
         print('[DoorOptions] Found project JSON at ${projectFile.path}. Loading...');
         final content = await projectFile.readAsString();
         _options = json.decode(content) as Map<String, dynamic>;
+        _mergeFallbackDefaults();
         _loaded = true;
         return;
       }
@@ -140,6 +175,7 @@ class DoorOptionsService {
       print('[DoorOptions] Loading options from internal assets...');
       final content = await rootBundle.loadString('door_options.json');
       _options = json.decode(content) as Map<String, dynamic>;
+      _mergeFallbackDefaults();
       _loaded = true;
       return;
     } catch (e) {
@@ -149,6 +185,76 @@ class DoorOptionsService {
     print('[DoorOptions] Using hardcoded fallback options.');
     _options = Map<String, dynamic>.from(_defaultFallbackOptions);
     _loaded = true;
+  }
+
+  static void _mergeFallbackDefaults() {
+    _defaultFallbackOptions.forEach((key, defaultVal) {
+      if (!_options.containsKey(key)) {
+        _options[key] = Map<String, dynamic>.from(defaultVal);
+      } else {
+        final currentEntry = _options[key];
+        if (currentEntry is Map && defaultVal is Map) {
+          final defaultOpts = defaultVal['options'];
+          final currentOpts = currentEntry['options'];
+          if (defaultOpts is List && currentOpts is List) {
+            for (final opt in defaultOpts) {
+              if (opt is String) {
+                if (!currentOpts.any((e) => e.toString().toLowerCase() == opt.toLowerCase())) {
+                  currentOpts.add(opt);
+                }
+              } else if (opt is Map) {
+                if (!currentOpts.any((e) => e is Map && e['value'] == opt['value'])) {
+                  currentOpts.add(opt);
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Remove legacy / erroneous '0,5' and '0.5' without 'm' from lintel height dropdowns
+    const lintelKeys = ['lintelHeightValue', 'lintelHeightInsideValue', 'lintelHeightOutsideValue'];
+    for (final k in lintelKeys) {
+      if (_options.containsKey(k) && _options[k]['options'] is List) {
+        final list = _options[k]['options'] as List;
+        list.removeWhere((e) => e.toString().trim() == '0,5' || e.toString().trim() == '0.5');
+        list.sort(compareOptions);
+      }
+    }
+
+    if (_options.containsKey('lockDimensions') && _options['lockDimensions']['options'] is List) {
+      final list = _options['lockDimensions']['options'] as List;
+      list.removeWhere((e) =>
+          e.toString().trim() == 'Schloßmaße/Stulp' ||
+          e.toString().trim() == 'DM/Abst./Nuß-Stulp');
+    }
+  }
+
+  /// Comparison function that places '?' first and orders numeric/meter items ascendingly.
+  static int compareOptions(dynamic a, dynamic b) {
+    final strA = (a is Map ? a['value'] : a)?.toString() ?? '';
+    final strB = (b is Map ? b['value'] : b)?.toString() ?? '';
+    if (strA == strB) return 0;
+    if (strA == '?') return -1;
+    if (strB == '?') return 1;
+
+    final numA = _extractNumeric(strA);
+    final numB = _extractNumeric(strB);
+    if (numA != null && numB != null) {
+      final comp = numA.compareTo(numB);
+      if (comp != 0) return comp;
+    }
+    return strA.toLowerCase().compareTo(strB.toLowerCase());
+  }
+
+  static double? _extractNumeric(String s) {
+    final clean = s.replaceAll('>', '').replaceAll('m', '').replaceAll('M', '').replaceAll(',', '.').trim();
+    final parsed = double.tryParse(clean);
+    if (parsed != null && s.startsWith('>')) {
+      return parsed + 0.001;
+    }
+    return parsed;
   }
 
   static bool _isTestMode = false;
@@ -189,6 +295,9 @@ class DoorOptionsService {
     final exists = currentList.any((e) => e.toString().trim().toLowerCase() == val.toLowerCase());
     if (!exists) {
       currentList.add(val);
+      if (key.startsWith('lintelHeight')) {
+        currentList.sort(compareOptions);
+      }
       _options[key]['options'] = currentList;
     }
   }

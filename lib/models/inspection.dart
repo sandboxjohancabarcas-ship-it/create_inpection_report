@@ -9,6 +9,7 @@ import '../services/local_database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
+import '../utils/file_export_helper.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -286,6 +287,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   Future<void> _handleJobDownload(List<int> ids) async {
     // Show the modal loading overlay
     setState(() => _isDownloading = true);
+    String? tempExportPath;
 
     try {
       // Logic: Orchestrates the handoff from Main DB to Working DB.
@@ -294,19 +296,24 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         inspectionIds: ids,
       );
 
-      // Export the file to the Documents folder for manual handoff
-      final String downloadPath = Platform.isAndroid 
-          ? '/storage/emulated/0/Download' 
-          : (await getDownloadsDirectory())?.path ?? (await getApplicationDocumentsDirectory()).path;
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final exportPath = p.join(downloadPath, 'inspektion_paket_$timestamp.db');
+      final defaultFileName = 'inspektion_paket_$timestamp.db';
+      tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
       
-      await LocalDatabaseService.exportWorkingDb(exportPath);
+      await LocalDatabaseService.exportWorkingDb(tempExportPath);
 
-      if (mounted) {
+      final tempFile = File(tempExportPath);
+      final savedPath = await FileExportHelper.saveFileSafely(
+        defaultFileName: defaultFileName,
+        dialogTitle: 'Inspektionspaket speichern unter',
+        sourceFile: tempFile,
+        allowedExtensions: ['db'],
+      );
+
+      if (savedPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Paket erstellt: $exportPath'),
+            content: Text('Paket gespeichert: $savedPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -322,6 +329,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         );
       }
     } finally {
+      if (tempExportPath != null) {
+        try {
+          final tf = File(tempExportPath);
+          if (await tf.exists()) await tf.delete();
+        } catch (_) {}
+      }
       // Hide the modal loading overlay regardless of success or failure
       if (mounted) setState(() => _isDownloading = false);
     }

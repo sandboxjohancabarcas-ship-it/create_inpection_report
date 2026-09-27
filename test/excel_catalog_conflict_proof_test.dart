@@ -15,6 +15,10 @@ void main() {
 
     setUp(() async {
       final db = await DatabaseService.getDb();
+      await db.delete('inspection_door_errors');
+      await db.delete('inspection_doors');
+      await db.delete('inspections');
+      await db.delete('doors');
       await db.delete('error_catalog', where: 'code = ? OR description LIKE ?', whereArgs: ['0.32', '%Dormakaba Fehler SCU-UP%']);
     });
 

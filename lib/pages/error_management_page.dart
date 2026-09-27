@@ -109,7 +109,171 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
   
 
-  Future<void> _addCatalogError(ErrorCatalog error, String notes) async {
+  Future<String?> _pickImageAsBase64(ImageSource source) async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 80,
+      );
+      if (image == null) return null;
+
+      final File file = File(image.path);
+      final int sizeInBytes = await file.length();
+      const int maxSizeInBytes = 60 * 1024 * 1024; // 60 MB
+
+      if (sizeInBytes > maxSizeInBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Das Bild ist zu groß. Maximale Größe ist 60 MB (Aktuell: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB).'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return null;
+      }
+
+      final bytes = await file.readAsBytes();
+      return base64Encode(bytes);
+    } catch (e) {
+      print('Error picking image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Auswählen des Fotos: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _openNotesInputDialog(TextEditingController controller) async {
+    final tempController = TextEditingController(text: controller.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.edit_note, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Notizen zum Fehler'),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width > 600 ? 550 : MediaQuery.of(context).size.width * 0.9,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Geben Sie hier detaillierte Beobachtungen und Notizen zum Fehler ein:',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: tempController,
+                autofocus: true,
+                maxLines: 8,
+                minLines: 4,
+                decoration: const InputDecoration(
+                  hintText: 'Detaillierte Fehlerbeschreibung, Fundort, Ursache, Bemerkungen...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, tempController.text),
+            icon: const Icon(Icons.check),
+            label: const Text('Übernehmen'),
+          ),
+        ],
+      ),
+    );
+    if (result != null) {
+      controller.text = result;
+    }
+  }
+
+  Widget _buildDialogPhotoThumbnails(
+    List<String> photos,
+    void Function(int index) onRemove,
+    void Function(int index) onView,
+  ) {
+    if (photos.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 75,
+      margin: const EdgeInsets.only(top: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: photos.length,
+        itemBuilder: (context, index) {
+          final photoBase64 = photos[index];
+          return Stack(
+            children: [
+              GestureDetector(
+                onTap: () => onView(index),
+                child: Container(
+                  width: 65,
+                  height: 65,
+                  margin: const EdgeInsets.only(right: 10, top: 4, bottom: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      base64Decode(photoBase64),
+                      fit: BoxFit.cover,
+                      cacheWidth: 130,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 6,
+                child: GestureDetector(
+                  onTap: () => onRemove(index),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _addCatalogError(ErrorCatalog error, String notes, {List<String> photos = const []}) async {
     if (_inspectionDoorId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,6 +290,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
       notes: notes,
       quantity: 1,
       severity: error.severity,
+      attachments: photos.where((p) => p.isNotEmpty).join(','),
     );
 
     try {
@@ -135,6 +300,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await LocalDatabaseService.insertInspectionDoorError(inspectionError);
       }
       _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fehler wurde erfolgreich hinzugefügt.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -153,492 +326,841 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     final recommendationController = TextEditingController();
     final normReferenceController = TextEditingController();
     final searchController = TextEditingController();
+    final List<String> dialogPhotos = [];
     ErrorCatalog? selectedError;
+    String? selectedCategory;
     bool isProvisional = false;
+
+    // Extract unique categories from catalog
+    final Set<String> categorySet = {};
+    for (final err in availableErrors) {
+      if (err.category.trim().isNotEmpty) {
+        categorySet.add(err.category.trim());
+      }
+    }
+    final List<String> categories = categorySet.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Text('Fehler hinzufügen'),
-          content: SizedBox(
-            width: MediaQuery.of(context).size.width > 600 ? 500 : MediaQuery.of(context).size.width * 0.85,
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Toggle between catalog and provisional mode
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RadioListTile<bool>(
-                        title: const Text('Aus Katalog wählen'),
-                        value: false,
-                        groupValue: isProvisional,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (value) {
-                          if (value != null) setState(() => isProvisional = value);
-                        },
+        builder: (context, dialogSetState) {
+          final screenWidth = MediaQuery.of(context).size.width;
+          final screenHeight = MediaQuery.of(context).size.height;
+          final dialogWidth = screenWidth > 900 ? 820.0 : screenWidth * 0.95;
+          final dialogHeight = screenHeight * 0.85;
+
+          // Filter errors based on category and search query
+          final query = searchController.text.trim().toLowerCase();
+          final filteredErrors = availableErrors.where((error) {
+            final matchesCategory = selectedCategory == null ||
+                selectedCategory!.isEmpty ||
+                error.category.toLowerCase() == selectedCategory!.toLowerCase();
+            if (!matchesCategory) return false;
+
+            if (query.isEmpty) return true;
+
+            return error.code.toLowerCase().contains(query) ||
+                error.category.toLowerCase().contains(query) ||
+                error.description.toLowerCase().contains(query) ||
+                error.normReference.toLowerCase().contains(query) ||
+                error.recommendation.toLowerCase().contains(query);
+          }).toList();
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.report_problem, color: isProvisional ? Colors.orange : Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Text(isProvisional ? 'Provisorischen Fehler erstellen' : 'Fehler hinzufügen'),
+              ],
+            ),
+            content: SizedBox(
+              width: dialogWidth,
+              height: dialogHeight,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Mode Toggle
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      RadioListTile<bool>(
-                        title: const Text('Provisorischen Fehler erstellen'),
-                        value: true,
-                        groupValue: isProvisional,
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        onChanged: (value) {
-                          if (value != null) setState(() => isProvisional = value);
-                        },
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  
-                  if (!isProvisional) ...[
-                    // Catalog error selection with search
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Fehler aus Katalog auswählen',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Suchen Sie nach Fehlercode oder Beschreibung:',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                        ),
-                        SizedBox(height: 8),
-                        TextField(
-                          controller: searchController,
-                          decoration: InputDecoration(
-                            labelText: 'Fehlercode oder Beschreibung',
-                            border: OutlineInputBorder(),
-                            hintText: 'z.B. 1.1.1 oder Türbeschlag',
-                            suffixIcon: Icon(Icons.search),
-                          ),
-                          onChanged: (value) async {
-                            // Perform catalog search locally within the dialog's state
-                            if (value.trim().isEmpty) {
-                              setState(() {
-                                searchResults = [];
-                                selectedError = null;
-                              });
-                              return;
-                            }
-                            try {
-                              final results = widget.isManagerMode
-                                  ? await DatabaseService.searchErrorCatalog(value)
-                                  : await LocalDatabaseService.searchErrorCatalog(value);
-                              setState(() {
-                                searchResults = List.from(results);
-                                selectedError = null;
-                              });
-                            } catch (e) {
-                              // Log error and clear results
-                              print('Search error: $e');
-                              setState(() {
-                                searchResults = [];
-                                selectedError = null;
-                              });
-                            }
-                          },
-                        ),
-                        SizedBox(height: 12),
-                        
-                        // Search results or selection display
-                        if (selectedError != null) ...[
-                          // Show selected error
-                          Container(
-                            padding: EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              border: Border.all(color: Colors.green.shade300),
-                              borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text('Aus Katalog wählen')),
+                              selected: !isProvisional,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  dialogSetState(() => isProvisional = false);
+                                }
+                              },
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ChoiceChip(
+                              label: const Center(child: Text('Provisorischer Fehler')),
+                              selected: isProvisional,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  dialogSetState(() => isProvisional = true);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    if (!isProvisional) ...[
+                      if (selectedError == null) ...[
+                        // Category Selection & Search Bar
+                        Card(
+                          elevation: 0,
+                          color: Colors.blue.shade50.withOpacity(0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: Colors.blue.shade200),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: [
-                                    Icon(Icons.check_circle, color: Colors.green, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Ausgewählter Fehler:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade800,
-                                      ),
+                                    const Icon(Icons.category, size: 18, color: Colors.blue),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      '1. Fehlerkategorie wählen:',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                     ),
+                                    if (selectedCategory != null && selectedCategory!.isNotEmpty) ...[
+                                      const Spacer(),
+                                      TextButton(
+                                        onPressed: () => dialogSetState(() => selectedCategory = null),
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: const Text('Kategorie zurücksetzen', style: TextStyle(fontSize: 12)),
+                                      ),
+                                    ],
                                   ],
                                 ),
-                                SizedBox(height: 8),
-                                Text(
-                                  '${selectedError!.code} - ${selectedError!.category}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                                const SizedBox(height: 6),
+                                DropdownButtonFormField<String?>(
+                                  value: selectedCategory,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: const OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    hintText: 'Alle Kategorien (${availableErrors.length} Fehler)',
                                   ),
+                                  items: [
+                                    DropdownMenuItem<String?>(
+                                      value: null,
+                                      child: Text(
+                                        'Alle Kategorien (${availableErrors.length} Fehler)',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                    ...categories.map((cat) {
+                                      final count = availableErrors
+                                          .where((e) => e.category.toLowerCase() == cat.toLowerCase())
+                                          .length;
+                                      return DropdownMenuItem<String?>(
+                                        value: cat,
+                                        child: Text('$cat ($count Fehler)'),
+                                      );
+                                    }),
+                                  ],
+                                  onChanged: (value) {
+                                    dialogSetState(() {
+                                      selectedCategory = value;
+                                    });
+                                  },
                                 ),
-                                SizedBox(height: 4),
-                                Text(
-                                  selectedError!.description,
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                                SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Row(
                                   children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () {
-                                        Navigator.pop(context);
-                                        _addCatalogError(selectedError!, notesController.text);
-                                      },
-                                      icon: Icon(Icons.add),
-                                      label: Text('Fehler hinzufügen'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    TextButton.icon(
-                                      onPressed: () {
-                                        setState(() {
-                                          selectedError = null;
-                                          searchController.clear();
-                                          searchResults = [];
-                                        });
-                                      },
-                                      icon: Icon(Icons.change_circle),
-                                      label: Text('Anderen Fehler wählen'),
+                                    const Icon(Icons.search, size: 18, color: Colors.blue),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      '2. Suche (nach Kategorie, Code oder Beschreibung):',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                                     ),
                                   ],
+                                ),
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: searchController,
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    labelText: 'Suchbegriff eingeben...',
+                                    hintText: 'z.B. Türschließer, 1.1.1, Schloss, Dichtung...',
+                                    border: const OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    prefixIcon: const Icon(Icons.search),
+                                    suffixIcon: searchController.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(Icons.clear),
+                                            onPressed: () {
+                                              searchController.clear();
+                                              dialogSetState(() {});
+                                            },
+                                          )
+                                        : null,
+                                  ),
+                                  onChanged: (value) => dialogSetState(() {}),
                                 ),
                               ],
                             ),
                           ),
-                        ] else ...[
-                          // Always show search results area when no error is selected
-                          Container(
-                            height: 250,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.blue.shade300),
-                              borderRadius: BorderRadius.circular(8),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Error List View Header
+                        Row(
+                          children: [
+                            Text(
+                              '${filteredErrors.length} Fehler gefunden',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue.shade900,
+                                fontSize: 13,
+                              ),
                             ),
-                            child: searchResults.isEmpty && searchController.text.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.search, size: 48, color: Colors.grey),
-                                        SizedBox(height: 8),
-                                        Text(
-                                          'Geben Sie Suchbegriff ein...',
-                                          style: TextStyle(color: Colors.grey, fontSize: 14),
-                                        ),
-                                        SizedBox(height: 4),
-                                        Text(
-                                          'z.B. 1.1.1 oder Türbeschlag',
-                                          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : searchResults.isEmpty && searchController.text.isNotEmpty
-                                    ? Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.search_off, size: 48, color: Colors.grey),
-                                            SizedBox(height: 8),
-                                            Text(
-                                              'Keine Ergebnisse gefunden',
-                                              style: TextStyle(color: Colors.grey, fontSize: 14),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Versuchen Sie einen anderen Suchbegriff',
-                                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : Column(
-                                        children: [
-                                          Container(
-                                            width: double.infinity,
-                                            padding: EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: Colors.blue.shade50,
-                                              borderRadius: BorderRadius.only(
-                                                topLeft: Radius.circular(8),
-                                                topRight: Radius.circular(8),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.search, color: Colors.blue, size: 16),
-                                                SizedBox(width: 4),
-                                                Text(
-                                                  '${searchResults.length} Ergebnisse gefunden',
+                            if (selectedCategory != null && selectedCategory!.isNotEmpty)
+                              Text(
+                                ' in "$selectedCategory"',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+
+                        // Error List View
+                        Container(
+                          height: 320,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey.shade50,
+                          ),
+                          child: filteredErrors.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Keine passenden Fehler gefunden',
+                                        style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Wählen Sie eine andere Kategorie oder ändern Sie den Suchbegriff.',
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.separated(
+                                  padding: const EdgeInsets.all(6),
+                                  itemCount: filteredErrors.length,
+                                  separatorBuilder: (context, index) => const SizedBox(height: 4),
+                                  itemBuilder: (context, index) {
+                                    final err = filteredErrors[index];
+                                    return Card(
+                                      margin: EdgeInsets.zero,
+                                      elevation: 1,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(6),
+                                        side: BorderSide(color: Colors.grey.shade200),
+                                      ),
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => dialogSetState(() => selectedError = err),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 16,
+                                                backgroundColor: Colors.blue.shade100,
+                                                child: Text(
+                                                  err.code.isNotEmpty ? err.code.split('.')[0] : '!',
                                                   style: TextStyle(
-                                                    color: Colors.blue.shade800,
-                                                    fontWeight: FontWeight.w500,
-                                                    fontSize: 12,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.blue.shade900,
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: SingleChildScrollView(
-                                              child: Column(
-                                                children: searchResults.map((error) {
-                                                  return Card(
-                                                    margin: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                                    elevation: 1,
-                                                    child: ListTile(
-                                                      dense: true,
-                                                      leading: CircleAvatar(
-                                                        backgroundColor: Colors.blue.shade100,
-                                                        radius: 16,
-                                                        child: Text(
-                                                          error.code.split('.')[0],
-                                                          style: TextStyle(
-                                                            fontSize: 10,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          err.code,
+                                                          style: const TextStyle(
                                                             fontWeight: FontWeight.bold,
-                                                            color: Colors.blue.shade800,
+                                                            fontSize: 13,
                                                           ),
                                                         ),
-                                                      ),
-                                                      title: Text(
-                                                        error.code,
-                                                        style: TextStyle(
-                                                          fontWeight: FontWeight.bold,
-                                                          fontSize: 13,
-                                                          color: Colors.black87,
-                                                        ),
-                                                      ),
-                                                      subtitle: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Text(
-                                                            error.category,
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: Colors.blue.shade50,
+                                                            borderRadius: BorderRadius.circular(4),
+                                                            border: Border.all(color: Colors.blue.shade200),
+                                                          ),
+                                                          child: Text(
+                                                            err.category,
                                                             style: TextStyle(
                                                               fontSize: 11,
-                                                              color: Colors.blue.shade600,
+                                                              color: Colors.blue.shade800,
                                                               fontWeight: FontWeight.w500,
                                                             ),
                                                           ),
-                                                          Text(
-                                                            error.description,
-                                                            style: TextStyle(fontSize: 11, color: Colors.black54),
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      trailing: ElevatedButton(
-                                                        onPressed: () {
-                                                          setState(() {
-                                                            selectedError = error;
-                                                            searchController.clear();
-                                                            searchResults = [];
-                                                          });
-                                                        },
-                                                        style: ElevatedButton.styleFrom(
-                                                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                                          textStyle: TextStyle(fontSize: 11),
                                                         ),
-                                                        child: Text('Auswählen'),
-                                                      ),
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                          decoration: BoxDecoration(
+                                                            color: _getSeverityColor(err.severity).withOpacity(0.15),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            _getSeverityDisplay(err.severity),
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: _getSeverityColor(err.severity),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  );
-                                                }).toList(),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      err.description,
+                                                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    if (err.recommendation.isNotEmpty || err.normReference.isNotEmpty) ...[
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        [
+                                                          if (err.normReference.isNotEmpty) 'Norm: ${err.normReference}',
+                                                          if (err.recommendation.isNotEmpty) 'Empfehlung: ${err.recommendation}',
+                                                        ].join(' | '),
+                                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
                                               ),
-                                            ),
+                                              const SizedBox(width: 8),
+                                              ElevatedButton(
+                                                onPressed: () => dialogSetState(() => selectedError = err),
+                                                style: ElevatedButton.styleFrom(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  minimumSize: Size.zero,
+                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  textStyle: const TextStyle(fontSize: 11),
+                                                ),
+                                                child: const Text('Auswählen'),
+                                              ),
+                                            ],
                                           ),
-                                        ],
+                                        ),
                                       ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ] else ...[
+                        // Selected Error Display Card
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            border: Border.all(color: Colors.green.shade300, width: 1.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Ausgewählter Fehler:',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green.shade900,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  OutlinedButton.icon(
+                                    onPressed: () => dialogSetState(() => selectedError = null),
+                                    icon: const Icon(Icons.swap_horiz, size: 16),
+                                    label: const Text('Anderen Fehler wählen'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(),
+                              Row(
+                                children: [
+                                  Text(
+                                    selectedError!.code,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      selectedError!.category,
+                                      style: TextStyle(fontSize: 12, color: Colors.blue.shade900, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _getSeverityColor(selectedError!.severity).withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      _getSeverityDisplay(selectedError!.severity),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: _getSeverityColor(selectedError!.severity),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(selectedError!.description, style: const TextStyle(fontSize: 13)),
+                              if (selectedError!.recommendation.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text('Empfehlung: ${selectedError!.recommendation}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                              ],
+                              if (selectedError!.normReference.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text('Norm: ${selectedError!.normReference}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Notes section with Pop-up Button
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Notizen zum Fehler:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
+                                await _openNotesInputDialog(notesController);
+                                dialogSetState(() {});
+                              },
+                              icon: const Icon(Icons.fullscreen, size: 18),
+                              label: const Text('In separatem Fenster bearbeiten'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: notesController,
+                          decoration: InputDecoration(
+                            labelText: 'Notizen',
+                            hintText: 'Detaillierte Beobachtungen, Fundort, Bemerkungen...',
+                            border: const OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.open_in_new),
+                              tooltip: 'Großansicht öffnen',
+                              onPressed: () async {
+                                await _openNotesInputDialog(notesController);
+                                dialogSetState(() {});
+                              },
+                            ),
+                          ),
+                          maxLines: 3,
+                          onChanged: (v) => dialogSetState(() {}),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Photo Attachments Section
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Fotonachweis (${dialogPhotos.length} Fotos):',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Row(
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final photo = await _pickImageAsBase64(ImageSource.camera);
+                                    if (photo != null) {
+                                      dialogSetState(() => dialogPhotos.add(photo));
+                                    }
+                                  },
+                                  icon: const Icon(Icons.camera_alt, size: 16),
+                                  label: const Text('Kamera'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                OutlinedButton.icon(
+                                  onPressed: () async {
+                                    final photo = await _pickImageAsBase64(ImageSource.gallery);
+                                    if (photo != null) {
+                                      dialogSetState(() => dialogPhotos.add(photo));
+                                    }
+                                  },
+                                  icon: const Icon(Icons.photo_library, size: 16),
+                                  label: const Text('Galerie'),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        _buildDialogPhotoThumbnails(
+                          dialogPhotos,
+                          (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
+                          (idx) => _viewPhotoFullScreen(dialogPhotos, idx),
+                        ),
+                      ],
+                    ] else ...[
+                      // Provisional error form
+                      TextField(
+                        controller: codeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Fehlercode *',
+                          border: OutlineInputBorder(),
+                          hintText: 'z.B. 1.1.1, 2.3.4, etc.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Beschreibung *',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: categoryController,
+                        decoration: const InputDecoration(
+                          labelText: 'Kategorie *',
+                          border: OutlineInputBorder(),
+                          hintText: 'z.B. Türbeschlag, Schloss, etc.',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Schweregrad'),
+                        value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())
+                            ? severityController.text.toLowerCase()
+                            : 'medium',
+                        items: const ['low', 'medium', 'high', 'critical'].map((severity) {
+                          return DropdownMenuItem<String>(
+                            value: severity,
+                            child: Text(_getSeverityDisplay(severity)),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            dialogSetState(() => severityController.text = value);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: recommendationController,
+                        decoration: const InputDecoration(
+                          labelText: 'Empfehlung',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: normReferenceController,
+                        decoration: const InputDecoration(
+                          labelText: 'Normreferenz',
+                          border: OutlineInputBorder(),
+                          hintText: 'z.B. DIN 18095, DIN 18251',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Notes section with Pop-up Button for Provisional
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Notizen zum Fehler:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              await _openNotesInputDialog(notesController);
+                              dialogSetState(() {});
+                            },
+                            icon: const Icon(Icons.fullscreen, size: 18),
+                            label: const Text('In separatem Fenster bearbeiten'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
                         ],
-                      ],
-                    ),
-                  ] else ...[
-                    // Provisional error form
-                    TextField(
-                      controller: codeController,
-                      decoration: InputDecoration(
-                        labelText: 'Fehlercode *',
-                        border: OutlineInputBorder(),
-                        hintText: 'z.B. 1.1.1, 2.3.4, etc.',
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: descriptionController,
-                      decoration: InputDecoration(
-                        labelText: 'Beschreibung *',
-                        border: OutlineInputBorder(),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: notesController,
+                        decoration: InputDecoration(
+                          labelText: 'Notizen',
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.open_in_new),
+                            tooltip: 'Großansicht öffnen',
+                            onPressed: () async {
+                              await _openNotesInputDialog(notesController);
+                              dialogSetState(() {});
+                            },
+                          ),
+                        ),
+                        maxLines: 3,
                       ),
-                      maxLines: 2,
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: categoryController,
-                      decoration: InputDecoration(
-                        labelText: 'Kategorie *',
-                        border: OutlineInputBorder(),
-                        hintText: 'z.B. Türbeschlag, Schloss, etc.',
+                      const SizedBox(height: 16),
+
+                      // Photo Attachments for Provisional
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Fotonachweis (${dialogPhotos.length} Fotos):',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Row(
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final photo = await _pickImageAsBase64(ImageSource.camera);
+                                  if (photo != null) {
+                                    dialogSetState(() => dialogPhotos.add(photo));
+                                  }
+                                },
+                                icon: const Icon(Icons.camera_alt, size: 16),
+                                label: const Text('Kamera'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final photo = await _pickImageAsBase64(ImageSource.gallery);
+                                  if (photo != null) {
+                                    dialogSetState(() => dialogPhotos.add(photo));
+                                  }
+                                },
+                                icon: const Icon(Icons.photo_library, size: 16),
+                                label: const Text('Galerie'),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    ),
-                    SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      decoration: InputDecoration(labelText: 'Schweregrad'),
-                      value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())
-                          ? severityController.text.toLowerCase()
-                          : 'medium',
-                      items: const ['low', 'medium', 'high', 'critical'].map((severity) {
-                        return DropdownMenuItem<String>(
-                          value: severity,
-                          child: Text(_getSeverityDisplay(severity)),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => severityController.text = value);
-                        }
-                      },
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: recommendationController,
-                      decoration: InputDecoration(
-                        labelText: 'Empfehlung',
-                        border: OutlineInputBorder(),
+                      _buildDialogPhotoThumbnails(
+                        dialogPhotos,
+                        (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
+                        (idx) => _viewPhotoFullScreen(dialogPhotos, idx),
                       ),
-                      maxLines: 2,
-                    ),
-                    SizedBox(height: 8),
-                    TextField(
-                      controller: normReferenceController,
-                      decoration: InputDecoration(
-                        labelText: 'Normreferenz',
-                        border: OutlineInputBorder(),
-                        hintText: 'z.B. DIN 18095, DIN 18251',
-                      ),
-                    ),
+                    ],
                   ],
-                  
-                  SizedBox(height: 16),
-                  TextField(
-                    controller: notesController,
-                    decoration: InputDecoration(
-                      labelText: 'Notizen',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 3,
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Abbrechen'),
-            ),
-            if (isProvisional)
-              ElevatedButton(
-                onPressed: () async {
-                  // Add provisional error
-                  if (codeController.text.trim().isEmpty || descriptionController.text.trim().isEmpty) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Fehlercode und Beschreibung sind erforderlich')),
-                      );
-                    }
-                    return;
-                  }
-                  
-                  // Create provisional error
-                  final provisionalError = ErrorCatalog(
-                    code: codeController.text.trim(),
-                    description: descriptionController.text.trim(),
-                    category: categoryController.text.trim().isNotEmpty ? categoryController.text.trim() : 'provisional',
-                    severity: severityController.text,
-                    recommendation: recommendationController.text.trim(),
-                    normReference: normReferenceController.text.trim(),
-                    status: 'Pending', // Explicitly set to Pending for manager approval
-                  );
-                  print('UI: Creating provisional error proposal: ${provisionalError.code} - Status: ${provisionalError.status}');
-                  
-                  try {
-                    ErrorCatalog insertedError;
-                    if (widget.isManagerMode) {
-                      await DatabaseService.insertErrorCatalog(provisionalError);
-                      final errors = await DatabaseService.searchErrorCatalog(provisionalError.code);
-                      insertedError = errors.firstWhere(
-                        (e) => e.code == provisionalError.code,
-                        orElse: () => provisionalError,
-                      );
-                    } else {
-                      // Note: In local-first, we store provisional errors locally
-                      // until they are synced and approved by the main DB.
-                      await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
-                      final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
-                      insertedError = errors.firstWhere(
-                        (e) => e.code == provisionalError.code,
-                        orElse: () => provisionalError,
-                      );
-                    }
-                    
-                    // Add to inspection using the resolved junction ID
-                    if (_inspectionDoorId == null) {
-                      throw Exception('Keine Inspektions-Sitzung gefunden');
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Abbrechen'),
+              ),
+              if (!isProvisional && selectedError != null)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _addCatalogError(selectedError!, notesController.text, photos: dialogPhotos);
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Fehler hinzufügen'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              if (isProvisional)
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    // Add provisional error
+                    if (codeController.text.trim().isEmpty || descriptionController.text.trim().isEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Fehlercode und Beschreibung sind erforderlich')),
+                        );
+                      }
+                      return;
                     }
 
-                    final inspectionError = InspectionDoorError(
-                      inspectionDoorId: _inspectionDoorId!,
-                      errorId: insertedError.errorId ?? 0,
-                      errorCode: insertedError.code,
-                      notes: notesController.text,
-                      quantity: 1,
-                      severity: insertedError.severity,
+                    final provisionalError = ErrorCatalog(
+                      code: codeController.text.trim(),
+                      description: descriptionController.text.trim(),
+                      category: categoryController.text.trim().isNotEmpty ? categoryController.text.trim() : 'provisional',
+                      severity: severityController.text,
+                      recommendation: recommendationController.text.trim(),
+                      normReference: normReferenceController.text.trim(),
+                      status: 'Pending',
                     );
-                    
-                    if (widget.isManagerMode) {
-                      await DatabaseService.insertInspectionDoorError(inspectionError);
-                    } else {
-                      await LocalDatabaseService.insertInspectionDoorError(inspectionError);
-                    }
-                    
-                    if (mounted) {
-                      Navigator.pop(context);
-                      _loadData();
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Provisorischer Fehler wurde hinzugefügt und zur Genehmigung eingereicht'),
-                          backgroundColor: Colors.orange,
-                        ),
+
+                    try {
+                      ErrorCatalog insertedError;
+                      if (widget.isManagerMode) {
+                        await DatabaseService.insertErrorCatalog(provisionalError);
+                        final errors = await DatabaseService.searchErrorCatalog(provisionalError.code);
+                        insertedError = errors.firstWhere(
+                          (e) => e.code == provisionalError.code,
+                          orElse: () => provisionalError,
+                        );
+                      } else {
+                        await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
+                        final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
+                        insertedError = errors.firstWhere(
+                          (e) => e.code == provisionalError.code,
+                          orElse: () => provisionalError,
+                        );
+                      }
+
+                      if (_inspectionDoorId == null) {
+                        throw Exception('Keine Inspektions-Sitzung gefunden');
+                      }
+
+                      final inspectionError = InspectionDoorError(
+                        inspectionDoorId: _inspectionDoorId!,
+                        errorId: insertedError.errorId ?? 0,
+                        errorCode: insertedError.code,
+                        notes: notesController.text,
+                        quantity: 1,
+                        severity: insertedError.severity,
+                        attachments: dialogPhotos.where((p) => p.isNotEmpty).join(','),
                       );
+
+                      if (widget.isManagerMode) {
+                        await DatabaseService.insertInspectionDoorError(inspectionError);
+                      } else {
+                        await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+                      }
+
+                      if (mounted) {
+                        Navigator.pop(context);
+                        _loadData();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Provisorischer Fehler wurde hinzugefügt und zur Genehmigung eingereicht'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Fehler beim Hinzufügen: $e')),
+                        );
+                      }
                     }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Fehler beim Hinzufügen: $e')),
-                      );
-                    }
-                  }
-                },
-                child: Text('Provisorisch hinzufügen'),
-              ),
-          ],
-        ),
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Provisorisch hinzufügen'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -887,9 +1409,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: _getStatusColor(error.resolutionStatus ?? 'open'),
+                                  backgroundColor: _getStatusColor(error.resolutionStatus),
                                   child: Icon(
-                                    _getStatusIcon(error.resolutionStatus ?? 'open'),
+                                    _getStatusIcon(error.resolutionStatus),
                                     color: Colors.white,
                                   ),
                                 ),
@@ -919,14 +1441,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                         Container(
                                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                        color: _getSeverityColor(error.severity ?? 'medium').withOpacity(0.2),
+                                        color: _getSeverityColor(error.severity).withOpacity(0.2),
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
-                                        _getSeverityDisplay(error.severity ?? 'medium'),
+                                        _getSeverityDisplay(error.severity),
                                             style: TextStyle(
                                               fontSize: 12,
-                                          color: _getSeverityColor(error.severity ?? 'medium'),
+                                          color: _getSeverityColor(error.severity),
                                             ),
                                           ),
                                         ),
@@ -1000,74 +1522,107 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
     final notesController = TextEditingController(text: error.notes);
     final validStatuses = ['open', 'in_progress', 'resolved'];
-    String status = validStatuses.contains((error.resolutionStatus ?? 'open').toLowerCase())
-        ? (error.resolutionStatus ?? 'open').toLowerCase()
+    String status = validStatuses.contains(error.resolutionStatus.toLowerCase())
+        ? error.resolutionStatus.toLowerCase()
         : 'open';
 
     if (!mounted) return;
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Fehler bearbeiten'),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Fehlercode: ${errorCatalog.code}', style: TextStyle(fontWeight: FontWeight.bold)),
-              SizedBox(height: 8),
-              Text('Beschreibung:', style: TextStyle(fontWeight: FontWeight.w500)),
-              Text(errorCatalog.description),
-              SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                decoration: InputDecoration(labelText: 'Status'),
-                value: status,
-                items: validStatuses.map((s) {
-                  return DropdownMenuItem<String>(
-                    value: s,
-                    child: Text(_getStatusDisplay(s)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    status = value;
-                  }
-                },
+      builder: (context) => StatefulBuilder(
+        builder: (context, editSetState) => AlertDialog(
+          title: const Text('Fehler bearbeiten'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Fehlercode: ${errorCatalog.code}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Beschreibung:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  Text(errorCatalog.description),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
+                    value: status,
+                    items: validStatuses.map((s) {
+                      return DropdownMenuItem<String>(
+                        value: s,
+                        child: Text(_getStatusDisplay(s)),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        editSetState(() => status = value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Notizen:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      TextButton.icon(
+                        onPressed: () async {
+                          await _openNotesInputDialog(notesController);
+                          editSetState(() {});
+                        },
+                        icon: const Icon(Icons.fullscreen, size: 16),
+                        label: const Text('Im Großfenster bearbeiten'),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: notesController,
+                    decoration: InputDecoration(
+                      labelText: 'Notizen',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.open_in_new),
+                        tooltip: 'Großansicht öffnen',
+                        onPressed: () async {
+                          await _openNotesInputDialog(notesController);
+                          editSetState(() {});
+                        },
+                      ),
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
               ),
-              SizedBox(height: 16),
-              TextField(
-                controller: notesController,
-                decoration: InputDecoration(
-                  labelText: 'Notizen',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Abbrechen'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final updatedError = error.copyWith(resolutionStatus: status, notes: notesController.text);
+                if (widget.isManagerMode) {
+                  await DatabaseService.insertInspectionDoorError(updatedError);
+                } else {
+                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                }
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                }
+              },
+              child: const Text('Speichern'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Abbrechen'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final updatedError = error.copyWith(resolutionStatus: status, notes: notesController.text);
-              if (widget.isManagerMode) {
-                await DatabaseService.insertInspectionDoorError(updatedError);
-              } else {
-                await LocalDatabaseService.insertInspectionDoorError(updatedError);
-              }
-              if (mounted) {
-                Navigator.pop(context);
-                _loadData();
-              }
-            },
-            child: Text('Speichern'),
-          ),
-        ],
       ),
     );
   }
@@ -1107,33 +1662,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
   Future<void> _addPhotoToError(InspectionDoorError error, ImageSource source) async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: source,
-        maxWidth: 1024,
-        maxHeight: 1024,
-        imageQuality: 80,
-      );
-      if (image == null) return;
-
-      final File file = File(image.path);
-      final int sizeInBytes = await file.length();
-      const int maxSizeInBytes = 60 * 1024 * 1024; // 60 MB
-
-      if (sizeInBytes > maxSizeInBytes) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Das Bild ist zu groß. Maximale Größe ist 60 MB (Aktuell: \${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB).'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-
-      final bytes = await file.readAsBytes();
-      final base64Str = base64Encode(bytes);
+      final base64Str = await _pickImageAsBase64(source);
+      if (base64Str == null) return;
 
       // Append base64 string to attachments (comma-separated)
       List<String> currentPhotos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();

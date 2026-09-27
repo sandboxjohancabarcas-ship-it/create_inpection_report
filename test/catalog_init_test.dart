@@ -29,11 +29,11 @@ void main() {
       expect(
         catalog.any((item) => item.code == '0.10'),
         isTrue,
-        reason: 'Entry with code "0.10" (Kein Zugang / Keine Prüfung) must be present',
+        reason: 'Entry with code "0.10" (Hinweis: Kein Zugang / Keine Prüfung) must be present',
       );
       expect(
         catalog.firstWhere((item) => item.code == '0.10').description,
-        equals('Kein Zugang / Keine Prüfung'),
+        equals('Hinweis: Kein Zugang / Keine Prüfung'),
       );
     });
 
