@@ -5,6 +5,7 @@ import '../models/models.dart';
 import 'error_consolidation_page.dart';
 import 'door_options_manager_page.dart';
 import '../widgets/batch_migration_dialog.dart';
+import '../widgets/create_project_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
@@ -265,6 +266,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.domain_add, color: Colors.greenAccent),
+            tooltip: 'Neues Projekt / Leervorlage für Inspektor anlegen',
+            onPressed: () => CreateProjectDialog.show(context),
+          ),
           IconButton(
             icon: const Icon(Icons.drive_file_move_outlined),
             onPressed: () => ExportCenterDialog.show(context),

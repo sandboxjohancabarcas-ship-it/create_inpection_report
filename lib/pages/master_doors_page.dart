@@ -1,12 +1,11 @@
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../models/door.dart';
 import '../services/database_service.dart';
 import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
-import '../widgets/import_report_dialog.dart';
+import '../widgets/create_project_dialog.dart';
 import '../widgets/batch_migration_dialog.dart';
 import '../widgets/migration_log_dialog.dart';
 import '../services/customer_normalizer.dart';
@@ -34,8 +33,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   ErrorSortOption _errorSort = ErrorSortOption.defaultSort;
   List<Map<String, dynamic>> _masterDoors = [];
   List<Map<String, dynamic>> _inspections = [];
-  List<String> _clients = ['Alle'];
-  String _selectedClient = 'Alle';
+  List<Map<String, String>> _projects = [{'projectNumber': 'Alle', 'objectAddress': ''}];
+  String _selectedProject = 'Alle';
   bool _isLoading = true;
   bool _isProcessing = false;
   bool _isSearching = false;
@@ -54,21 +53,28 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final clientsList = await DatabaseService.getAllMasterClients();
+      final projectsList = await DatabaseService.getAllMasterProjects();
       final doorsList = await DatabaseService.searchMasterDoorsDetailed(
         query: _searchController.text,
-        clientFilter: _selectedClient,
+        projectFilter: _selectedProject,
       );
       final inspectionsList = await DatabaseService.searchInspections(
         _searchController.text,
-        clientFilter: _selectedClient,
+        projectFilter: _selectedProject,
       );
 
       if (mounted) {
         setState(() {
-          _clients = ['Alle', ...clientsList];
-          if (!_clients.contains(_selectedClient)) {
-            _selectedClient = 'Alle';
+          _projects = [
+            {'projectNumber': 'Alle', 'objectAddress': ''},
+            ...projectsList,
+          ];
+          final projectExists = _projects.any((p) {
+            final key = p['projectNumber']!.isNotEmpty ? p['projectNumber']! : p['objectAddress']!;
+            return key == _selectedProject || p['projectNumber'] == _selectedProject;
+          });
+          if (!projectExists) {
+            _selectedProject = 'Alle';
           }
           _masterDoors = doorsList;
           _inspections = inspectionsList;
@@ -82,6 +88,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           SnackBar(content: Text('Fehler beim Laden: $e'), backgroundColor: Colors.red),
         );
       }
+    }
+  }
+
+  Future<void> _showCreateProjectDialog() async {
+    final result = await CreateProjectDialog.show(context);
+    if (result == true) {
+      await _loadData();
     }
   }
 
@@ -598,6 +611,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ] else ...[
             IconButton(
+              icon: const Icon(Icons.domain_add, color: Colors.greenAccent),
+              tooltip: 'Neues Projekt / Leere Techniker-Vorlage anlegen',
+              onPressed: _isProcessing ? null : _showCreateProjectDialog,
+            ),
+            IconButton(
               icon: const Icon(Icons.drive_folder_upload),
               tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
               onPressed: _isProcessing ? null : () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadData),
@@ -642,15 +660,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
         children: [
           Column(
             children: [
-              // Segmented Switcher: Prüfungen pro Kunde vs. Türen-Inventar
+              // Segmented Switcher: Projekte & Aufträge vs. Türen-Inventar
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: SegmentedButton<MasterViewMode>(
                   segments: const [
                     ButtonSegment<MasterViewMode>(
                       value: MasterViewMode.customerInspections,
-                      icon: Icon(Icons.business_center_outlined),
-                      label: Text('Aufträge & Prüfungen'),
+                      icon: Icon(Icons.domain_outlined),
+                      label: Text('Projekte & Aufträge'),
                     ),
                     ButtonSegment<MasterViewMode>(
                       value: MasterViewMode.doorInventory,
@@ -669,30 +687,46 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 ),
               ),
 
-              // Customer Filter Chips
-              if (_clients.length > 1)
+              // Project / Liegenschaft Filter Chips
+              if (_projects.length > 1)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.business, size: 18, color: Colors.grey),
+                      const Icon(Icons.domain, size: 18, color: Colors.blueAccent),
                       const SizedBox(width: 8),
-                      const Text('Kunde:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      const Text('Projekt:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
-                            children: _clients.map((client) {
-                              final isSelected = client == _selectedClient;
+                            children: _projects.map((proj) {
+                              final projNum = proj['projectNumber'] ?? '';
+                              final objAddr = proj['objectAddress'] ?? '';
+                              final projKey = projNum.isNotEmpty ? projNum : (objAddr.isNotEmpty ? objAddr : 'Alle');
+                              final isSelected = projKey == _selectedProject;
+
+                              String labelText = 'Alle Projekte';
+                              if (projKey != 'Alle') {
+                                if (projNum.isNotEmpty && objAddr.isNotEmpty) {
+                                  labelText = '$projNum ($objAddr)';
+                                } else if (projNum.isNotEmpty) {
+                                  labelText = projNum;
+                                } else {
+                                  labelText = objAddr;
+                                }
+                              }
+
                               return Padding(
                                 padding: const EdgeInsets.only(right: 6.0),
                                 child: ChoiceChip(
-                                  label: Text(client, style: const TextStyle(fontSize: 12)),
+                                  avatar: isSelected && projKey != 'Alle' ? const Icon(Icons.check, size: 14) : null,
+                                  label: Text(labelText, style: const TextStyle(fontSize: 12)),
                                   selected: isSelected,
                                   onSelected: (selected) {
                                     if (selected) {
-                                      setState(() => _selectedClient = client);
+                                      setState(() => _selectedProject = projKey);
                                       _loadData();
                                     }
                                   },
@@ -713,7 +747,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : _viewMode == MasterViewMode.customerInspections
-                        ? _buildCustomerInspectionsView()
+                        ? _buildProjectInspectionsView()
                         : _buildDoorInventoryView(),
               ),
             ],
@@ -783,40 +817,48 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                 )
               : null,
-      floatingActionButton: (_viewMode == MasterViewMode.doorInventory && !isDoorSelectionMode)
-          ? FloatingActionButton(
-              heroTag: 'fab_master_doors',
-              tooltip: 'Neue Tür im Master anlegen',
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DoorInspectionForm(isManagerMode: true),
-                  ),
-                );
-                _loadData();
-              },
-              child: const Icon(Icons.add),
-            )
-          : null,
+      floatingActionButton: (isDoorSelectionMode || isInspectionSelectionMode)
+          ? null
+          : (_viewMode == MasterViewMode.customerInspections
+              ? FloatingActionButton.extended(
+                  heroTag: 'fab_create_project',
+                  onPressed: _isProcessing ? null : _showCreateProjectDialog,
+                  icon: const Icon(Icons.domain_add),
+                  label: const Text('Neues Projekt / Vorlage'),
+                  tooltip: 'Neues Projekt / Adresse mit leerer Techniker-Vorlage anlegen',
+                )
+              : FloatingActionButton(
+                  heroTag: 'fab_master_doors',
+                  tooltip: 'Neue Tür im Master anlegen',
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DoorInspectionForm(isManagerMode: true),
+                      ),
+                    );
+                    _loadData();
+                  },
+                  child: const Icon(Icons.add),
+                )),
     );
   }
 
   // ─────────────────────────────────────────────────────────────
-  // VIEW 1: AUFTRÄGE & PRÜFUNGEN PRO KUNDE
+  // VIEW 1: PROJEKTE & AUFTRÄGE PRO LIEGENSCHAFT
   // ─────────────────────────────────────────────────────────────
 
-  Widget _buildCustomerInspectionsView() {
+  Widget _buildProjectInspectionsView() {
     if (_inspections.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.domain_disabled_outlined, size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              _searchController.text.isNotEmpty || _selectedClient != 'Alle'
-                  ? 'Keine passenden Aufträge gefunden'
+              _searchController.text.isNotEmpty || _selectedProject != 'Alle'
+                  ? 'Keine passenden Projekte / Aufträge gefunden'
                   : 'Keine Aufträge in der Hauptdatenbank vorhanden',
               style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
             ),
@@ -827,33 +869,51 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
     for (final insp in _inspections) {
-      final rawClient = insp['clientName']?.toString().trim() ?? '';
-      final canonicalDisplay = rawClient.isNotEmpty
-          ? CustomerNormalizer.getCanonicalName(rawClient)
-          : 'Ohne Kundenzuordnung';
-      grouped.putIfAbsent(canonicalDisplay, () => []).add(insp);
+      final pNum = insp['projectNumber']?.toString().trim() ?? '';
+      final addr = insp['objectAddress']?.toString().trim() ?? '';
+      final client = insp['clientName']?.toString().trim() ?? '';
+
+      String groupKey;
+      if (pNum.isNotEmpty) {
+        groupKey = addr.isNotEmpty ? '$pNum ($addr)' : pNum;
+      } else if (addr.isNotEmpty) {
+        groupKey = addr;
+      } else if (client.isNotEmpty) {
+        groupKey = CustomerNormalizer.getCanonicalName(client);
+      } else {
+        groupKey = 'Ohne Projektzuordnung';
+      }
+
+      grouped.putIfAbsent(groupKey, () => []).add(insp);
     }
 
-    final clientKeys = grouped.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final projectKeys = grouped.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: clientKeys.length,
+      itemCount: projectKeys.length,
       itemBuilder: (context, index) {
-        final clientName = clientKeys[index];
-        final clientInspections = grouped[clientName]!;
-        final totalDoors = clientInspections.fold<int>(
+        final projectGroupTitle = projectKeys[index];
+        final projectInspections = grouped[projectGroupTitle]!;
+        final totalDoors = projectInspections.fold<int>(
           0,
           (sum, item) => sum + ((item['doorCount'] as num?)?.toInt() ?? 0),
         );
 
-        final customerInspectionIds = clientInspections
+        final clients = projectInspections
+            .map((i) => i['clientName']?.toString().trim() ?? '')
+            .where((c) => c.isNotEmpty)
+            .toSet()
+            .map((c) => CustomerNormalizer.getCanonicalName(c))
+            .join(', ');
+
+        final projectInspectionIds = projectInspections
             .map((job) => job['inspectionId'] as int)
             .toList();
 
-        final bool isAllCustomerSelected = customerInspectionIds.isNotEmpty &&
-            customerInspectionIds.every((id) => _selectedInspectionIds.contains(id));
-        final bool isAnyCustomerSelected = customerInspectionIds
+        final bool isAllProjectSelected = projectInspectionIds.isNotEmpty &&
+            projectInspectionIds.every((id) => _selectedInspectionIds.contains(id));
+        final bool isAnyProjectSelected = projectInspectionIds
             .any((id) => _selectedInspectionIds.contains(id));
 
         return Card(
@@ -863,17 +923,26 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           child: ExpansionTile(
             initiallyExpanded: true,
             leading: Checkbox(
-              value: isAllCustomerSelected
+              value: isAllProjectSelected
                   ? true
-                  : (isAnyCustomerSelected ? null : false),
+                  : (isAnyProjectSelected ? null : false),
               tristate: true,
-              onChanged: (_) => _toggleCustomerInspections(customerInspectionIds),
+              onChanged: (_) => _toggleCustomerInspections(projectInspectionIds),
             ),
             title: Row(
               children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.domain, color: Colors.indigo.shade700, size: 20),
+                ),
                 Expanded(
                   child: Text(
-                    clientName,
+                    projectGroupTitle,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
@@ -884,11 +953,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           final messenger = ScaffoldMessenger.of(context);
                           setState(() => _isProcessing = true);
                           try {
-                            final exportPath = await DatabaseService.exportJobPackage(customerInspectionIds);
+                            final exportPath = await DatabaseService.exportJobPackage(projectInspectionIds);
                             if (mounted) {
                               messenger.showSnackBar(
                                 SnackBar(
-                                  content: Text('Kundenpaket ($clientName) mit ${customerInspectionIds.length} Auftrag/Aufträgen exportiert:\n$exportPath'),
+                                  content: Text('Projektpaket ($projectGroupTitle) mit ${projectInspectionIds.length} Auftrag/Aufträgen exportiert:\n$exportPath'),
                                   backgroundColor: Colors.green,
                                   duration: const Duration(seconds: 5),
                                 ),
@@ -906,17 +975,21 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         },
                   icon: const Icon(Icons.upload_file, color: Colors.green, size: 18),
                   label: Text(
-                    'Kundenpaket (${customerInspectionIds.length})',
+                    'Projektpaket (${projectInspectionIds.length})',
                     style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            subtitle: Text(
-              '${clientInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Text(
+                '${projectInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt' +
+                    (clients.isNotEmpty ? ' • Kunde: $clients' : ''),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+              ),
             ),
-            children: clientInspections.map((job) {
+            children: projectInspections.map((job) {
               final id = job['inspectionId'] as int;
               final isSelected = _selectedInspectionIds.contains(id);
               final bool locked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
@@ -998,6 +1071,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (job['clientName'] != null && job['clientName'].toString().isNotEmpty)
+                          Text(
+                            'Kunde: ${job['clientName']}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          ),
                         if (job['objectAddress'] != null && job['objectAddress'].toString().isNotEmpty)
                           Text(
                             'Objekt: ${job['objectAddress']}',
@@ -1052,7 +1130,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         MaterialPageRoute(
                           builder: (_) => InspectionDoorsPage(
                             inspectionId: id,
-                            title: '${job['clientName'] ?? clientName} - ${job['jobNumber'] ?? ""}',
+                            title: '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
                             isManagerMode: true,
                           ),
                         ),
@@ -1117,7 +1195,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     final int shownCount = displayDoors.length;
     final int withErrorsCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) > 0).length;
     final int errorFreeCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) == 0).length;
-    final bool isFilterActive = _searchController.text.isNotEmpty || _selectedClient != 'Alle' || _errorFilter != ErrorFilterOption.all;
+    final bool isFilterActive = _searchController.text.isNotEmpty || _selectedProject != 'Alle' || _errorFilter != ErrorFilterOption.all;
 
     return Column(
       children: [
@@ -1317,7 +1395,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             ? 'Keine Türen mit Mängeln gefunden'
                             : _errorFilter == ErrorFilterOption.errorFree
                                 ? 'Keine mängelfreien Türen gefunden'
-                                : _searchController.text.isNotEmpty || _selectedClient != 'Alle'
+                                : _searchController.text.isNotEmpty || _selectedProject != 'Alle'
                                     ? 'Keine passenden Türen gefunden'
                                     : 'Keine Türen in der Hauptdatenbank vorhanden',
                         style: TextStyle(fontSize: 16, color: Colors.grey.shade700),

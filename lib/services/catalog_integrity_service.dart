@@ -16,6 +16,31 @@ class SimilarCatalogMatch {
 }
 
 class CatalogIntegrityService {
+  /// Natural comparator for error codes (e.g., '0.1', '0.2', '0.10', '1.1', '11.2', 'ALT-1', etc.)
+  static int compareCodes(String codeA, String codeB) {
+    final regex = RegExp(r'(\d+|\D+)');
+    final matchesA = regex.allMatches(codeA).map((m) => m.group(0)!).toList();
+    final matchesB = regex.allMatches(codeB).map((m) => m.group(0)!).toList();
+
+    final minLen = min(matchesA.length, matchesB.length);
+    for (int i = 0; i < minLen; i++) {
+      final tokenA = matchesA[i];
+      final tokenB = matchesB[i];
+
+      final numA = int.tryParse(tokenA);
+      final numB = int.tryParse(tokenB);
+
+      if (numA != null && numB != null) {
+        final comp = numA.compareTo(numB);
+        if (comp != 0) return comp;
+      } else {
+        final comp = tokenA.toLowerCase().compareTo(tokenB.toLowerCase());
+        if (comp != 0) return comp;
+      }
+    }
+    return matchesA.length.compareTo(matchesB.length);
+  }
+
   /// Proposes the next available error code for a given category.
   /// E.g., for Category 'Feststellanlagen (FSA)' with existing '11.1'..'11.19', it proposes '11.20'.
   static String proposeNextCodeForCategory(

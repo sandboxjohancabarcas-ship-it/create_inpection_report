@@ -323,7 +323,37 @@ class ExcelDataImporter {
           }
         }
       }
-      logs.add('Neueste Inspektion "$latestSheetName": ${allCatalogConflicts.length} Mängelkatalog-Konflikte erkannt.');
+    logs.add('Neueste Inspektion "$latestSheetName": ${allCatalogConflicts.length} Mängelkatalog-Konflikte erkannt.');
+    }
+
+    // ── Resolve Canonical Object Address for this Project/File ──────────
+    final String fileNameAddress = _extractAddressFromFileName(fileName);
+    String canonicalObjectAddress = '';
+
+    // Check if filename contains a valid street address
+    if (_hasStreetOrNumber(fileNameAddress)) {
+      canonicalObjectAddress = fileNameAddress;
+    }
+
+    // Check sheets (newest sheet first)
+    for (final ds in doorSheetsToProcess) {
+      final sheetMeta = ds['meta'] as Map<String, dynamic>;
+      final rawAddr = (sheetMeta['objectAddress'] ?? '').toString().trim();
+      if (_hasStreetOrNumber(rawAddr)) {
+        if (canonicalObjectAddress.isEmpty || rawAddr.length > canonicalObjectAddress.length) {
+          canonicalObjectAddress = rawAddr;
+        }
+      }
+    }
+
+    // If still empty, use newest sheet's objectAddress if non-empty, otherwise fileNameAddress
+    if (canonicalObjectAddress.isEmpty) {
+      final newestAddr = (doorSheetsToProcess.firstOrNull?['meta']?['objectAddress'] ?? '').toString().trim();
+      canonicalObjectAddress = newestAddr.isNotEmpty ? newestAddr : fileNameAddress;
+    }
+
+    if (canonicalObjectAddress.isNotEmpty && projectNumber.isNotEmpty) {
+      logs.add('Projekt-Anker $projectNumber: Kanonische Liegenschaftsadresse festgelegt als: "$canonicalObjectAddress"');
     }
 
     for (final dsInfo in doorSheetsToProcess) {
@@ -333,6 +363,14 @@ class ExcelDataImporter {
       meta['projectNumber'] = projectNumber;
       if (meta['clientName'] != null && meta['clientName']!.isNotEmpty) {
         meta['clientName'] = CustomerNormalizer.getCanonicalName(meta['clientName']!);
+      }
+
+      // If sheet has a short/incomplete address or differs from canonical address for this project, unify it
+      final String rawSheetAddr = (meta['objectAddress'] ?? '').trim();
+      if (canonicalObjectAddress.isNotEmpty) {
+        if (rawSheetAddr.isEmpty || !_hasStreetOrNumber(rawSheetAddr) || projectNumber.isNotEmpty) {
+          meta['objectAddress'] = canonicalObjectAddress;
+        }
       }
 
       logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
@@ -913,6 +951,43 @@ class ExcelDataImporter {
       'inspectorName': inspector.isNotEmpty ? inspector : 'Gert',
       'jobNumber': jobNum.isNotEmpty ? jobNum : '25-12115-AB',
     };
+  }
+
+  static String _extractAddressFromFileName(String fileName) {
+    String clean = p.basenameWithoutExtension(fileName);
+    // Remove job number pattern e.g. 25-13966-AB or 26-14332-AB
+    clean = clean.replaceAll(RegExp(r'\b\d{2}-\d{5}(?:-[A-Za-z0-9]+)?\b'), ' ');
+    // Remove project number pattern e.g. P-000604 or P-003341
+    clean = clean.replaceAll(RegExp(r'\bP-\d+\b', caseSensitive: false), ' ');
+    // Remove suffixes like Türen, Türliste, final, Monteur, Wartung, KINCHI, TEST, Kopie, template
+    clean = clean.replaceAll(RegExp(r'\b(Türen|Türliste|final|Monteur|Wartung|KINCHI|TEST|Kopie|template|1 Monteur)\b', caseSensitive: false), ' ');
+    // Remove underscores and isolated hyphens (preserving hyphenated German street names like Carl-Cohn-Straße)
+    clean = clean.replaceAll('_', ' ');
+    clean = clean.replaceAll(RegExp(r'\s+-\s+'), ' ');
+    clean = clean.replaceAll(RegExp(r'^[-_\s]+|[-_\s]+$'), '');
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return clean;
+  }
+
+  static bool _hasStreetOrNumber(String address) {
+    if (address.isEmpty) return false;
+    final lower = address.toLowerCase();
+    final hasStreetKeyword = lower.contains('straße') ||
+        lower.contains('strasse') ||
+        lower.contains('str.') ||
+        lower.contains('str ') ||
+        lower.contains('weg') ||
+        lower.contains('platz') ||
+        lower.contains('allee') ||
+        lower.contains('ring') ||
+        lower.contains('damm') ||
+        lower.contains('ufer') ||
+        lower.contains('chaussee') ||
+        lower.contains('gasse') ||
+        lower.contains('krug') ||
+        lower.contains('bogen');
+    final hasNumber = RegExp(r'\d+').hasMatch(address);
+    return hasStreetKeyword && hasNumber;
   }
 
   static bool _isSummaryOrFooterText(String str) {

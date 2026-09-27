@@ -119,6 +119,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         _codeControllers[key]?.text = proposed;
       }
 
+      // Sort catalog in natural numerical/code order (e.g., 0.1, 0.2, 0.10, 1.1, 1.2, etc.)
+      catalog.sort((a, b) => CatalogIntegrityService.compareCodes(a.code, b.code));
+
       setState(() {
         _existingCatalog = catalog;
         _isLoading = false;
@@ -789,8 +792,10 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                   helperText: 'Dieser Mangel wird für die importierten Türen verwendet.',
                 ),
                 hint: const Text('Bitte Katalog-Eintrag wählen...'),
-                items: _existingCatalog
+                items: (_existingCatalog
                     .where((e) => e.category != 'Altdaten' && !e.code.toUpperCase().startsWith('ALT-'))
+                    .toList()
+                  ..sort((a, b) => CatalogIntegrityService.compareCodes(a.code, b.code)))
                     .map((item) {
                   return DropdownMenuItem<String>(
                     value: item.code,

@@ -136,5 +136,35 @@ void main() {
       expect(match!.existing.code, equals('11.19'));
       expect(match.similarityPercentage, greaterThanOrEqualTo(75));
     });
+
+    test('compareCodes correctly sorts error codes in natural numeric order', () {
+      final unsortedCodes = [
+        '1.10',
+        '0.2',
+        '11.1',
+        '0.1',
+        '1.2',
+        '0.10',
+        '0.9',
+        '1.1',
+        '11.10',
+        '11.2',
+      ];
+
+      unsortedCodes.sort(CatalogIntegrityService.compareCodes);
+
+      expect(unsortedCodes, [
+        '0.1',
+        '0.2',
+        '0.9',
+        '0.10',
+        '1.1',
+        '1.2',
+        '1.10',
+        '11.1',
+        '11.2',
+        '11.10',
+      ]);
+    });
   });
 }

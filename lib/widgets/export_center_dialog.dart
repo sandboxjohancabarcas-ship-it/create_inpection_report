@@ -7,6 +7,7 @@ import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/services/pdf_export_service.dart';
+import '../utils/file_export_helper.dart';
 
 enum ExportScope { singleInspection, clientAudit, doorHistory }
 enum ExportFormat { excel, pdf, dbPackage }
@@ -173,7 +174,13 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           targetPath = p.join(exportDir, 'Inspektion_${safeJob}_$timestamp.pdf');
           await PdfExportService.exportSingleInspectionPdf(_selectedInspectionId!, targetPath);
         } else if (_selectedFormat == ExportFormat.dbPackage) {
-          targetPath = p.join(exportDir, 'Inspektion_${safeJob}_$timestamp.db');
+          final fileName = FileExportHelper.buildPackageFileName(
+            jobNumber: insp['jobNumber']?.toString() ?? insp['auftragsnummer']?.toString(),
+            projectNumber: insp['projectNumber']?.toString(),
+            objectAddress: insp['objectAddress']?.toString() ?? insp['clientName']?.toString(),
+            packageType: 'inspektion_paket',
+          );
+          targetPath = p.join(exportDir, fileName);
           await DatabaseService.exportJobPackage([_selectedInspectionId!], destinationPath: targetPath);
         }
       } else if (_selectedScope == ExportScope.clientAudit) {

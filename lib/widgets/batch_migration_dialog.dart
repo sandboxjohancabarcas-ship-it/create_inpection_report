@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:wartungstool/pages/door_conflict_review_page.dart';
 import 'package:wartungstool/pages/error_conflict_review_page.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
+import 'package:wartungstool/utils/error_log_export_helper.dart';
 import 'package:wartungstool/widgets/import_report_dialog.dart';
 
 class BatchMigrationDialog extends StatefulWidget {
@@ -43,12 +44,15 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
             .map((f) => File(f.path!))
             .toList();
 
-        await _startMigration(selectedFiles);
+        await _checkAndStartMigration(selectedFiles);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler bei der Dateiauswahl: $e'), backgroundColor: Colors.red),
+        await ErrorLogExportHelper.handleExceptionWithDialog(
+          context,
+          error: e,
+          stackTrace: stackTrace,
+          operation: 'Dateiauswahl für Batch-Migration',
         );
       }
     }
@@ -73,15 +77,40 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
           return;
         }
 
-        await _startMigration(folderFiles);
+        await _checkAndStartMigration(folderFiles);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler bei der Ordnerauswahl: $e'), backgroundColor: Colors.red),
+        await ErrorLogExportHelper.handleExceptionWithDialog(
+          context,
+          error: e,
+          stackTrace: stackTrace,
+          operation: 'Ordnerauswahl für Batch-Migration',
         );
       }
     }
+  }
+
+  Future<void> _checkAndStartMigration(List<File> files) async {
+    // Check compatibility for any SQLite package files before migrating
+    for (final file in files) {
+      final ext = file.path.split('.').last.toLowerCase();
+      if (['db', 'db3', 'sqlite', 'wartung'].contains(ext)) {
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(file.path, targetVersion: 16);
+        if (compat.hasVersionMismatch) {
+          if (!mounted) return;
+          final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
+            context,
+            compatibility: compat,
+            fileName: file.path.split(Platform.pathSeparator).last,
+          );
+          if (!proceed) return;
+          break; // Warn once per batch
+        }
+      }
+    }
+
+    await _startMigration(files);
   }
 
   Future<void> _startMigration(List<File> files) async {
@@ -92,24 +121,25 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       _currentFileName = 'Vorbereitung...';
     });
 
-    final result = await BatchMigrationService.migrateFiles(
-      files,
-      onProgress: (current, total, filename) {
-        if (mounted) {
-          setState(() {
-            _currentFileIndex = current;
-            _totalFilesCount = total;
-            _currentFileName = filename;
-          });
-        }
-      },
-    );
+    try {
+      final result = await BatchMigrationService.migrateFiles(
+        files,
+        onProgress: (current, total, filename) {
+          if (mounted) {
+            setState(() {
+              _currentFileIndex = current;
+              _totalFilesCount = total;
+              _currentFileName = filename;
+            });
+          }
+        },
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    Navigator.pop(context); // Close migration dialog
+      Navigator.pop(context); // Close migration dialog
 
-    widget.onMigrationCompleted?.call();
+      widget.onMigrationCompleted?.call();
 
     // Route error/catalog conflicts (unlisted defect headers or code collisions) to review page first if present
     if (result.catalogConflicts.isNotEmpty && mounted) {
@@ -142,17 +172,20 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       await ImportReportDialog.show(context, result.aggregatedReport);
     }
 
-    if (result.skippedFilesCount > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${result.compliantFilesProcessed} Datei(en) migriert. '
-            '${result.skippedFilesCount} nicht-konforme/ungültige Datei(en) übersprungen.',
-          ),
-          backgroundColor: Colors.blueGrey,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+    } catch (e, stackTrace) {
+      if (mounted) {
+        Navigator.pop(context); // Close migration dialog
+        await ErrorLogExportHelper.handleExceptionWithDialog(
+          context,
+          error: e,
+          stackTrace: stackTrace,
+          operation: 'Batch-Migration',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 

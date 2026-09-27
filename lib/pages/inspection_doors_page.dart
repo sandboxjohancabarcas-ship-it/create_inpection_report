@@ -15,6 +15,8 @@ import '../widgets/master_portal_home_button.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
+enum InspectionDoorFilter { all, inspected, pending, withErrors, errorFree }
+
 class InspectionDoorsPage extends StatefulWidget {
   final int inspectionId;
   final String title;
@@ -34,6 +36,8 @@ class InspectionDoorsPage extends StatefulWidget {
 class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   List<Door> _doors = [];
   Map<int, DoorErrorSummary> _errorSummaries = {};
+  Map<int, String> _doorInspectionStatuses = {};
+  InspectionDoorFilter _filter = InspectionDoorFilter.all;
   bool _isLoading = true;
   final Set<int> _selectedDoorIds = {};
   bool _isSyncing = false;
@@ -57,6 +61,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     setState(() => _isLoading = true);
     List<Door> doors;
     Map<int, DoorErrorSummary> errorSummaries;
+    Map<int, String> statuses;
     _selectedDoorIds.clear();
 
     final Map<String, dynamic>? inspData = widget.isManagerMode
@@ -77,19 +82,34 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
         query: _searchController.text,
       );
       errorSummaries = await DatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
+      statuses = await DatabaseService.getDoorInspectionStatuses(widget.inspectionId);
     } else {
       doors = await LocalDatabaseService.getDoorsByInspectionId(
         widget.inspectionId,
         query: _searchController.text,
       );
       errorSummaries = await LocalDatabaseService.getDoorErrorSummariesForInspection(widget.inspectionId);
+      statuses = await LocalDatabaseService.getDoorInspectionStatuses(widget.inspectionId);
     }
 
     setState(() {
       _doors = doors;
       _errorSummaries = errorSummaries;
+      _doorInspectionStatuses = statuses;
       _isLoading = false;
     });
+  }
+
+  bool _isDoorInspected(Door door) {
+    if (door.id == null) return false;
+    final status = (_doorInspectionStatuses[door.id] ?? '').trim().toLowerCase();
+    return status == 'inspected' ||
+        status == 'geprüft' ||
+        status == 'completed' ||
+        status == 'passed' ||
+        status == 'failed' ||
+        status == 'done' ||
+        status == 'bearbeitet';
   }
 
   void _toggleSelection(int id) {
@@ -135,8 +155,15 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     setState(() => _isSyncing = true);
     String? tempExportPath;
     try {
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final defaultFileName = 'tueren_export_$timestamp.db';
+      final inspData = widget.isManagerMode
+          ? await DatabaseService.getInspectionById(widget.inspectionId)
+          : await LocalDatabaseService.getInspectionById(widget.inspectionId);
+      final defaultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
+        projectNumber: inspData?['projectNumber']?.toString(),
+        objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
+        packageType: widget.isManagerMode ? 'inspektion_paket' : 'inspektion_ergebnis',
+      );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 
       await LocalDatabaseService.exportSelectiveJobPackage(_selectedDoorIds.toList(), tempExportPath);
@@ -421,12 +448,74 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     );
   }
 
-  Widget _buildLeadingIcon(DoorErrorSummary summary, bool isSelected, bool isSelectionMode, int doorId) {
+  Widget _buildInspectionStatusBadge(bool isInspected) {
+    if (isInspected) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.shade400),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle, size: 12, color: Colors.green.shade800),
+            const SizedBox(width: 4),
+            Text(
+              'Geprüft',
+              style: TextStyle(
+                color: Colors.green.shade800,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.hourglass_top, size: 12, color: Colors.orange.shade900),
+            const SizedBox(width: 4),
+            Text(
+              'Offen',
+              style: TextStyle(
+                color: Colors.orange.shade900,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Widget _buildLeadingIcon(Door door, DoorErrorSummary summary, bool isSelected, bool isSelectionMode, int doorId) {
     if (isSelectionMode) {
       return Checkbox(
         value: isSelected,
         onChanged: (_) => _toggleSelection(doorId),
       );
+    }
+
+    if (!widget.isManagerMode) {
+      final isInspected = _isDoorInspected(door);
+      if (!isInspected) {
+        return CircleAvatar(
+          backgroundColor: Colors.grey.shade100,
+          child: Icon(Icons.hourglass_empty, color: Colors.grey.shade600, size: 20),
+        );
+      }
     }
 
     Color iconColor;
@@ -447,7 +536,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       case DoorErrorState.noErrors:
         iconColor = Colors.green.shade700;
         avatarBg = Colors.green.shade50;
-        icon = Icons.door_front_door;
+        icon = widget.isManagerMode ? Icons.door_front_door : Icons.task_alt;
         break;
     }
 
@@ -601,7 +690,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
             ),
           if (!isSelectionMode)
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 6.0),
               child: TextField(
                 controller: _searchController,
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
@@ -626,60 +715,220 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 onChanged: (value) => _loadDoors(),
               ),
             ),
-          if (!_isLoading)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _searchController.text.isNotEmpty
-                        ? 'Gefundene Türen: ${_doors.length}'
-                        : 'Türen gesamt: ${_doors.length}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                    ),
+
+          // Progress & Filter Header Card (Inspector only)
+          if (!widget.isManagerMode && !_isLoading && _doors.isNotEmpty && !isSelectionMode) ...[
+            Builder(
+              builder: (context) {
+                final totalCount = _doors.length;
+                final inspectedCount = _doors.where((d) => _isDoorInspected(d)).length;
+                final pendingCount = totalCount - inspectedCount;
+                final doorsWithErrorsCount = _doors.where((d) => (_errorSummaries[d.id]?.openErrors ?? 0) > 0 || (_errorSummaries[d.id]?.totalErrors ?? 0) > 0).length;
+                final doorsErrorFreeCount = _doors.where((d) => _isDoorInspected(d) && (_errorSummaries[d.id]?.totalErrors ?? 0) == 0).length;
+                final progress = totalCount > 0 ? (inspectedCount / totalCount) : 0.0;
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
                   ),
-                ],
-              ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                inspectedCount == totalCount ? Icons.task_alt : Icons.pending_actions,
+                                size: 18,
+                                color: inspectedCount == totalCount ? Colors.green.shade700 : Colors.indigo.shade700,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Prüffortschritt: $inspectedCount von $totalCount geprüft (${(progress * 100).toInt()}%)',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: pendingCount == 0 ? Colors.green.shade50 : Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: pendingCount == 0 ? Colors.green.shade300 : Colors.orange.shade300,
+                              ),
+                            ),
+                            child: Text(
+                              pendingCount == 0 ? 'Komplett' : '$pendingCount offen',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: pendingCount == 0 ? Colors.green.shade900 : Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: Colors.grey.shade200,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            inspectedCount == totalCount ? Colors.green : Colors.indigo,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Filter Chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ChoiceChip(
+                              label: Text('Alle ($totalCount)'),
+                              selected: _filter == InspectionDoorFilter.all,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.all),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.check_circle, size: 14, color: _filter == InspectionDoorFilter.inspected ? Colors.white : Colors.green.shade700),
+                              label: Text('Geprüft ($inspectedCount)'),
+                              selected: _filter == InspectionDoorFilter.inspected,
+                              selectedColor: Colors.green.shade700,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.inspected),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.hourglass_top, size: 14, color: _filter == InspectionDoorFilter.pending ? Colors.white : Colors.orange.shade800),
+                              label: Text('Offen ($pendingCount)'),
+                              selected: _filter == InspectionDoorFilter.pending,
+                              selectedColor: Colors.orange.shade800,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.pending),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.error, size: 14, color: _filter == InspectionDoorFilter.withErrors ? Colors.white : Colors.red.shade700),
+                              label: Text('Mit Mängeln ($doorsWithErrorsCount)'),
+                              selected: _filter == InspectionDoorFilter.withErrors,
+                              selectedColor: Colors.red.shade700,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.withErrors),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.check_circle_outline, size: 14, color: _filter == InspectionDoorFilter.errorFree ? Colors.white : Colors.teal.shade700),
+                              label: Text('Mängelfrei ($doorsErrorFreeCount)'),
+                              selected: _filter == InspectionDoorFilter.errorFree,
+                              selectedColor: Colors.teal.shade700,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.errorFree),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
+          ],
+
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _doors.isEmpty
-                    ? Center(
-                        child: Text(
-                          _searchController.text.isNotEmpty
-                              ? 'Keine Türen für "${_searchController.text}" gefunden'
-                              : 'Keine Türen in diesem Auftrag gefunden',
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: _doors.length,
+                : Builder(
+                    builder: (context) {
+                      final displayDoors = widget.isManagerMode
+                          ? _doors
+                          : _doors.where((door) {
+                              if (_filter == InspectionDoorFilter.inspected && !_isDoorInspected(door)) {
+                                return false;
+                              }
+                              if (_filter == InspectionDoorFilter.pending && _isDoorInspected(door)) {
+                                return false;
+                              }
+                              if (_filter == InspectionDoorFilter.withErrors) {
+                                final summary = _errorSummaries[door.id];
+                                if (summary == null || (summary.openErrors == 0 && summary.totalErrors == 0)) {
+                                  return false;
+                                }
+                              }
+                              if (_filter == InspectionDoorFilter.errorFree) {
+                                final summary = _errorSummaries[door.id];
+                                if (summary != null && summary.totalErrors > 0) return false;
+                                if (!_isDoorInspected(door)) return false;
+                              }
+                              return true;
+                            }).toList();
+
+                      if (displayDoors.isEmpty) {
+                        return Center(
+                          child: Text(
+                            _searchController.text.isNotEmpty || _filter != InspectionDoorFilter.all
+                                ? 'Keine passenden Türen gefunden'
+                                : 'Keine Türen in diesem Auftrag gefunden',
+                            style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        itemCount: displayDoors.length,
                         itemBuilder: (context, index) {
-                          final door = _doors[index];
+                          final door = displayDoors[index];
                           final isSelected = _selectedDoorIds.contains(door.id);
-                          final summary = _errorSummaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
+                          final isInspected = !widget.isManagerMode && _isDoorInspected(door);
+                          final summary = _errorSummaries[door.id] ??
+                              const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
 
                           return Card(
-                            color: isSelected ? Colors.blue.shade50 : null,
-                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            color: isSelected
+                                ? Colors.blue.shade50
+                                : (isInspected ? Colors.green.shade50.withValues(alpha: 0.15) : null),
+                            margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            elevation: isInspected ? 2 : 1,
+                            shape: RoundedRectangleBorder(
+                              side: BorderSide(
+                                color: isSelected
+                                    ? Colors.blue.shade400
+                                    : (isInspected ? Colors.green.shade300 : Colors.grey.shade200),
+                                width: isSelected ? 2.0 : (isInspected ? 1.5 : 1.0),
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             child: ListTile(
-                              leading: _buildLeadingIcon(summary, isSelected, isSelectionMode, door.id!),
+                              leading: _buildLeadingIcon(door, summary, isSelected, isSelectionMode, door.id!),
                               title: Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      'Tür ${door.doorNumber}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Tür ${door.doorNumber}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                        ),
+                                        if (!widget.isManagerMode) ...[
+                                          const SizedBox(width: 8),
+                                          _buildInspectionStatusBadge(isInspected),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                   if (!isSelectionMode) _buildErrorStatusBadge(summary),
                                 ],
                               ),
-                              subtitle: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Text('ID: ${door.doorAlias ?? "Kein Alias"}\n${door.floor} | ${door.roomDesignation}'),
+                              ),
                               trailing: isSelectionMode
                                   ? null
                                   : Row(
@@ -745,7 +994,9 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                             ),
                           );
                         },
-                      ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

@@ -451,6 +451,16 @@ class LocalDatabaseService {
           .where((i) => inspectionIds.contains(i['inspectionId']))
           .toList();
 
+      // Ensure any inspections not returned in the first 100 search results are fetched directly
+      for (int id in inspectionIds) {
+        if (!selectedInspections.any((i) => i['inspectionId'] == id)) {
+          final directInsp = await DatabaseService.getInspectionById(id);
+          if (directInsp != null) {
+            selectedInspections.add(directInsp);
+          }
+        }
+      }
+
       // Fetch the full approved catalog to include in the package
       final masterCatalog = await DatabaseService.getAllErrorCatalog(status: 'Approved');
 
@@ -474,7 +484,10 @@ class LocalDatabaseService {
         }
 
         for (var junction in allJunctions) {
-          await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
+          final Map<String, dynamic> jData = Map<String, dynamic>.from(junction);
+          // New exported packages start in Pending (Offen) state for inspector
+          jData['status'] = 'Pending';
+          await txn.insert('inspection_doors', jData, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         for (var door in doorList) {
@@ -599,26 +612,6 @@ class LocalDatabaseService {
 
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
-    if (door.id == null && door.doorAlias != null && door.doorAlias!.trim().isNotEmpty) {
-      final existing = await db.query(
-        'doors',
-        columns: ['id'],
-        where: 'doorAlias = ?',
-        whereArgs: [door.doorAlias!.trim()],
-        limit: 1,
-      );
-      if (existing.isNotEmpty) {
-        final existingId = existing.first['id'] as int;
-        final doorToUpdate = door.copyWith(id: existingId);
-        await db.update(
-          'doors',
-          doorToUpdate.toMap(),
-          where: 'id = ?',
-          whereArgs: [existingId],
-        );
-        return existingId;
-      }
-    }
     return await db.insert(
       'doors', 
       door.toMap(), 
@@ -779,6 +772,52 @@ class LocalDatabaseService {
         newObjectAddress: newAddress,
       );
     }
+  }
+
+  /// Updates project number and/or building address across all inspections in local DB.
+  static Future<int> updateProjectBuildingData({
+    required String currentProjectNumber,
+    required String newProjectNumber,
+    required String newObjectAddress,
+  }) async {
+    final db = await getDb();
+    final cleanCurrentProj = currentProjectNumber.trim();
+    final cleanNewProj = newProjectNumber.trim();
+    final cleanNewAddress = newObjectAddress.trim();
+
+    if (cleanCurrentProj.isEmpty && cleanNewProj.isEmpty) {
+      return 0;
+    }
+
+    final String searchProj = cleanCurrentProj.isNotEmpty ? cleanCurrentProj : cleanNewProj;
+    final targetInspections = await db.query(
+      'inspections',
+      columns: ['inspectionId', 'clientName'],
+      where: 'projectNumber = ?',
+      whereArgs: [searchProj],
+    );
+
+    int updatedCount = 0;
+    for (final insp in targetInspections) {
+      final inspId = insp['inspectionId'] as int;
+      final clientName = (insp['clientName'] as String? ?? '').trim();
+      await db.update(
+        'inspections',
+        {
+          'projectNumber': cleanNewProj,
+          'objectAddress': cleanNewAddress,
+        },
+        where: 'inspectionId = ?',
+        whereArgs: [inspId],
+      );
+      await updateDoorAliasesForInspection(
+        inspectionId: inspId,
+        newClientName: clientName,
+        newObjectAddress: cleanNewAddress,
+      );
+      updatedCount++;
+    }
+    return updatedCount;
   }
 
   static Future<void> updateDoorAliasesForInspection({
@@ -1034,6 +1073,58 @@ class LocalDatabaseService {
     );
   }
 
+  /// Updates or sets the status of a door for a given inspection (e.g. 'Inspected', 'Pending').
+  static Future<void> updateInspectionDoorStatus({
+    required int inspectionId,
+    required int doorId,
+    required String status,
+    String? notes,
+  }) async {
+    final db = await getDb();
+    final existing = await db.query(
+      'inspection_doors',
+      columns: ['id'],
+      where: 'inspectionId = ? AND doorId = ?',
+      whereArgs: [inspectionId, doorId],
+      limit: 1,
+    );
+
+    final Map<String, dynamic> data = {'status': status};
+    if (notes != null) data['notes'] = notes;
+
+    if (existing.isNotEmpty) {
+      await db.update(
+        'inspection_doors',
+        data,
+        where: 'inspectionId = ? AND doorId = ?',
+        whereArgs: [inspectionId, doorId],
+      );
+    } else {
+      data['inspectionId'] = inspectionId;
+      data['doorId'] = doorId;
+      await db.insert('inspection_doors', data);
+    }
+  }
+
+  /// Returns a map of doorId -> status for all doors in an inspection.
+  static Future<Map<int, String>> getDoorInspectionStatuses(int inspectionId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_doors',
+      columns: ['doorId', 'status'],
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+    final Map<int, String> map = {};
+    for (final r in rows) {
+      final doorId = r['doorId'] as int?;
+      if (doorId != null) {
+        map[doorId] = (r['status'] as String? ?? '').trim();
+      }
+    }
+    return map;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // INSPECTION DOOR ERRORS (LOCAL)
   // ─────────────────────────────────────────────────────────────
@@ -1261,14 +1352,37 @@ class LocalDatabaseService {
     }
   }
 
-  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
+  /// Fetches all error catalog entries from the local database.
+  static Future<List<ErrorCatalog>> getAllErrorCatalog({String? status}) async {
     final db = await getDb();
+    final List<Map<String, dynamic>> maps;
+    if (status != null && status.isNotEmpty) {
+      maps = await db.query(
+        'error_catalog',
+        where: 'status = ?',
+        whereArgs: [status],
+        orderBy: 'category, code',
+      );
+    } else {
+      maps = await db.query(
+        'error_catalog',
+        orderBy: 'category, code',
+      );
+    }
+    return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
+  }
+
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query, {int? limit}) async {
+    final db = await getDb();
+    if (query.trim().isEmpty) {
+      return getAllErrorCatalog();
+    }
     final maps = await db.query(
       'error_catalog',
       where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
       whereArgs: ['%$query%', '%$query%'],
       orderBy: 'category, code',
-      limit: 50,
+      limit: limit,
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
@@ -1440,6 +1554,7 @@ class LocalDatabaseService {
         final pCatalog = await packageDb.query('error_catalog');
 
         // 1. Merge catalog
+        final localCatalogColumns = await _getTableColumns(txn, 'error_catalog');
         final catalogList = pCatalog.map((m) => ErrorCatalog.fromMap(m)).toList();
         for (var cat in catalogList) {
           final existing = await txn.query('error_catalog', where: 'code = ?', whereArgs: [cat.code], limit: 1);
@@ -1447,12 +1562,18 @@ class LocalDatabaseService {
             newCatalogProposals.add('${cat.code}: ${cat.description}');
           }
         }
-        await _batchInsertCatalog(txn, catalogList, ConflictAlgorithm.replace);
+        for (final cat in catalogList) {
+          final catData = cat.toMap();
+          catData.removeWhere((k, _) => !localCatalogColumns.contains(k));
+          await txn.insert('error_catalog', catData, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
 
         // 2. Merge inspections
+        final localInspectionColumns = await _getTableColumns(txn, 'inspections');
         for (var insp in pInspections) {
           final data = Map<String, dynamic>.from(insp);
           data.remove('doorCount');
+          data.removeWhere((k, _) => !localInspectionColumns.contains(k));
           final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '') as String;
           final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
           if (existing.isNotEmpty) {
@@ -1464,18 +1585,30 @@ class LocalDatabaseService {
         }
 
         // 3. Merge doors
+        final localDoorColumns = await _getTableColumns(txn, 'doors');
         for (var door in pDoors) {
-          final alias = door['doorAlias'] as String? ?? '';
-          final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+          final incomingDoor = Door.fromMap(door);
+          final alias = incomingDoor.doorAlias ?? (door['doorAlias'] as String? ?? '');
+          final existing = alias.isNotEmpty
+              ? await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1)
+              : <Map<String, dynamic>>[];
           if (existing.isNotEmpty) {
             updatedDoorsCount++;
           } else {
             newDoorsCount++;
           }
-          await txn.insert('doors', door, conflictAlgorithm: ConflictAlgorithm.replace);
+          final doorMap = incomingDoor.toMap();
+          final data = <String, dynamic>{};
+          for (final entry in doorMap.entries) {
+            if (localDoorColumns.contains(entry.key)) {
+              data[entry.key] = entry.value;
+            }
+          }
+          await txn.insert('doors', data, conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         // 4. Merge junctions
+        final localJunctionColumns = await _getTableColumns(txn, 'inspection_doors');
         for (var junction in pJunctions) {
           final doorId = junction['doorId'] as int?;
           final doorRow = doorId != null ? pDoors.firstWhere((d) => d['id'] == doorId, orElse: () => {}) : {};
@@ -1490,7 +1623,9 @@ class LocalDatabaseService {
               whereArgs: [junction['inspectionId'], junction['doorId']],
               limit: 1);
 
-          await txn.insert('inspection_doors', junction, conflictAlgorithm: ConflictAlgorithm.replace);
+          final junctionData = Map<String, dynamic>.from(junction);
+          junctionData.removeWhere((k, _) => !localJunctionColumns.contains(k));
+          await txn.insert('inspection_doors', junctionData, conflictAlgorithm: ConflictAlgorithm.replace);
 
           final errCount = pErrors.where((e) => e['inspectionDoorId'] == junctionId).length;
           doorChanges.add(DoorChangeItem(
@@ -1504,13 +1639,16 @@ class LocalDatabaseService {
         }
 
         // 5. Merge errors
+        final localErrorColumns = await _getTableColumns(txn, 'inspection_door_errors');
         totalErrorsImported = pErrors.length;
         for (var err in pErrors) {
           final att = err['attachments'] as String? ?? '';
           if (att.isNotEmpty) {
             totalAttachmentsImported++;
           }
-          await txn.insert('inspection_door_errors', err, conflictAlgorithm: ConflictAlgorithm.replace);
+          final errData = Map<String, dynamic>.from(err);
+          errData.removeWhere((k, _) => !localErrorColumns.contains(k));
+          await txn.insert('inspection_door_errors', errData, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
 
@@ -1529,6 +1667,15 @@ class LocalDatabaseService {
       );
     } finally {
       await packageDb.close();
+    }
+  }
+
+  static Future<Set<String>> _getTableColumns(DatabaseExecutor db, String tableName) async {
+    try {
+      final rows = await db.rawQuery('PRAGMA table_info($tableName)');
+      return rows.map((r) => r['name'] as String).toSet();
+    } catch (_) {
+      return {};
     }
   }
 }

@@ -10,6 +10,7 @@ import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../utils/file_export_helper.dart';
+import '../utils/error_log_export_helper.dart';
 
 // Define a typedef for the complex list type to improve readability and avoid parsing issues
 typedef InspectionList = List<Map<String, dynamic>>;
@@ -296,8 +297,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         inspectionIds: ids,
       );
 
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final defaultFileName = 'inspektion_paket_$timestamp.db';
+      Map<String, dynamic>? firstInsp;
+      if (ids.isNotEmpty) {
+        firstInsp = await DatabaseService.getInspectionById(ids.first);
+      }
+      final defaultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: firstInsp?['jobNumber']?.toString() ?? firstInsp?['auftragsnummer']?.toString(),
+        projectNumber: firstInsp?['projectNumber']?.toString(),
+        objectAddress: firstInsp?['objectAddress']?.toString() ?? firstInsp?['clientName']?.toString(),
+        packageType: 'inspektion_paket',
+      );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
       
       await LocalDatabaseService.exportWorkingDb(tempExportPath);
@@ -351,6 +360,19 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
         if (!mounted) return;
 
+        // Check compatibility before import (Inspector result package uses local schema v16)
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 16);
+        if (compat.hasVersionMismatch) {
+          final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
+            context,
+            compatibility: compat,
+            fileName: p.basename(path),
+          );
+          if (!proceed) return;
+        }
+
+        if (!mounted) return;
+
         // User Confirmation Dialog (German UX)
         final confirm = await showDialog<bool>(
           context: context,
@@ -388,10 +410,14 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
           _refreshInspections();
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
+        await ErrorLogExportHelper.handleExceptionWithDialog(
+          context,
+          error: e,
+          stackTrace: stackTrace,
+          packagePath: null,
+          operation: 'Ergebnis-Paket importieren',
         );
       }
     } finally {

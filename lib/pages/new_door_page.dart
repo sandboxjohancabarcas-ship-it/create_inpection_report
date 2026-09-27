@@ -29,6 +29,8 @@ class DoorInspectionForm extends StatefulWidget {
 }
 
 class _DoorInspectionFormState extends State<DoorInspectionForm> {
+  Door? _activeDoor;
+
   // Controllers for inspection metadata
   late TextEditingController customerNameController;
   late TextEditingController customerAddressController;
@@ -101,13 +103,27 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   @override
   void initState() {
     super.initState();
+    _activeDoor = widget.door;
     _loadOptionsAndData();
+  }
+
+  void _updateGeneratedAlias() {
+    if (_activeDoor == null && !isAliasManuallyEdited) {
+      final gen = Door.generateAlias(
+        projectNumber: projectNumberController.text,
+        pos: pos,
+        floor: floorController.text,
+        doorNumber: doorNumberController.text,
+      );
+      provisionalAliasController.text = gen;
+      doorAliasController.text = gen;
+    }
   }
 
   Future<void> _loadOptionsAndData() async {
     await DoorOptionsService.ensureLoaded();
 
-    final d = widget.door;
+    final d = _activeDoor;
 
     // Note: These will now be handled separately from the Door object
     customerNameController = TextEditingController();
@@ -133,38 +149,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
 
     if (d == null) {
-      void updateAlias() {
-        if (!isAliasManuallyEdited) {
-          final gen = Door.generateAlias(
-            projectNumber: projectNumberController.text,
-            pos: pos,
-            floor: floorController.text,
-            doorNumber: doorNumberController.text,
-          );
-          provisionalAliasController.text = gen;
-          if (doorAliasController.text.isEmpty || doorAliasController.text == provisionalAliasController.text) {
-            doorAliasController.text = gen;
-          }
-        }
-      }
-      customerNameController.addListener(updateAlias);
-      customerAddressController.addListener(updateAlias);
-      doorNumberController.addListener(updateAlias);
-      floorController.addListener(updateAlias);
-      projectNumberController.addListener(updateAlias);
+      customerNameController.addListener(_updateGeneratedAlias);
+      customerAddressController.addListener(_updateGeneratedAlias);
+      doorNumberController.addListener(_updateGeneratedAlias);
+      floorController.addListener(_updateGeneratedAlias);
+      projectNumberController.addListener(_updateGeneratedAlias);
     }
-
-    doorAliasController.addListener(() {
-      final expected = Door.generateAlias(
-        projectNumber: projectNumberController.text,
-        pos: pos,
-        floor: floorController.text,
-        doorNumber: doorNumberController.text,
-      );
-      if (doorAliasController.text != expected && doorAliasController.text.isNotEmpty) {
-        isAliasManuallyEdited = true;
-      }
-    });
 
     // Initialize booleans
     escapeSignage = d?.escapeRouteSignage ?? false;
@@ -290,7 +280,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       });
 
       // Calculate next available door position (pos) for this inspection if creating a new door
-      if (widget.door == null && currentInspectionId != null) {
+      if (_activeDoor == null && currentInspectionId != null) {
         final existingDoors = await db.rawQuery('''
           SELECT MAX(d.pos) as maxPos, COUNT(d.id) as doorCount
           FROM doors d
@@ -304,7 +294,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           setState(() {
             pos = (maxPos != null && maxPos > 0) ? maxPos + 1 : count + 1;
           });
+        } else {
+          setState(() {
+            pos = 1;
+          });
         }
+        _updateGeneratedAlias();
       }
     } else if (widget.inspectionId != null) {
       setState(() {
@@ -316,7 +311,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   }
 
   Future<void> _syncErrorNotes() async {
-    final doorId = widget.door?.id;
+    final doorId = _activeDoor?.id ?? widget.door?.id;
     if (doorId == null || currentInspectionId == null) {
       if (mounted) {
         setState(() {
@@ -538,7 +533,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       alias = prov;
     }
     return Door(
-      id: widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
+      id: _activeDoor?.id ?? widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
       pos: pos,
       doorAlias: alias,
       provisionalAlias: prov,
@@ -624,37 +619,58 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       inspectionData['inspectionId'] = currentInspectionId;
     }
 
+    final isNew = (_activeDoor == null);
     if (widget.isManagerMode) {
       final id = await DatabaseService.insertInspection(inspectionData);
       setState(() => currentInspectionId = id);
 
-      if (widget.door == null) {
+      if (isNew) {
         final insertedDoorId = await DatabaseService.insertDoor(door);
+        _activeDoor = door.copyWith(id: insertedDoorId);
         await DatabaseService.insertInspectionDoor({
           'inspectionId': currentInspectionId,
           'doorId': insertedDoorId,
-          'status': 'InProgress',
-          'notes': '',
+          'status': 'Inspected',
+          'notes': notesController.text,
           'attachments': null,
         });
       } else {
-        await DatabaseService.updateDoor(door);
+        final updatedDoor = door.copyWith(id: _activeDoor!.id);
+        await DatabaseService.updateDoor(updatedDoor);
+        if (currentInspectionId != null && updatedDoor.id != null) {
+          await DatabaseService.updateInspectionDoorStatus(
+            inspectionId: currentInspectionId!,
+            doorId: updatedDoor.id!,
+            status: 'Inspected',
+            notes: notesController.text,
+          );
+        }
       }
     } else {
       final id = await LocalDatabaseService.insertInspection(inspectionData);
       setState(() => currentInspectionId = id);
 
-      if (widget.door == null) {
+      if (isNew) {
         final insertedDoorId = await LocalDatabaseService.insertDoor(door);
+        _activeDoor = door.copyWith(id: insertedDoorId);
         await LocalDatabaseService.insertInspectionDoor({
           'inspectionId': currentInspectionId,
           'doorId': insertedDoorId,
-          'status': 'InProgress',
-          'notes': '',
+          'status': 'Inspected',
+          'notes': notesController.text,
           'attachments': null,
         });
       } else {
-        await LocalDatabaseService.updateDoor(door);
+        final updatedDoor = door.copyWith(id: _activeDoor!.id);
+        await LocalDatabaseService.updateDoor(updatedDoor);
+        if (currentInspectionId != null && updatedDoor.id != null) {
+          await LocalDatabaseService.updateInspectionDoorStatus(
+            inspectionId: currentInspectionId!,
+            doorId: updatedDoor.id!,
+            status: 'Inspected',
+            notes: notesController.text,
+          );
+        }
       }
     }
 
@@ -832,13 +848,57 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      if (widget.door != null && currentInspectionId != null) {
+                      if (_activeDoor == null) {
+                        // Persist new door draft first so errors can be linked to this specific door
+                        final door = buildDoor();
+                        final Map<String, dynamic> inspectionData = {
+                          'clientName': customerNameController.text,
+                          'objectAddress': customerAddressController.text,
+                          'date': inspectionDate.toIso8601String(),
+                          'contactPerson': contactPersonController.text,
+                          'inspectorName': inspectorNameController.text,
+                          'jobNumber': jobNumberController.text,
+                          'projectNumber': projectNumberController.text,
+                        };
+                        if (currentInspectionId != null) {
+                          inspectionData['inspectionId'] = currentInspectionId;
+                        }
+                        int insertedDoorId;
+                        if (widget.isManagerMode) {
+                          final id = await DatabaseService.insertInspection(inspectionData);
+                          setState(() => currentInspectionId = id);
+                          insertedDoorId = await DatabaseService.insertDoor(door);
+                          await DatabaseService.insertInspectionDoor({
+                            'inspectionId': currentInspectionId,
+                            'doorId': insertedDoorId,
+                            'status': 'Pending',
+                            'notes': notesController.text,
+                            'attachments': null,
+                          });
+                        } else {
+                          final id = await LocalDatabaseService.insertInspection(inspectionData);
+                          setState(() => currentInspectionId = id);
+                          insertedDoorId = await LocalDatabaseService.insertDoor(door);
+                          await LocalDatabaseService.insertInspectionDoor({
+                            'inspectionId': currentInspectionId,
+                            'doorId': insertedDoorId,
+                            'status': 'Pending',
+                            'notes': notesController.text,
+                            'attachments': null,
+                          });
+                        }
+                        setState(() {
+                          _activeDoor = door.copyWith(id: insertedDoorId);
+                        });
+                      }
+
+                      if (_activeDoor != null && currentInspectionId != null) {
                         await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => ErrorManagementPage(
-                              doorId: widget.door!.id!,
-                              doorNumber: widget.door!.doorNumber,
+                              doorId: _activeDoor!.id!,
+                              doorNumber: _activeDoor!.doorNumber.isNotEmpty ? _activeDoor!.doorNumber : doorNumberController.text,
                               inspectionId: currentInspectionId!,
                               isManagerMode: widget.isManagerMode,
                               isReadOnly: _isFormReadOnly,
@@ -846,10 +906,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                           ),
                         );
                         await _syncErrorNotes();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Bitte speichern Sie zuerst die Tür')),
-                        );
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -1001,6 +1057,14 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               controller: doorAliasController,
               enabled: true, // Editable at all times for inspector and manager
               maxLength: 32,
+              onChanged: (val) {
+                if (val.trim().isEmpty) {
+                  isAliasManuallyEdited = false;
+                  _updateGeneratedAlias();
+                } else {
+                  isAliasManuallyEdited = true;
+                }
+              },
               decoration: InputDecoration(
                 labelText: "Barcode",
                 helperText: "Physischer Barcode / QR-Code der Tür (jederzeit bearbeitbar)",

@@ -222,6 +222,14 @@ class Door {
         'notes': notes,
       };
 
+  static bool _parseBool(dynamic val) {
+    if (val == null) return false;
+    if (val is bool) return val;
+    if (val is int) return val == 1;
+    final str = val.toString().trim().toLowerCase();
+    return str == '1' || str == 'true' || str == 'ja' || str == 'x' || str == 'j';
+  }
+
   static String _parseEscapeDoorControl(dynamic val) {
     if (val == null) return 'Nein';
     if (val is bool) return val ? 'Ja ?' : 'Nein';
@@ -250,23 +258,21 @@ class Door {
         closerType: map['closerType'] ?? '',
         closingSequenceSystem: map['closingSequenceSystem'] ?? '',
         lockDimensions: map['lockDimensions'] ?? '',
-        closerOnHingeSide: map['closerOnHingeSide'] == 1,
-        closerOnOppositeSide: map['closerOnOppositeSide'] == 1,
-        lintelHeightInsideOver1m: map['lintelHeightInsideOver1m'] == 1,
-        lintelHeightOutsideOver1m: map['lintelHeightOutsideOver1m'] == 1 || map['lintelHeightOver1m'] == 1,
+        closerOnHingeSide: _parseBool(map['closerOnHingeSide']),
+        closerOnOppositeSide: _parseBool(map['closerOnOppositeSide']),
+        lintelHeightInsideOver1m: _parseBool(map['lintelHeightInsideOver1m']) || _parseBool(map['lintelHeightUnder1m']),
+        lintelHeightOutsideOver1m: _parseBool(map['lintelHeightOutsideOver1m']) || _parseBool(map['lintelHeightOver1m']),
         escapeDoorControl: _parseEscapeDoorControl(map['escapeDoorControl']),
         accessControl: map['accessControl'] ?? '',
-        escapeRouteSituation: map['escapeRouteSituation'] == 1,
-        escapeRouteSignage: map['escapeRouteSignage'] == 1,
-        blindCylinder: map['blindCylinder'] == 1,
-        pzCylinder: map['pzCylinder'] == 1,
+        escapeRouteSituation: _parseBool(map['escapeRouteSituation']),
+        escapeRouteSignage: _parseBool(map['escapeRouteSignage']),
+        blindCylinder: _parseBool(map['blindCylinder']),
+        pzCylinder: _parseBool(map['pzCylinder']),
         fittingType: map['fittingType'] ?? '',
         panicFunction: map['panicFunction'] ?? '',
-        escapeDirectionRespected:
-            map['escapeDirectionRespected'] == 1,
-        fullPanicStandWing:
-            map['fullPanicStandWing'] == 1,
-        doorFunctionOK: map['doorFunctionOK'] == 1,
+        escapeDirectionRespected: _parseBool(map['escapeDirectionRespected']),
+        fullPanicStandWing: _parseBool(map['fullPanicStandWing']),
+        doorFunctionOK: _parseBool(map['doorFunctionOK']),
         approvalNumber: map['approvalNumber'] ?? '?',
         manufacturerNumber: map['manufacturerNumber'] ?? '?',
         dopNumber: map['dopNumber'] ?? '?',

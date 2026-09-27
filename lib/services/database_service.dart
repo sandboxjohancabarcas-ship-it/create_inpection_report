@@ -10,6 +10,7 @@ import 'package:path/path.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'dart:convert';
 import 'local_database_service.dart';
+import '../utils/file_export_helper.dart';
 
 /// Master Database Service (Manager Role)
 /// This is a stub to allow the project to compile for Windows.
@@ -417,26 +418,6 @@ class DatabaseService {
 
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
-    if (door.id == null && door.doorAlias != null && door.doorAlias!.trim().isNotEmpty) {
-      final existing = await db.query(
-        'doors',
-        columns: ['id'],
-        where: 'doorAlias = ?',
-        whereArgs: [door.doorAlias!.trim()],
-        limit: 1,
-      );
-      if (existing.isNotEmpty) {
-        final existingId = existing.first['id'] as int;
-        final doorToUpdate = door.copyWith(id: existingId);
-        await db.update(
-          'doors',
-          doorToUpdate.toMap(),
-          where: 'id = ?',
-          whereArgs: [existingId],
-        );
-        return existingId;
-      }
-    }
     final id = await db.insert(
       'doors',
       door.toMap(),
@@ -765,6 +746,70 @@ class DatabaseService {
     }
   }
 
+  /// Updates project number and/or building address across all inspections linked to a project/building anchor.
+  /// When projectNumber or objectAddress changes, door aliases for all affected doors are also refreshed.
+  static Future<int> updateProjectBuildingData({
+    required String currentProjectNumber,
+    required String newProjectNumber,
+    required String newObjectAddress,
+  }) async {
+    final db = await getDb();
+    final cleanCurrentProj = currentProjectNumber.trim();
+    final cleanNewProj = newProjectNumber.trim();
+    final cleanNewAddress = newObjectAddress.trim();
+
+    if (cleanCurrentProj.isEmpty && cleanNewProj.isEmpty) {
+      return 0;
+    }
+
+    final String searchProj = cleanCurrentProj.isNotEmpty ? cleanCurrentProj : cleanNewProj;
+    final targetInspections = await db.query(
+      'inspections',
+      columns: ['inspectionId', 'clientName'],
+      where: 'projectNumber = ?',
+      whereArgs: [searchProj],
+    );
+
+    int updatedCount = 0;
+    for (final insp in targetInspections) {
+      final inspId = insp['inspectionId'] as int;
+      final clientName = (insp['clientName'] as String? ?? '').trim();
+      await db.update(
+        'inspections',
+        {
+          'projectNumber': cleanNewProj,
+          'objectAddress': cleanNewAddress,
+        },
+        where: 'inspectionId = ?',
+        whereArgs: [inspId],
+      );
+      // Re-generate aliases if projectNumber or objectAddress changed
+      await updateDoorAliasesForInspection(
+        inspectionId: inspId,
+        newClientName: clientName,
+        newObjectAddress: cleanNewAddress,
+      );
+      updatedCount++;
+    }
+    return updatedCount;
+  }
+
+  /// Returns all distinct projects (projectNumber + objectAddress) for Liegenschaft filtering
+  static Future<List<Map<String, String>>> getAllMasterProjects() async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT projectNumber, objectAddress
+      FROM inspections
+      WHERE (projectNumber IS NOT NULL AND TRIM(projectNumber) != '')
+         OR (objectAddress IS NOT NULL AND TRIM(objectAddress) != '')
+      ORDER BY projectNumber ASC, objectAddress ASC
+    ''');
+    return rows.map((r) => {
+      'projectNumber': (r['projectNumber'] as String? ?? '').trim(),
+      'objectAddress': (r['objectAddress'] as String? ?? '').trim(),
+    }).toList();
+  }
+
   /// Updates doorAliases for all doors linked to an inspection when customer or address changes.
   /// If alias generation causes a collision with an existing door in the DB, it merges the duplicate doors.
   static Future<void> updateDoorAliasesForInspection({
@@ -881,13 +926,23 @@ class DatabaseService {
 
   /// Searches inspections by client name, job number, date, or door number.
   /// Supports optional clientFilter and limits results to 100 jobs for performance.
-  static Future<List<Map<String, dynamic>>> searchInspections(String query, {String clientFilter = ''}) async {
+  static Future<List<Map<String, dynamic>>> searchInspections(
+    String query, {
+    String clientFilter = '',
+    String projectFilter = '',
+  }) async {
     final db = await getDb();
     final cleanQuery = query.trim();
     final cleanClient = clientFilter.trim();
+    final cleanProject = projectFilter.trim();
 
     String where = '1=1';
     List<dynamic> whereArgs = [];
+
+    if (cleanProject.isNotEmpty && cleanProject != 'Alle') {
+      where += ' AND (i.projectNumber = ? OR i.objectAddress = ?)';
+      whereArgs.addAll([cleanProject, cleanProject]);
+    }
 
     if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
       where += ' AND i.clientName = ?';
@@ -897,7 +952,8 @@ class DatabaseService {
     if (cleanQuery.isNotEmpty) {
       final searchTerm = '%$cleanQuery%';
       where += ''' AND (
-        i.clientName LIKE ? 
+        i.projectNumber LIKE ?
+        OR i.clientName LIKE ? 
         OR i.jobNumber LIKE ? 
         OR i.date LIKE ? 
         OR i.objectAddress LIKE ? 
@@ -909,7 +965,7 @@ class DatabaseService {
       )''';
       whereArgs.addAll([
         searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
-        searchTerm, searchTerm, searchTerm, searchTerm
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm
       ]);
     }
 
@@ -1202,6 +1258,58 @@ class DatabaseService {
     );
   }
 
+  /// Updates or sets the status of a door for a given inspection (e.g. 'Inspected', 'Pending').
+  static Future<void> updateInspectionDoorStatus({
+    required int inspectionId,
+    required int doorId,
+    required String status,
+    String? notes,
+  }) async {
+    final db = await getDb();
+    final existing = await db.query(
+      'inspection_doors',
+      columns: ['id'],
+      where: 'inspectionId = ? AND doorId = ?',
+      whereArgs: [inspectionId, doorId],
+      limit: 1,
+    );
+
+    final Map<String, dynamic> data = {'status': status};
+    if (notes != null) data['notes'] = notes;
+
+    if (existing.isNotEmpty) {
+      await db.update(
+        'inspection_doors',
+        data,
+        where: 'inspectionId = ? AND doorId = ?',
+        whereArgs: [inspectionId, doorId],
+      );
+    } else {
+      data['inspectionId'] = inspectionId;
+      data['doorId'] = doorId;
+      await db.insert('inspection_doors', data);
+    }
+  }
+
+  /// Returns a map of doorId -> status for all doors in an inspection.
+  static Future<Map<int, String>> getDoorInspectionStatuses(int inspectionId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_doors',
+      columns: ['doorId', 'status'],
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+    final Map<int, String> map = {};
+    for (final r in rows) {
+      final doorId = r['doorId'] as int?;
+      if (doorId != null) {
+        map[doorId] = (r['status'] as String? ?? '').trim();
+      }
+    }
+    return map;
+  }
+
   static Future<Set<String>> _getInspectionDoorErrorsColumns(DatabaseExecutor db) async {
     try {
       final List<Map<String, dynamic>> tableInfo = await db.rawQuery('PRAGMA table_info(inspection_door_errors)');
@@ -1331,13 +1439,20 @@ class DatabaseService {
   static Future<List<Map<String, dynamic>>> searchMasterDoorsDetailed({
     String query = '',
     String clientFilter = '',
+    String projectFilter = '',
   }) async {
     final db = await getDb();
     final cleanQuery = query.trim();
     final cleanClient = clientFilter.trim();
+    final cleanProject = projectFilter.trim();
 
     String whereClause = '1=1';
     List<dynamic> whereArgs = [];
+
+    if (cleanProject.isNotEmpty && cleanProject != 'Alle') {
+      whereClause += ' AND (i.projectNumber = ? OR i.objectAddress = ?)';
+      whereArgs.addAll([cleanProject, cleanProject]);
+    }
 
     if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
       whereClause += ' AND i.clientName = ?';
@@ -1354,13 +1469,14 @@ class DatabaseService {
           OR d.roomNumber LIKE ?
           OR d.floor LIKE ?
           OR d.manufacturer LIKE ?
+          OR i.projectNumber LIKE ?
           OR i.clientName LIKE ?
           OR i.jobNumber LIKE ?
         )
       ''';
       whereArgs.addAll([
         searchTerm, searchTerm, searchTerm, searchTerm,
-        searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
       ]);
     }
 
@@ -1368,6 +1484,7 @@ class DatabaseService {
       SELECT 
         d.*,
         i.inspectionId,
+        i.projectNumber,
         i.clientName,
         i.jobNumber,
         i.objectAddress,
@@ -1402,8 +1519,17 @@ class DatabaseService {
     if (exportPath.isEmpty) {
       final Directory docDir = await getApplicationDocumentsDirectory();
       final String downloadPath = (await getDownloadsDirectory())?.path ?? docDir.path;
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      exportPath = join(downloadPath, 'inspektion_paket_$timestamp.db');
+      Map<String, dynamic>? inspData;
+      if (inspectionIds.isNotEmpty) {
+        inspData = await getInspectionById(inspectionIds.first);
+      }
+      final defaultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
+        projectNumber: inspData?['projectNumber']?.toString(),
+        objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
+        packageType: 'inspektion_paket',
+      );
+      exportPath = join(downloadPath, defaultFileName);
     }
     
     await LocalDatabaseService.downloadJobPackage(inspectionIds: inspectionIds);
@@ -1640,14 +1766,17 @@ class DatabaseService {
   }
 
   /// Search error catalog by code or description
-  static Future<List<ErrorCatalog>> searchErrorCatalog(String query) async {
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query, {int? limit}) async {
     final db = await getDb();
+    if (query.trim().isEmpty) {
+      return getAllErrorCatalog();
+    }
     final maps = await db.query(
       'error_catalog',
       where: 'LOWER(code) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?)',
       whereArgs: ['%$query%', '%$query%'],
       orderBy: 'category, code',
-      limit: 50,
+      limit: limit,
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
@@ -1728,6 +1857,7 @@ class DatabaseService {
 
         // 2. Merge ALL Catalog Entries and build catalogIdMap (packageId → masterId)
         //    Keyed by `code` so IDs are remapped correctly across different DBs.
+        final masterCatalogColumns = await _getTableColumns(txn, 'error_catalog');
         final Map<int, int> catalogIdMap = {};
         for (var row in pCatalog) {
           final packageCatalogId = row['errorId'] as int;
@@ -1735,6 +1865,8 @@ class DatabaseService {
           final status = row['status'] as String? ?? 'Approved';
           final description = row['description'] as String? ?? '';
           final data = Map<String, dynamic>.from(row)..remove('errorId');
+          data.removeWhere((key, _) => !masterCatalogColumns.contains(key));
+          
           int masterCatalogId;
           final existing = await txn.query('error_catalog',
               columns: ['errorId'], where: 'code = ?', whereArgs: [code], limit: 1);
@@ -1758,14 +1890,17 @@ class DatabaseService {
         }
 
         // 3. Merge Doors and create ID Mapping (Package ID -> Master ID)
+        final masterDoorColumns = await _getTableColumns(txn, 'doors');
         Map<int, int> doorIdMap = {};
         for (var row in pDoors) {
-          final alias = row['doorAlias'] as String;
+          final alias = row['doorAlias'] as String? ?? '';
           final packageId = row['id'] as int;
           final incomingDoor = Door.fromMap(row);
 
           // Check if door exists in Master by Alias
-          final existing = await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+          final existing = alias.isNotEmpty 
+              ? await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1)
+              : <Map<String, dynamic>>[];
           final Door? existingDoor = existing.isNotEmpty ? Door.fromMap(existing.first) : null;
 
           // Detect new custom dropdown options introduced by Inspector
@@ -1775,7 +1910,14 @@ class DatabaseService {
           }
           
           int masterId;
-          final data = Map<String, dynamic>.from(row)..remove('id');
+          // Sanitize door data through canonical Door model and target schema column whitelist
+          final doorMap = incomingDoor.toMap()..remove('id');
+          final data = <String, dynamic>{};
+          for (final entry in doorMap.entries) {
+            if (masterDoorColumns.contains(entry.key)) {
+              data[entry.key] = entry.value;
+            }
+          }
           
           if (existing.isNotEmpty) {
             masterId = existing.first['id'] as int;
@@ -1789,6 +1931,7 @@ class DatabaseService {
         }
 
         // 4. Merge Inspections and create ID Mapping (Package ID -> Master ID)
+        final masterInspectionColumns = await _getTableColumns(txn, 'inspections');
         Map<int, int> inspectionIdMap = {};
         for (var row in pInspections) {
           final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
@@ -1797,7 +1940,10 @@ class DatabaseService {
           final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
           
           int masterId;
-          final data = Map<String, dynamic>.from(row)..remove('inspectionId');
+          final data = Map<String, dynamic>.from(row)
+            ..remove('inspectionId')
+            ..remove('doorCount');
+          data.removeWhere((key, _) => !masterInspectionColumns.contains(key));
 
           if (existing.isNotEmpty) {
             masterId = existing.first['inspectionId'] as int;
@@ -1811,6 +1957,7 @@ class DatabaseService {
         }
 
         // 5. Merge Junctions (inspection_doors)
+        final masterJunctionColumns = await _getTableColumns(txn, 'inspection_doors');
         Map<int, int> junctionIdMap = {};
         for (var row in pJunctions) {
           final packageId = row['id'] as int;
@@ -1824,6 +1971,7 @@ class DatabaseService {
             ..['doorId'] = mDoorId
             ..['inspectionId'] = mInspId
             ..remove('id');
+          data.removeWhere((key, _) => !masterJunctionColumns.contains(key));
 
           final isNewJunction = (await txn.query('inspection_doors', 
               where: 'inspectionId = ? AND doorId = ?', whereArgs: [mInspId, mDoorId], limit: 1)).isEmpty;
@@ -1876,6 +2024,7 @@ class DatabaseService {
         }
 
         // 6. Merge Errors — remap errorId via catalogIdMap to prevent FK mismatch
+        final masterErrorColumns = await _getTableColumns(txn, 'inspection_door_errors');
         for (var row in pErrors) {
           final mJunctionId = junctionIdMap[row['inspectionDoorId']];
           if (mJunctionId == null) continue;
@@ -1902,6 +2051,7 @@ class DatabaseService {
             ..['errorId'] = mappedErrorId
             ..['errorCode'] = errorCode
             ..remove('id');
+          data.removeWhere((key, _) => !masterErrorColumns.contains(key));
 
           List<Map<String, dynamic>> existingErrors = [];
           if (errorCode.isNotEmpty) {
@@ -1969,6 +2119,15 @@ class DatabaseService {
       );
     } finally {
       await packageDb.close();
+    }
+  }
+
+  static Future<Set<String>> _getTableColumns(DatabaseExecutor db, String tableName) async {
+    try {
+      final rows = await db.rawQuery('PRAGMA table_info($tableName)');
+      return rows.map((r) => r['name'] as String).toSet();
+    } catch (_) {
+      return {};
     }
   }
 

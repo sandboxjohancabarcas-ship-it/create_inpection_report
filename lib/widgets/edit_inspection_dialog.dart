@@ -49,6 +49,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
   late TextEditingController _inspectorNameController;
   late DateTime _selectedDate;
   bool _isLocked = false;
+  bool _syncBuildingData = true;
   bool _isLoading = true;
   bool _isSaving = false;
 
@@ -163,6 +164,16 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
 
       if (widget.isManagerMode) {
         await DatabaseService.updateInspection(updatedData);
+        if (_syncBuildingData) {
+          final originalProj = widget.initialData?['projectNumber']?.toString().trim() ?? _projectNumberController.text.trim();
+          if (originalProj.isNotEmpty || _projectNumberController.text.trim().isNotEmpty) {
+            await DatabaseService.updateProjectBuildingData(
+              currentProjectNumber: originalProj,
+              newProjectNumber: _projectNumberController.text.trim(),
+              newObjectAddress: _objectAddressController.text.trim(),
+            );
+          }
+        }
       } else {
         await LocalDatabaseService.updateInspection(updatedData);
       }
@@ -213,7 +224,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                       controller: _clientNameController,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
                       decoration: const InputDecoration(
-                        labelText: 'Kunde / Aufraggeber',
+                        labelText: 'Kunde / Auftraggeber',
                         prefixIcon: Icon(Icons.person),
                         border: OutlineInputBorder(),
                       ),
@@ -223,11 +234,13 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _objectAddressController,
+                      readOnly: !widget.isManagerMode,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                      decoration: const InputDecoration(
-                        labelText: 'Objektadresse / Projekt',
-                        prefixIcon: Icon(Icons.location_on),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'Objektadresse / Liegenschaft',
+                        prefixIcon: const Icon(Icons.location_on),
+                        border: const OutlineInputBorder(),
+                        helperText: !widget.isManagerMode ? 'Liegenschaftsdaten sind fest verankert' : null,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -245,11 +258,13 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _projectNumberController,
+                      readOnly: !widget.isManagerMode,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                      decoration: const InputDecoration(
-                        labelText: 'Projektnummer',
-                        prefixIcon: Icon(Icons.folder),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'Projektnummer (Gebäude-Anker)',
+                        prefixIcon: const Icon(Icons.folder),
+                        border: const OutlineInputBorder(),
+                        helperText: !widget.isManagerMode ? 'Projektnummer wird vom Manager verwaltet' : null,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -288,7 +303,16 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                       ),
                     ),
                     if (widget.isManagerMode) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
+                      CheckboxListTile(
+                        value: _syncBuildingData,
+                        onChanged: (val) => setState(() => _syncBuildingData = val ?? true),
+                        title: const Text('Liegenschaftsdaten für Projekt synchronisieren', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Aktualisiert Adresse & Projektnummer in allen historischen & aktuellen Aufträgen dieses Gebäudes', style: TextStyle(fontSize: 11)),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const SizedBox(height: 4),
                       SwitchListTile(
                         value: _isLocked,
                         title: const Text('Auftrag gesperrt (Sperrstatus)'),

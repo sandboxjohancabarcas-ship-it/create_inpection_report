@@ -11,6 +11,7 @@ import '../widgets/import_report_dialog.dart';
 import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
 import '../utils/file_export_helper.dart';
+import '../utils/error_log_export_helper.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
 import 'door_conflict_review_page.dart';
@@ -115,6 +116,19 @@ class _DoorListPageState extends State<DoorListPage> {
 
         if (!mounted) return;
 
+        // Check compatibility before showing import options
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 16);
+        if (compat.hasVersionMismatch) {
+          final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
+            context,
+            compatibility: compat,
+            fileName: p.basename(path),
+          );
+          if (!proceed) return;
+        }
+
+        if (!mounted) return;
+
         final String? action = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
@@ -164,10 +178,13 @@ class _DoorListPageState extends State<DoorListPage> {
           }
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import-Fehler: $e'), backgroundColor: Colors.red),
+        await ErrorLogExportHelper.handleExceptionWithDialog(
+          context,
+          error: e,
+          stackTrace: stackTrace,
+          operation: 'Inspektionspaket importieren',
         );
       }
     } finally {
@@ -191,8 +208,16 @@ class _DoorListPageState extends State<DoorListPage> {
 
       if (doorIdsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
 
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final defaultFileName = 'inspektion_ergebnis_$timestamp.db';
+      Map<String, dynamic>? inspData;
+      if (_selectedIds.isNotEmpty) {
+        inspData = await LocalDatabaseService.getInspectionById(_selectedIds.first);
+      }
+      final defaultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
+        projectNumber: inspData?['projectNumber']?.toString(),
+        objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
+        packageType: 'inspektion_ergebnis',
+      );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 
       await LocalDatabaseService.exportSelectiveJobPackage(

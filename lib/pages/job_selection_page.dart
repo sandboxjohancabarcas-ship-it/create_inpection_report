@@ -369,8 +369,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         inspectionIds: ids,
       );
 
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final defaultFileName = 'inspektion_paket_$timestamp.db';
+      Map<String, dynamic>? firstInsp;
+      if (ids.isNotEmpty) {
+        firstInsp = await DatabaseService.getInspectionById(ids.first);
+      }
+      final defaultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: firstInsp?['jobNumber']?.toString() ?? firstInsp?['auftragsnummer']?.toString(),
+        projectNumber: firstInsp?['projectNumber']?.toString(),
+        objectAddress: firstInsp?['objectAddress']?.toString() ?? firstInsp?['clientName']?.toString(),
+        packageType: 'inspektion_paket',
+      );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
       
       await LocalDatabaseService.exportWorkingDb(tempExportPath);

@@ -82,7 +82,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           }
         }
 
-        final catalogSuggestions = await LocalDatabaseService.searchErrorCatalog('');
+        final catalogSuggestions = await LocalDatabaseService.getAllErrorCatalog();
         final inspectionErrors = _inspectionDoorId != null
             ? await LocalDatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
             : <InspectionDoorError>[];
@@ -273,6 +273,16 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
   }
 
+  Future<void> _markDoorAsInspectedIfInspector() async {
+    if (!widget.isManagerMode) {
+      await LocalDatabaseService.updateInspectionDoorStatus(
+        inspectionId: widget.inspectionId,
+        doorId: widget.doorId,
+        status: 'Inspected',
+      );
+    }
+  }
+
   Future<void> _addCatalogError(ErrorCatalog error, String notes, {List<String> photos = const []}) async {
     if (_inspectionDoorId == null) {
       if (mounted) {
@@ -298,6 +308,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await DatabaseService.insertInspectionDoorError(inspectionError);
       } else {
         await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+        await _markDoorAsInspectedIfInspector();
       }
       _loadData();
       if (mounted) {
@@ -1240,6 +1251,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   await DatabaseService.insertInspectionDoorError(updatedError);
                 } else {
                   await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await _markDoorAsInspectedIfInspector();
                 }
                 if (mounted) {
                   Navigator.pop(context);
@@ -1613,6 +1625,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   await DatabaseService.insertInspectionDoorError(updatedError);
                 } else {
                   await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await _markDoorAsInspectedIfInspector();
                 }
                 if (mounted) {
                   Navigator.pop(context);
@@ -1646,6 +1659,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 await DatabaseService.deleteInspectionDoorError(error.id!);
               } else {
                 await LocalDatabaseService.deleteInspectionDoorError(error.id!);
+                await _markDoorAsInspectedIfInspector();
               }
               if (mounted) {
                 Navigator.pop(context);
@@ -1675,6 +1689,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await DatabaseService.insertInspectionDoorError(updatedError);
       } else {
         await LocalDatabaseService.insertInspectionDoorError(updatedError);
+        await _markDoorAsInspectedIfInspector();
       }
       
       _loadData();
@@ -1710,6 +1725,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await DatabaseService.insertInspectionDoorError(updatedError);
       } else {
         await LocalDatabaseService.insertInspectionDoorError(updatedError);
+        await _markDoorAsInspectedIfInspector();
       }
       
       _loadData();
