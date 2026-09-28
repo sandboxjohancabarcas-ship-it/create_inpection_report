@@ -83,11 +83,16 @@ void main() {
 
       // 1. Setup local DB with 2 doors
       final lDb = await LocalDatabaseService.getDb();
-      await lDb.insert('doors', {'doorNumber': 'D1', 'doorAlias': 'A1', 'pos': 1});
+      await lDb.delete('inspection_door_errors');
+      await lDb.delete('inspection_doors');
+      await lDb.delete('inspections');
+      await lDb.delete('doors');
+
+      final id1 = await lDb.insert('doors', {'doorNumber': 'D1', 'doorAlias': 'A1', 'pos': 1});
       await lDb.insert('doors', {'doorNumber': 'D2', 'doorAlias': 'A2', 'pos': 2});
 
-      // 2. Export only the first door (ID 1)
-      await LocalDatabaseService.exportSelectiveJobPackage([1], exportPath);
+      // 2. Export only the first door
+      await LocalDatabaseService.exportSelectiveJobPackage([id1], exportPath);
 
       // 3. Verify the exported file only contains 1 door
       final checkDb = await openDatabase(exportPath);

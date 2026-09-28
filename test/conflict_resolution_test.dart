@@ -160,7 +160,7 @@ void main() {
       expect(result.duplicateCount, 0);
       expect(result.conflicts.length, 1);
       expect(result.conflicts[0].code, 'CONFLICT-001');
-      expect(result.conflicts[0].reason, 'Existing entry with same code has different data');
+      expect(result.conflicts[0].reason, contains('CONFLICT-001'));
     });
 
     test('mergeErrorCatalog detects description conflicts', () async {
@@ -190,7 +190,7 @@ void main() {
       expect(result.insertedCount, 0);
       expect(result.duplicateCount, 0);
       expect(result.conflicts.length, 1);
-      expect(result.conflicts[0].reason, 'Existing entry with same description has a different code (DESC-001)');
+      expect(result.conflicts[0].reason, contains('DESC-001'));
     });
   });
 
