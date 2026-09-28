@@ -365,6 +365,10 @@ class DoorOptionsService {
 
   /// Saves current options to external JSON file on disk.
   static Future<bool> saveOptions() async {
+    if (_options.isEmpty) {
+      print('[DoorOptions] Skipping save: _options is empty.');
+      return false;
+    }
     try {
       final dbPath = await getDatabasesPath();
       final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));

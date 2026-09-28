@@ -196,31 +196,24 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   Future<void> _handleScanBarcode() async {
-    if (!_isEditable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vorjahres-Aufträge sind für Inspektoren schreibgeschützt.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
     final scanned = await BarcodeScannerDialog.show(
       context,
       title: 'Barcode für Türsuche / Alias-Zuweisung scannen',
     );
-    if (scanned == null || scanned.isEmpty || !mounted) return;
+    if (scanned == null || scanned.trim().isEmpty || !mounted) return;
 
+    final cleanScan = scanned.trim().toLowerCase();
     final matchingDoor = _doors.firstWhereOrNull(
-      (d) => (d.doorAlias?.toLowerCase() == scanned.toLowerCase()) ||
-             (d.provisionalAlias?.toLowerCase() == scanned.toLowerCase()) ||
-             (d.doorNumber.toLowerCase() == scanned.toLowerCase()),
+      (d) => (d.doorAlias?.trim().toLowerCase() == cleanScan) ||
+             (d.provisionalAlias?.trim().toLowerCase() == cleanScan) ||
+             (d.doorNumber.trim().toLowerCase() == cleanScan) ||
+             (d.pos.toString() == cleanScan),
     );
 
     if (matchingDoor != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Tür ${matchingDoor.doorNumber} (Alias: ${matchingDoor.doorAlias}) gefunden!'),
+          content: Text('Tür ${matchingDoor.doorNumber} (Alias: ${matchingDoor.doorAlias ?? "Keiner"}) gefunden!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -237,6 +230,18 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       );
       _loadDoors();
     } else {
+      if (!_isEditable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Keine Tür mit Barcode "$scanned" in diesem Auftrag gefunden.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
       final action = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
@@ -295,17 +300,58 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   Future<void> _updateDoorAlias(Door door, String newAlias) async {
-    if (door.id == null || !_isEditable) return;
+    final cleanAlias = newAlias.trim();
+    if (door.id == null || !_isEditable || cleanAlias.isEmpty) return;
+
+    final existingDoor = widget.isManagerMode
+        ? await DatabaseService.findDoorByBarcode(cleanAlias, excludeDoorId: door.id)
+        : await LocalDatabaseService.findDoorByBarcode(cleanAlias, excludeDoorId: door.id);
+
+    if (existingDoor != null) {
+      if (mounted) {
+        final doorDesc = existingDoor.doorNumber.isNotEmpty ? existingDoor.doorNumber : 'Pos. ${existingDoor.pos}';
+        final locationInfo = [
+          if (existingDoor.floor.isNotEmpty) existingDoor.floor,
+          if (existingDoor.roomDesignation.isNotEmpty) existingDoor.roomDesignation,
+        ].join(', ');
+        final locationText = locationInfo.isNotEmpty ? ' ($locationInfo)' : '';
+
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                SizedBox(width: 8),
+                Text('Barcode bereits vergeben'),
+              ],
+            ),
+            content: Text(
+              'Der Barcode "$cleanAlias" wird bereits für Tür "$doorDesc"$locationText verwendet.\n\n'
+              'Ein Barcode darf nicht mehrfach vergeben werden.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     if (widget.isManagerMode) {
-      await DatabaseService.updateDoorAlias(door.id!, newAlias);
+      await DatabaseService.updateDoorAlias(door.id!, cleanAlias);
     } else {
-      await LocalDatabaseService.updateDoorAlias(door.id!, newAlias);
+      await LocalDatabaseService.updateDoorAlias(door.id!, cleanAlias);
     }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Neuer Alias "$newAlias" für Tür ${door.doorNumber} gespeichert.'),
+          content: Text('Neuer Barcode "$cleanAlias" für Tür ${door.doorNumber} gespeichert.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -625,12 +671,11 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 _loadDoors();
               },
             ),
-          if (_isEditable)
-            IconButton(
-              icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
-              tooltip: 'Barcode / QR-Code scannen',
-              onPressed: _handleScanBarcode,
-            ),
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
+            tooltip: 'Barcode / QR-Code scannen',
+            onPressed: _handleScanBarcode,
+          ),
           IconButton(
             icon: const Icon(Icons.edit_note),
             tooltip: widget.isManagerMode

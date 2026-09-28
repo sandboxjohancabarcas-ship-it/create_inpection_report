@@ -438,6 +438,28 @@ class DatabaseService {
     return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 
+  /// Finds an existing door matching the given barcode (doorAlias or provisionalAlias),
+  /// optionally excluding a specific door ID.
+  static Future<Door?> findDoorByBarcode(String barcode, {int? excludeDoorId}) async {
+    final clean = barcode.trim();
+    if (clean.isEmpty) return null;
+    final db = await getDb();
+    final String whereClause = excludeDoorId != null
+        ? '(doorAlias = ? OR provisionalAlias = ?) AND id != ?'
+        : 'doorAlias = ? OR provisionalAlias = ?';
+    final List<dynamic> whereArgs = excludeDoorId != null
+        ? [clean, clean, excludeDoorId]
+        : [clean, clean];
+
+    final maps = await db.query(
+      'doors',
+      where: whereClause,
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
+  }
+
   /// Updates the doorAlias for a specific door ID in Master DB.
   /// Preserves the existing alias into provisionalAlias if provisionalAlias is not set.
   static Future<int> updateDoorAlias(int doorId, String newAlias) async {
@@ -2417,6 +2439,95 @@ class DatabaseService {
       where: 'errorId = ?',
       whereArgs: [errorId],
     );
+  }
+
+  /// Approves a pending error proposal and updates any linked inspection_door_errors if code/id changed.
+  static Future<void> approveAndRemapPendingError(
+    ErrorCatalog approvedError, {
+    String? oldCode,
+    int? oldErrorId,
+  }) async {
+    final db = await getDb();
+    await db.transaction((txn) async {
+      // 1. Upsert/Update the error in error_catalog with Approved status
+      var finalized = approvedError.copyWith(status: 'Approved');
+      int? targetId = finalized.errorId;
+      if (targetId != null) {
+        await txn.insert(
+          'error_catalog',
+          finalized.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      } else {
+        targetId = await txn.insert(
+          'error_catalog',
+          finalized.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        finalized = finalized.copyWith(errorId: targetId);
+      }
+
+      // 2. Remap any existing inspection_door_errors if the code changed
+      final targetCode = finalized.code;
+
+      if (oldCode != null && oldCode.isNotEmpty && oldCode != targetCode) {
+        await txn.update(
+          'inspection_door_errors',
+          {
+            'errorCode': targetCode,
+            if (targetId != null) 'errorId': targetId,
+          },
+          where: 'errorCode = ? OR errorId = ?',
+          whereArgs: [oldCode, oldErrorId ?? -1],
+        );
+      } else if (oldErrorId != null && targetId != null && oldErrorId != targetId) {
+        await txn.update(
+          'inspection_door_errors',
+          {'errorId': targetId},
+          where: 'errorId = ?',
+          whereArgs: [oldErrorId],
+        );
+      }
+    });
+  }
+
+  /// Merges all door error instances of a pending proposal into an existing official catalog error,
+  /// then deletes/archives the pending proposal.
+  static Future<void> mergePendingErrorIntoExisting({
+    required ErrorCatalog pendingError,
+    required ErrorCatalog targetError,
+  }) async {
+    final db = await getDb();
+    await db.transaction((txn) async {
+      final targetId = targetError.errorId ?? 0;
+      final targetCode = targetError.code;
+
+      // 1. Remap inspection_door_errors
+      await txn.update(
+        'inspection_door_errors',
+        {
+          'errorId': targetId,
+          'errorCode': targetCode,
+        },
+        where: 'errorId = ? OR (errorCode = ? AND errorCode != \'\')',
+        whereArgs: [pendingError.errorId ?? -1, pendingError.code],
+      );
+
+      // 2. Remove pending proposal from catalog
+      if (pendingError.errorId != null) {
+        await txn.delete(
+          'error_catalog',
+          where: 'errorId = ?',
+          whereArgs: [pendingError.errorId],
+        );
+      } else {
+        await txn.delete(
+          'error_catalog',
+          where: 'code = ? AND status = \'Pending\'',
+          whereArgs: [pendingError.code],
+        );
+      }
+    });
   }
   // ─────────────────────────────────────────────────────────────
   // SEED DATA

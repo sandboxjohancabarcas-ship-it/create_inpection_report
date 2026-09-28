@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/services/catalog_integrity_service.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../widgets/full_screen_photo_viewer.dart';
 
@@ -345,12 +346,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     // Extract unique categories from catalog
     final Set<String> categorySet = {};
     for (final err in availableErrors) {
-      if (err.category.trim().isNotEmpty) {
+      if (err.category.trim().isNotEmpty && err.category != 'Altdaten') {
         categorySet.add(err.category.trim());
       }
     }
     final List<String> categories = categorySet.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    String? selectedProvisionalCategory = categories.isNotEmpty ? categories.first : null;
+    bool isCustomProvisionalCategory = categories.isEmpty;
+    final customCategoryController = TextEditingController();
+    if (selectedProvisionalCategory != null) {
+      categoryController.text = selectedProvisionalCategory;
+    }
 
     showDialog(
       context: context,
@@ -902,34 +910,279 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         ),
                       ],
                     ] else ...[
-                      // Provisional error form
-                      TextField(
-                        controller: codeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Fehlercode *',
-                          border: OutlineInputBorder(),
-                          hintText: 'z.B. 1.1.1, 2.3.4, etc.',
+                      // Dynamic Category Picker for Provisional Error
+                      Card(
+                        elevation: 0,
+                        color: Colors.orange.shade50.withOpacity(0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(color: Colors.orange.shade200),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.category, size: 18, color: Colors.deepOrange),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Kategorie auswählen oder neu erstellen:',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  if (isCustomProvisionalCategory && categories.isNotEmpty) ...[
+                                    const Spacer(),
+                                    TextButton.icon(
+                                      onPressed: () {
+                                        dialogSetState(() {
+                                          isCustomProvisionalCategory = false;
+                                          selectedProvisionalCategory = categories.first;
+                                          categoryController.text = categories.first;
+                                        });
+                                      },
+                                      icon: const Icon(Icons.list, size: 14),
+                                      label: const Text('Aus Liste wählen', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              if (!isCustomProvisionalCategory && categories.isNotEmpty) ...[
+                                DropdownButtonFormField<String>(
+                                  value: categories.contains(selectedProvisionalCategory)
+                                      ? selectedProvisionalCategory
+                                      : categories.first,
+                                  decoration: const InputDecoration(
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    labelText: 'Bestehende Kategorie',
+                                  ),
+                                  items: [
+                                    ...categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                                    const DropdownMenuItem(
+                                      value: '__NEW_CATEGORY__',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.add_circle_outline, size: 16, color: Colors.deepOrange),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            '+ Neue Kategorie erstellen...',
+                                            style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (val) {
+                                    if (val == '__NEW_CATEGORY__') {
+                                      dialogSetState(() {
+                                        isCustomProvisionalCategory = true;
+                                        categoryController.clear();
+                                      });
+                                    } else if (val != null) {
+                                      dialogSetState(() {
+                                        selectedProvisionalCategory = val;
+                                        categoryController.text = val;
+                                        if (codeController.text.isEmpty) {
+                                          codeController.text = CatalogIntegrityService.proposeNextCodeForCategory(val, availableErrors);
+                                        }
+                                      });
+                                    }
+                                  },
+                                ),
+                              ] else ...[
+                                TextField(
+                                  controller: customCategoryController,
+                                  decoration: InputDecoration(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    labelText: 'Neue Kategorie Bezeichnung *',
+                                    hintText: 'z.B. Zarge & Türblatt, Feststellanlage...',
+                                    border: const OutlineInputBorder(),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    prefixIcon: const Icon(Icons.create_new_folder, color: Colors.deepOrange),
+                                    suffixIcon: categories.isNotEmpty
+                                        ? IconButton(
+                                            tooltip: 'Zurück zur Auswahlliste',
+                                            icon: const Icon(Icons.close),
+                                            onPressed: () {
+                                              dialogSetState(() {
+                                                isCustomProvisionalCategory = false;
+                                                selectedProvisionalCategory = categories.first;
+                                                categoryController.text = categories.first;
+                                              });
+                                            },
+                                          )
+                                        : null,
+                                  ),
+                                  onChanged: (val) {
+                                    categoryController.text = val.trim();
+                                    dialogSetState(() {});
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 10),
+
+                      // Code field with dynamic code generator
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: codeController,
+                              decoration: InputDecoration(
+                                labelText: 'Fehlercode *',
+                                border: const OutlineInputBorder(),
+                                hintText: 'z.B. 1.1, 11.20, etc.',
+                                suffixIcon: IconButton(
+                                  tooltip: 'Nächsten freien Code berechnen',
+                                  icon: const Icon(Icons.auto_awesome, color: Colors.blue),
+                                  onPressed: () {
+                                    final cat = categoryController.text.trim().isNotEmpty
+                                        ? categoryController.text.trim()
+                                        : (selectedProvisionalCategory ?? 'Allgemein');
+                                    final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                                    codeController.text = nextCode;
+                                    dialogSetState(() {});
+                                  },
+                                ),
+                              ),
+                              onChanged: (val) => dialogSetState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                            ),
+                            onPressed: () {
+                              final cat = categoryController.text.trim().isNotEmpty
+                                  ? categoryController.text.trim()
+                                  : (selectedProvisionalCategory ?? 'Allgemein');
+                              final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                              codeController.text = nextCode;
+                              dialogSetState(() {});
+                            },
+                            icon: const Icon(Icons.tag, size: 16),
+                            label: const Text('Code vorschlagen', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+
+                      // Live Code Collision Warning
+                      Builder(builder: (context) {
+                        final code = codeController.text.trim();
+                        final collision = CatalogIntegrityService.findCodeCollision(code, availableErrors);
+                        if (collision != null) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, size: 18, color: Colors.red),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Code "$code" ist bereits an "${collision.description}" vergeben!',
+                                    style: TextStyle(color: Colors.red.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    final cat = categoryController.text.trim().isNotEmpty
+                                        ? categoryController.text.trim()
+                                        : (selectedProvisionalCategory ?? 'Allgemein');
+                                    codeController.text = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                                    dialogSetState(() {});
+                                  },
+                                  child: const Text('Freien Code wählen', style: TextStyle(fontSize: 12)),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
                       const SizedBox(height: 8),
+
+                      // Description field
                       TextField(
                         controller: descriptionController,
                         decoration: const InputDecoration(
                           labelText: 'Beschreibung *',
                           border: OutlineInputBorder(),
+                          hintText: 'Fehlerbeschreibung eingeben...',
                         ),
                         maxLines: 2,
+                        onChanged: (val) => dialogSetState(() {}),
                       ),
+
+                      // Live Description Similarity / Duplicate Warning
+                      Builder(builder: (context) {
+                        final desc = descriptionController.text.trim();
+                        final simMatch = CatalogIntegrityService.findSimilarDescription(desc, availableErrors, threshold: 0.65);
+                        if (simMatch != null) {
+                          return Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.orange.shade300),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.lightbulb_outline, size: 18, color: Colors.orange),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Ähnlicher Fehler existiert bereits (${simMatch.similarityPercentage}% Ähnlichkeit):',
+                                        style: TextStyle(color: Colors.orange.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${simMatch.existing.code} - ${simMatch.existing.description}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      dialogSetState(() {
+                                        isProvisional = false;
+                                        selectedError = simMatch.existing;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.check, size: 14),
+                                    label: const Text('Diesen Katalog-Fehler wählen', style: TextStyle(fontSize: 12)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      }),
                       const SizedBox(height: 8),
-                      TextField(
-                        controller: categoryController,
-                        decoration: const InputDecoration(
-                          labelText: 'Kategorie *',
-                          border: OutlineInputBorder(),
-                          hintText: 'z.B. Türbeschlag, Schloss, etc.',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
+
                       DropdownButtonFormField<String>(
                         decoration: const InputDecoration(labelText: 'Schweregrad'),
                         value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())

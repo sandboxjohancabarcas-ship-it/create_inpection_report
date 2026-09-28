@@ -665,7 +665,35 @@ class LocalDatabaseService {
 
   static Future<Door?> getDoorByAlias(String alias) async {
     final db = await getDb();
-    final maps = await db.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1);
+    final clean = alias.trim();
+    final maps = await db.query(
+      'doors',
+      where: 'doorAlias = ? OR provisionalAlias = ?',
+      whereArgs: [clean, clean],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
+  }
+
+  /// Finds an existing door matching the given barcode (doorAlias or provisionalAlias),
+  /// optionally excluding a specific door ID.
+  static Future<Door?> findDoorByBarcode(String barcode, {int? excludeDoorId}) async {
+    final clean = barcode.trim();
+    if (clean.isEmpty) return null;
+    final db = await getDb();
+    final String whereClause = excludeDoorId != null
+        ? '(doorAlias = ? OR provisionalAlias = ?) AND id != ?'
+        : 'doorAlias = ? OR provisionalAlias = ?';
+    final List<dynamic> whereArgs = excludeDoorId != null
+        ? [clean, clean, excludeDoorId]
+        : [clean, clean];
+
+    final maps = await db.query(
+      'doors',
+      where: whereClause,
+      whereArgs: whereArgs,
+      limit: 1,
+    );
     return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
   }
 

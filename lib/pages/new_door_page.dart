@@ -310,6 +310,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     await _syncErrorNotes();
   }
 
+  Future<void> syncErrorNotes() => _syncErrorNotes();
+
   Future<void> _syncErrorNotes() async {
     final doorId = _activeDoor?.id ?? widget.door?.id;
     if (doorId == null || currentInspectionId == null) {
@@ -333,6 +335,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         limit: 1,
       );
 
+      final allCatalog = widget.isManagerMode
+          ? await DatabaseService.getAllErrorCatalog()
+          : await LocalDatabaseService.getAllErrorCatalog();
+
       if (junctionResults.isNotEmpty) {
         final junctionId = junctionResults.first['id'] as int;
         final errors = widget.isManagerMode
@@ -352,21 +358,61 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           }
         }
 
+        // Reconcile current notesController text: preserve manual notes, replace/remove error lines
+        final existingLines = notesController.text
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.isNotEmpty)
+            .toList();
+        final List<String> manualNotes = [];
+
+        for (final line in existingLines) {
+          if (!_isErrorDerivedLine(line, allCatalog, formattedEntries)) {
+            manualNotes.add(line);
+          }
+        }
+
+        final List<String> consolidated = [];
+        if (manualNotes.isNotEmpty) {
+          consolidated.addAll(manualNotes);
+        }
+        if (formattedEntries.isNotEmpty) {
+          consolidated.addAll(formattedEntries);
+        }
+
+        final newNotesText = consolidated.join('\n').trim();
+
         if (mounted) {
           setState(() {
             _errorCount = errors.length;
             if (errors.isNotEmpty) {
               properFunction = false;
             }
-            if (formattedEntries.isNotEmpty) {
-              final newNotesText = formattedEntries.join('\n');
-              if (notesController.text.trim().isEmpty || _isAutoSyncedErrorNotes(notesController.text.trim(), formattedEntries)) {
-                notesController.text = newNotesText;
-              } else if (!notesController.text.contains(newNotesText)) {
-                notesController.text = '${notesController.text.trim()}\n$newNotesText';
-              }
-            }
+            notesController.text = newNotesText;
           });
+        }
+
+        // Keep database in sync
+        if (_activeDoor != null && _activeDoor!.id != null) {
+          final updatedDoor = _activeDoor!.copyWith(notes: newNotesText);
+          _activeDoor = updatedDoor;
+          if (widget.isManagerMode) {
+            await DatabaseService.updateDoor(updatedDoor);
+            await DatabaseService.updateInspectionDoorStatus(
+              inspectionId: currentInspectionId!,
+              doorId: updatedDoor.id!,
+              status: properFunction ? 'Inspected' : 'Pending',
+              notes: newNotesText,
+            );
+          } else {
+            await LocalDatabaseService.updateDoor(updatedDoor);
+            await LocalDatabaseService.updateInspectionDoorStatus(
+              inspectionId: currentInspectionId!,
+              doorId: updatedDoor.id!,
+              status: properFunction ? 'Inspected' : 'Pending',
+              notes: newNotesText,
+            );
+          }
         }
       } else {
         if (mounted) {
@@ -380,17 +426,40 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
   }
 
-  bool _isAutoSyncedErrorNotes(String text, List<String> formattedEntries) {
-    if (text.isEmpty) return true;
-    final trimmed = text.trim();
-    // Legacy check for old error codes format (e.g. M-01, M-02)
-    final parts = trimmed.split(',').map((s) => s.trim()).toList();
-    if (parts.every((p) => p.startsWith('M-') || p.startsWith('ERR_') || p.contains('-'))) {
+  bool _isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog, List<String> currentFormattedEntries) {
+    if (line.isEmpty) return false;
+    // Direct match with any currently active error note entry
+    if (currentFormattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry))) {
       return true;
     }
-    // Check if lines match error descriptions / notes
-    final lines = trimmed.split('\n').map((l) => l.trim()).toList();
-    return lines.every((line) => formattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry.split(':').first)));
+    // Legacy error prefixes
+    if (line.startsWith('M-') || line.startsWith('ERR_') || line.startsWith('PROP-') || line.startsWith('ALT-')) {
+      return true;
+    }
+    // Match against any known catalog error description or code prefix
+    final cleanLine = line.toLowerCase();
+    for (final cat in allCatalog) {
+      final desc = cat.description.trim().toLowerCase();
+      final code = cat.code.trim().toLowerCase();
+      if (desc.isNotEmpty) {
+        if (cleanLine == desc ||
+            cleanLine.startsWith('$desc:') ||
+            cleanLine.startsWith('$desc -') ||
+            cleanLine.startsWith('$desc,') ||
+            cleanLine.startsWith('$desc ')) {
+          return true;
+        }
+      }
+      if (code.isNotEmpty) {
+        if (cleanLine == code ||
+            cleanLine.startsWith('$code:') ||
+            cleanLine.startsWith('$code -') ||
+            cleanLine.startsWith('$code ')) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   void _openNotesDialog() {
@@ -583,6 +652,52 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return _isLocked;
   }
 
+  Future<bool> _validateBarcodeUniqueness([String? customBarcode]) async {
+    final barcodeToTest = (customBarcode ?? doorAliasController.text).trim();
+    if (barcodeToTest.isEmpty) return true;
+
+    final currentId = _activeDoor?.id ?? widget.door?.id;
+    final existingDoor = widget.isManagerMode
+        ? await DatabaseService.findDoorByBarcode(barcodeToTest, excludeDoorId: currentId)
+        : await LocalDatabaseService.findDoorByBarcode(barcodeToTest, excludeDoorId: currentId);
+
+    if (existingDoor != null) {
+      if (mounted) {
+        final doorDesc = existingDoor.doorNumber.isNotEmpty ? existingDoor.doorNumber : 'Pos. ${existingDoor.pos}';
+        final locationInfo = [
+          if (existingDoor.floor.isNotEmpty) existingDoor.floor,
+          if (existingDoor.roomDesignation.isNotEmpty) existingDoor.roomDesignation,
+        ].join(', ');
+        final locationText = locationInfo.isNotEmpty ? ' ($locationInfo)' : '';
+
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                SizedBox(width: 8),
+                Text('Barcode bereits vergeben'),
+              ],
+            ),
+            content: Text(
+              'Der Barcode "$barcodeToTest" wird bereits für Tür "$doorDesc"$locationText verwendet.\n\n'
+              'Ein Barcode darf nicht mehrfach vergeben werden.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return false;
+    }
+    return true;
+  }
+
   Future<void> saveDoor() async {
     if (!_canSave) {
       if (_isFormReadOnly) {
@@ -602,6 +717,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       }
       return;
     }
+
+    if (!await _validateBarcodeUniqueness()) {
+      return;
+    }
+
     final door = buildDoor();
     
     // Save Inspection Metadata first
@@ -849,6 +969,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   child: ElevatedButton(
                     onPressed: () async {
                       if (_activeDoor == null) {
+                        if (!await _validateBarcodeUniqueness()) return;
+
                         // Persist new door draft first so errors can be linked to this specific door
                         final door = buildDoor();
                         final Map<String, dynamic> inspectionData = {
@@ -1076,9 +1198,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                       context,
                       title: 'Tür-Barcode scannen',
                     );
-                    if (scanned != null && scanned.isNotEmpty) {
+                    if (scanned != null && scanned.trim().isNotEmpty) {
+                      final isUnique = await _validateBarcodeUniqueness(scanned.trim());
+                      if (!isUnique) return;
                       setState(() {
-                        doorAliasController.text = scanned;
+                        doorAliasController.text = scanned.trim();
                         isAliasManuallyEdited = true;
                       });
                     }
