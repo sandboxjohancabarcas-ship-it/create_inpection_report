@@ -51,7 +51,7 @@ void main() {
       expect(reconstructed.notes, equals('M-01, M-02'));
     });
 
-    test('DoorValidator detects technical mismatch in notes field', () {
+    test('DoorValidator does not treat notes / Anmerkung field as a conflict', () {
       final door1 = Door(
         id: 1,
         pos: 1,
@@ -86,7 +86,8 @@ void main() {
       final door2 = door1.copyWith(notes: 'M-01, M-02');
 
       final conflicts = DoorValidator.detectConflicts(door2, door1);
-      expect(conflicts.any((c) => c.fieldName == 'notes'), isTrue);
+      expect(conflicts.any((c) => c.fieldName == 'notes'), isFalse);
+      expect(conflicts.isEmpty, isTrue);
     });
 
     test('Database schema includes doors table notes column', () async {

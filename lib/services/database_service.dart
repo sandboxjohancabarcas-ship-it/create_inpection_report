@@ -26,7 +26,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 26, // v26: Added isLocked column to inspections table
+      version: 27, // v27: Added orderType and repairDate columns to inspections table
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -89,7 +89,9 @@ class DatabaseService {
             inspectorName TEXT,
             jobNumber TEXT,
             projectNumber TEXT,
-            isLocked INTEGER DEFAULT 0
+            isLocked INTEGER DEFAULT 0,
+            orderType TEXT DEFAULT 'Wartung',
+            repairDate TEXT
           );
         ''');
         await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
@@ -318,6 +320,16 @@ class DatabaseService {
             print('Main DB migration warning (v26 column): $e');
           }
         }
+
+        if (oldVersion < 27) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN orderType TEXT DEFAULT 'Wartung'");
+            await db.execute("ALTER TABLE inspections ADD COLUMN repairDate TEXT");
+            print('[DatabaseService] Main DB upgraded to v27: orderType and repairDate columns added to inspections table.');
+          } catch (e) {
+            print('Main DB migration warning (v27 columns): $e');
+          }
+        }
       },
     );
 
@@ -393,8 +405,16 @@ class DatabaseService {
     print('[DatabaseService] Finished populating missing aliases.');
   }
 
-  /// Safely deletes the database file from the system.
+  /// Safely deletes the database file and clears all table rows from the system.
   static Future<void> clearDatabase() async {
+    try {
+      final db = await getDb();
+      await db.delete('inspection_door_errors');
+      await db.delete('inspection_doors');
+      await db.delete('inspections');
+      await db.delete('doors');
+      await db.delete('error_catalog');
+    } catch (_) {}
     await closeDb();
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'door_inspection.db');
@@ -717,6 +737,288 @@ class DatabaseService {
     }
 
     return await insertInspection(inspectionData);
+  }
+
+  /// Prepares a new Auftrag ("Wartung" or "Reparatur") for a project/building.
+  /// Clones all door technical specifications from the most recent inspection for that project.
+  ///
+  /// For "Wartung":
+  /// - Notes ("Anmerkung") are set to empty.
+  /// - Errors are NOT copied (0 errors for new inspection).
+  /// - Door status is set to 'Pending'.
+  /// - repairDate is null.
+  ///
+  /// For "Reparatur":
+  /// - Notes ("Anmerkung") are preserved from previous inspection.
+  /// - All errors and their resolution status are copied as a guide for repair.
+  /// - repairDate is stored in inspection metadata.
+  ///
+  /// If no previous inspection exists for this project, creates a blank Auftrag template.
+  static Future<int> createAuftragFromLatestInspection({
+    required String projectNumber,
+    required String objectAddress,
+    required String clientName,
+    required String jobNumber,
+    required DateTime date,
+    String orderType = 'Wartung', // 'Wartung' or 'Reparatur'
+    DateTime? repairDate,
+    String contactPerson = '',
+    String inspectorName = '',
+    bool cloneDoors = true,
+  }) async {
+    final db = await getDb();
+    final cleanProj = projectNumber.trim();
+    final cleanAddr = objectAddress.trim();
+    final cleanClient = clientName.trim();
+
+    // 1. Locate the latest inspection for this project / address
+    List<Map<String, dynamic>> latestInspections = [];
+    if (cleanProj.isNotEmpty) {
+      latestInspections = await db.query(
+        'inspections',
+        where: 'projectNumber = ?',
+        whereArgs: [cleanProj],
+        orderBy: 'date DESC, inspectionId DESC',
+        limit: 1,
+      );
+    }
+    if (latestInspections.isEmpty && cleanAddr.isNotEmpty) {
+      latestInspections = await db.query(
+        'inspections',
+        where: 'objectAddress = ?',
+        whereArgs: [cleanAddr],
+        orderBy: 'date DESC, inspectionId DESC',
+        limit: 1,
+      );
+    }
+
+    final resolvedProj = cleanProj.isNotEmpty
+        ? cleanProj
+        : (latestInspections.isNotEmpty ? (latestInspections.first['projectNumber']?.toString() ?? '') : '');
+    final resolvedAddr = cleanAddr.isNotEmpty
+        ? cleanAddr
+        : (latestInspections.isNotEmpty ? (latestInspections.first['objectAddress']?.toString() ?? '') : '');
+    final resolvedClient = cleanClient.isNotEmpty
+        ? cleanClient
+        : (latestInspections.isNotEmpty ? (latestInspections.first['clientName']?.toString() ?? '') : '');
+
+    // 2. Create the new inspection record (does NOT overwrite existing previous jobs)
+    final inspectionData = {
+      'projectNumber': resolvedProj,
+      'objectAddress': resolvedAddr,
+      'clientName': resolvedClient,
+      'jobNumber': jobNumber.trim(),
+      'date': date.toIso8601String(),
+      'contactPerson': contactPerson.trim().isNotEmpty
+          ? contactPerson.trim()
+          : (latestInspections.isNotEmpty ? (latestInspections.first['contactPerson']?.toString() ?? '') : ''),
+      'inspectorName': inspectorName.trim().isNotEmpty
+          ? inspectorName.trim()
+          : (latestInspections.isNotEmpty ? (latestInspections.first['inspectorName']?.toString() ?? '') : ''),
+      'orderType': orderType,
+      'repairDate': repairDate != null ? repairDate.toIso8601String() : null,
+      'isLocked': 0,
+    };
+
+    final newInspectionId = await insertInspection(inspectionData);
+
+    // 3. Clone doors from the latest inspection if requested and present
+    if (cloneDoors && latestInspections.isNotEmpty) {
+      final prevInspId = latestInspections.first['inspectionId'] as int;
+      final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
+      final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
+      final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
+
+      for (final j in prevJunctions) {
+        final doorId = j['doorId'] as int;
+        final prevJunctionId = j['id'] as int;
+
+        // For Wartung: notes must be empty!
+        // For Reparatur: notes are preserved as a guide!
+        final String note = (orderType == 'Reparatur') ? (j['notes']?.toString() ?? '') : '';
+        final String status = 'Pending';
+
+        final newJunctionId = await insertInspectionDoor({
+          'inspectionId': newInspectionId,
+          'doorId': doorId,
+          'status': status,
+          'notes': note,
+          'attachments': null,
+        });
+
+        // For Reparatur: Copy all recorded errors so inspector has them as repair guidance!
+        if (orderType == 'Reparatur') {
+          final doorErrors = prevErrors.where((e) => e['inspectionDoorId'] == prevJunctionId);
+          for (final err in doorErrors) {
+            final errorObj = InspectionDoorError(
+              id: null,
+              inspectionDoorId: newJunctionId,
+              errorId: err['errorId'] as int?,
+              errorCode: err['errorCode']?.toString() ?? '',
+              quantity: (err['quantity'] as num?)?.toInt() ?? 1,
+              severity: err['severity']?.toString() ?? 'medium',
+              notes: err['notes']?.toString() ?? '',
+              resolutionStatus: err['resolutionStatus']?.toString() ?? 'Open',
+              attachments: err['attachments']?.toString() ?? '',
+            );
+            await insertInspectionDoorError(errorObj);
+          }
+        }
+      }
+    }
+
+    return newInspectionId;
+  }
+
+  /// Consolidates separate phase records (Wartung & Reparatur) for the same jobNumber into a single "Erledigt" Auftrag.
+  /// Merges inspection records, preserves both inspection date and repairDate, and repoints junctions & door history.
+  static Future<int?> consolidateJobToErledigt({
+    required String jobNumber,
+    String? projectNumber,
+    DatabaseExecutor? executor,
+  }) async {
+    final cleanJob = jobNumber.trim();
+    if (cleanJob.isEmpty) return null;
+
+    Future<int?> runConsolidation(DatabaseExecutor dbExec) async {
+      String whereClause = 'jobNumber = ?';
+      List<dynamic> whereArgs = [cleanJob];
+      if (projectNumber != null && projectNumber.trim().isNotEmpty) {
+        whereClause += ' AND projectNumber = ?';
+        whereArgs.add(projectNumber.trim());
+      }
+
+      final inspections = await dbExec.query(
+        'inspections',
+        where: whereClause,
+        whereArgs: whereArgs,
+        orderBy: "CASE WHEN orderType = 'Reparatur' THEN 1 WHEN orderType = 'Wartung' THEN 2 ELSE 3 END ASC, date DESC",
+      );
+
+      if (inspections.isEmpty) return null;
+
+      // Primary inspection to retain (prefer Reparatur if available, or the first record)
+      final primary = inspections.first;
+      final int primaryId = primary['inspectionId'] as int;
+
+      // Extract best dates and metadata
+      String? bestRepairDate = primary['repairDate']?.toString();
+      String? bestInspectionDate = primary['date']?.toString();
+      String? bestInspector = primary['inspectorName']?.toString();
+      String? bestClient = primary['clientName']?.toString();
+      String? bestAddress = primary['objectAddress']?.toString();
+      String? bestContact = primary['contactPerson']?.toString();
+
+      for (final insp in inspections) {
+        final rDate = insp['repairDate']?.toString();
+        if (bestRepairDate == null || bestRepairDate.isEmpty) {
+          if (rDate != null && rDate.isNotEmpty) bestRepairDate = rDate;
+        }
+        final iDate = insp['date']?.toString();
+        if (bestInspectionDate == null || bestInspectionDate.isEmpty) {
+          if (iDate != null && iDate.isNotEmpty) bestInspectionDate = iDate;
+        }
+        final inspName = insp['inspectorName']?.toString();
+        if (bestInspector == null || bestInspector.isEmpty) {
+          if (inspName != null && inspName.isNotEmpty) bestInspector = inspName;
+        }
+      }
+
+      if (bestRepairDate == null || bestRepairDate.isEmpty) {
+        bestRepairDate = DateTime.now().toIso8601String().substring(0, 10);
+      }
+
+      // Update primary inspection to 'Erledigt'
+      await dbExec.update(
+        'inspections',
+        {
+          'orderType': 'Erledigt',
+          'repairDate': bestRepairDate,
+          'date': bestInspectionDate,
+          'inspectorName': bestInspector,
+          'clientName': bestClient,
+          'objectAddress': bestAddress,
+          'contactPerson': bestContact,
+        },
+        where: 'inspectionId = ?',
+        whereArgs: [primaryId],
+      );
+
+      // Repoint junctions from companion inspections to primaryId and remove duplicates
+      for (int i = 1; i < inspections.length; i++) {
+        final companionId = inspections[i]['inspectionId'] as int;
+
+        final companionJunctions = await dbExec.query(
+          'inspection_doors',
+          where: 'inspectionId = ?',
+          whereArgs: [companionId],
+        );
+
+        for (final cJunc in companionJunctions) {
+          final cJuncId = cJunc['id'] as int;
+          final cDoorId = cJunc['doorId'] as int;
+
+          // Check if primary already has junction for this door
+          final existingPrimaryJunc = await dbExec.query(
+            'inspection_doors',
+            where: 'inspectionId = ? AND doorId = ?',
+            whereArgs: [primaryId, cDoorId],
+            limit: 1,
+          );
+
+          if (existingPrimaryJunc.isNotEmpty) {
+            // Primary (latest imported inspection state) already contains the authoritative error state for this door.
+            // Delete companion errors for this companion junction to avoid duplicate "Open" vs "Resolved" error entries.
+            await dbExec.delete(
+              'inspection_door_errors',
+              where: 'inspectionDoorId = ?',
+              whereArgs: [cJuncId],
+            );
+            await dbExec.delete('inspection_doors', where: 'id = ?', whereArgs: [cJuncId]);
+          } else {
+            // Move junction to primary if door only existed in companion inspection
+            await dbExec.update(
+              'inspection_doors',
+              {'inspectionId': primaryId},
+              where: 'id = ?',
+              whereArgs: [cJuncId],
+            );
+          }
+        }
+
+        // Delete companion inspection row
+        await dbExec.delete('inspections', where: 'inspectionId = ?', whereArgs: [companionId]);
+      }
+
+      // Ensure primaryId has no duplicate junctions for the same doorId
+      final primaryJunctions = await dbExec.query(
+        'inspection_doors',
+        where: 'inspectionId = ?',
+        whereArgs: [primaryId],
+        orderBy: 'id ASC',
+      );
+      final Set<int> seenDoorIds = {};
+      for (final pJunc in primaryJunctions) {
+        final pJuncId = pJunc['id'] as int;
+        final pDoorId = pJunc['doorId'] as int;
+        if (seenDoorIds.contains(pDoorId)) {
+          // Duplicate junction on primary, delete extra junction and its errors
+          await dbExec.delete('inspection_door_errors', where: 'inspectionDoorId = ?', whereArgs: [pJuncId]);
+          await dbExec.delete('inspection_doors', where: 'id = ?', whereArgs: [pJuncId]);
+        } else {
+          seenDoorIds.add(pDoorId);
+        }
+      }
+
+      return primaryId;
+    }
+
+    if (executor != null) {
+      return await runConsolidation(executor);
+    } else {
+      final db = await getDb();
+      return await db.transaction((txn) async => await runConsolidation(txn));
+    }
   }
 
   static Future<Map<String, dynamic>?> getInspectionById(int inspectionId) async {
@@ -1049,7 +1351,7 @@ class DatabaseService {
 
     if (cleanQuery.isEmpty) {
       final List<Map<String, dynamic>> maps = await db.rawQuery('''
-        SELECT d.* 
+        SELECT d.*, COALESCE(id.notes, '') AS notes 
         FROM doors d
         INNER JOIN inspection_doors id ON d.id = id.doorId
         WHERE id.inspectionId IN ($idString)
@@ -1060,7 +1362,7 @@ class DatabaseService {
 
     final searchTerm = '%$cleanQuery%';
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT DISTINCT d.* 
+      SELECT DISTINCT d.*, COALESCE(id.notes, '') AS notes 
       FROM doors d
       INNER JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
@@ -1152,7 +1454,9 @@ class DatabaseService {
         i.contactPerson,
         i.inspectorName,
         i.jobNumber,
-        i.projectNumber
+        i.projectNumber,
+        i.orderType,
+        i.repairDate
       FROM inspection_doors id
       INNER JOIN inspections i ON id.inspectionId = i.inspectionId
       WHERE id.doorId = ?
@@ -1633,7 +1937,25 @@ class DatabaseService {
       InspectionDoorError error) async {
     final db = await getDb();
 
-    if (error.id == null && error.inspectionDoorId > 0) {
+    if (error.id != null) {
+      final existing = await db.query(
+        'inspection_door_errors',
+        where: 'id = ?',
+        whereArgs: [error.id],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        await db.update(
+          'inspection_door_errors',
+          error.toMap(),
+          where: 'id = ?',
+          whereArgs: [error.id],
+        );
+        return error.id!;
+      }
+    }
+
+    if (error.inspectionDoorId > 0) {
       List<Map<String, dynamic>> existing = [];
       if (error.errorId != null) {
         existing = await db.query(
@@ -1812,7 +2134,8 @@ class DatabaseService {
   /// Uses Job Number (auftragsnummer) and Door Alias as correlation keys.
   static Future<ImportReport> importAndMergePackage(String packagePath) async {
     final masterDb = await getDb();
-    final packageDb = await openDatabase(packagePath, readOnly: true);
+    final absolutePackagePath = File(packagePath).absolute.path;
+    final packageDb = await openDatabase(absolutePackagePath, readOnly: true);
 
     int newDoorsCount = 0;
     int updatedDoorsCount = 0;
@@ -1919,10 +2242,20 @@ class DatabaseService {
           final packageId = row['id'] as int;
           final incomingDoor = Door.fromMap(row);
 
-          // Check if door exists in Master by Alias
-          final existing = alias.isNotEmpty 
-              ? await txn.query('doors', where: 'doorAlias = ?', whereArgs: [alias], limit: 1)
-              : <Map<String, dynamic>>[];
+          // Check if door exists in Master by Alias, provisionalAlias or doorNumber
+          List<Map<String, dynamic>> existing = [];
+          if (alias.isNotEmpty) {
+            existing = await txn.query(
+              'doors',
+              where: 'doorAlias = ? OR provisionalAlias = ?',
+              whereArgs: [alias, alias],
+              limit: 1,
+            );
+          }
+          final doorNumber = incomingDoor.doorNumber.trim();
+          if (existing.isEmpty && doorNumber.isNotEmpty) {
+            existing = await txn.query('doors', where: 'doorNumber = ?', whereArgs: [doorNumber], limit: 1);
+          }
           final Door? existingDoor = existing.isNotEmpty ? Door.fromMap(existing.first) : null;
 
           // Detect new custom dropdown options introduced by Inspector
@@ -1955,11 +2288,32 @@ class DatabaseService {
         // 4. Merge Inspections and create ID Mapping (Package ID -> Master ID)
         final masterInspectionColumns = await _getTableColumns(txn, 'inspections');
         Map<int, int> inspectionIdMap = {};
+        final Set<String> reparaturJobsToConsolidate = {};
+
         for (var row in pInspections) {
           final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
           final packageId = row['inspectionId'] as int;
+          final incomingOrderType = row['orderType']?.toString() ?? '';
+          final incomingRepairDate = row['repairDate']?.toString() ?? '';
 
-          final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
+          if (incomingOrderType == 'Reparatur' || incomingOrderType == 'Erledigt' || incomingRepairDate.isNotEmpty) {
+            if (jobNum.trim().isNotEmpty) {
+              reparaturJobsToConsolidate.add(jobNum.trim());
+            }
+          }
+
+          List<Map<String, dynamic>> existing = [];
+          if (incomingOrderType.isNotEmpty) {
+            existing = await txn.query(
+              'inspections',
+              where: 'jobNumber = ? AND orderType = ?',
+              whereArgs: [jobNum, incomingOrderType],
+              limit: 1,
+            );
+          }
+          if (existing.isEmpty) {
+            existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
+          }
           
           int masterId;
           final data = Map<String, dynamic>.from(row)
@@ -2108,6 +2462,11 @@ class DatabaseService {
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
+        }
+
+        // 7. Auto-consolidate Reparatur jobs into a single 'Erledigt' Auftrag in master DB
+        for (final jobToConsolidate in reparaturJobsToConsolidate) {
+          await consolidateJobToErledigt(jobNumber: jobToConsolidate, executor: txn);
         }
 
         fileReports.add(InspectionFileReportItem(
@@ -3056,6 +3415,14 @@ class DatabaseService {
           }
         }
 
+        // Notes / Anmerkung are always simply copied from incoming door
+        if (doorConflicts.isNotEmpty) {
+          final incomingNotes = doorConflicts.first.incomingDoor.notes;
+          if (incomingNotes.isNotEmpty) {
+            propertyUpdates['notes'] = incomingNotes;
+          }
+        }
+
         if (alias != null && alias.isNotEmpty && propertyUpdates.isNotEmpty) {
           await txn.update(
             'doors',
@@ -3182,4 +3549,5 @@ class DatabaseService {
     return result;
   }
 }
+
 

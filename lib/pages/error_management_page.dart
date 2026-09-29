@@ -1899,14 +1899,24 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Fehler löschen'),
-        content: Text('Möchten Sie diesen Fehler wirklich löschen?'),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Text('Mangel löschen oder lösen?'),
+          ],
+        ),
+        content: const Text(
+          'Wichtiger Hinweis zur Dokumentation & Reparatur:\n\n'
+          '• Reparierte bzw. behobene Mängel dürfen NICHT gelöscht werden. Bitte markieren Sie diese als "Gelöst", damit die Reparaturhistorie erhalten bleibt.\n\n'
+          '• Das Löschen ist ausschließlich für versehentliche Fehleingaben gedacht.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Abbrechen'),
+            child: const Text('Abbrechen'),
           ),
-          ElevatedButton(
+          OutlinedButton(
             onPressed: () async {
               if (widget.isManagerMode) {
                 await DatabaseService.deleteInspectionDoorError(error.id!);
@@ -1919,9 +1929,31 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 _loadData();
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Löschen'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Trotzdem löschen (Fehleingabe)'),
           ),
+          if (error.resolutionStatus != 'resolved')
+            ElevatedButton.icon(
+              onPressed: () async {
+                final updatedError = error.copyWith(resolutionStatus: 'resolved');
+                if (widget.isManagerMode) {
+                  await DatabaseService.insertInspectionDoorError(updatedError);
+                } else {
+                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await _markDoorAsInspectedIfInspector();
+                }
+                if (mounted) {
+                  Navigator.pop(context);
+                  _loadData();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              label: const Text('Als "Gelöst" markieren'),
+            ),
         ],
       ),
     );

@@ -37,7 +37,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 16,  // v16: Added isLocked column to inspections table
+      version: 17,  // v17: Added orderType and repairDate columns to inspections table
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -96,7 +96,9 @@ class LocalDatabaseService {
             inspectorName TEXT,
             jobNumber TEXT,
             projectNumber TEXT,
-            isLocked INTEGER DEFAULT 0
+            isLocked INTEGER DEFAULT 0,
+            orderType TEXT DEFAULT 'Wartung',
+            repairDate TEXT
           );
         ''');
 
@@ -321,6 +323,16 @@ class LocalDatabaseService {
             print('Local Database upgraded to version 16: isLocked column added to inspections table.');
           } catch (e) {
             print('Local DB migration warning (v16 column): $e');
+          }
+        }
+
+        if (oldVersion < 17) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN orderType TEXT DEFAULT 'Wartung'");
+            await db.execute("ALTER TABLE inspections ADD COLUMN repairDate TEXT");
+            print('Local Database upgraded to version 17: orderType and repairDate columns added to inspections table.');
+          } catch (e) {
+            print('Local DB migration warning (v17 columns): $e');
           }
         }
       },
@@ -1007,7 +1019,7 @@ class LocalDatabaseService {
     final cleanQuery = query.trim();
     if (cleanQuery.isEmpty) {
       final List<Map<String, dynamic>> maps = await db.rawQuery('''
-        SELECT d.* 
+        SELECT d.*, COALESCE(id.notes, '') AS notes 
         FROM doors d
         INNER JOIN inspection_doors id ON d.id = id.doorId
         WHERE id.inspectionId = ?
@@ -1018,7 +1030,7 @@ class LocalDatabaseService {
 
     final searchTerm = '%$cleanQuery%';
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT DISTINCT d.* 
+      SELECT DISTINCT d.*, COALESCE(id.notes, '') AS notes 
       FROM doors d
       INNER JOIN inspection_doors id ON d.id = id.doorId
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId

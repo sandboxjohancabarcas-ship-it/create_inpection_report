@@ -865,6 +865,16 @@ class ExcelDataImporter {
         }
       }
 
+      if (meta['orderType'] == 'Reparatur' || meta['orderType'] == 'Erledigt') {
+        final jobNum = meta['jobNumber'] ?? '';
+        if (jobNum.isNotEmpty) {
+          await DatabaseService.consolidateJobToErledigt(
+            jobNumber: jobNum,
+            projectNumber: meta['projectNumber'],
+          );
+        }
+      }
+
       logs.add('Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen importiert, $sheetErrorsCount Mängel verknüpft.');
     }
 

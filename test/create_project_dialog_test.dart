@@ -39,7 +39,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Neues Projekt / Gebäude anlegen'), findsOneWidget);
+      expect(find.text('Neues Projekt / Auftrag anlegen'), findsOneWidget);
       expect(find.text('Projektnummer (Gebäude-Anker) *'), findsOneWidget);
       expect(find.text('Objektadresse / Liegenschaft *'), findsOneWidget);
       expect(find.text('Kunde / Auftraggeber *'), findsOneWidget);
@@ -103,7 +103,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Toggle export checkbox
-      final checkbox = find.byType(CheckboxListTile);
+      final checkbox = find.text('Direkt als Techniker-Paket (.db) exportieren');
       expect(checkbox, findsOneWidget);
       await tester.tap(checkbox);
       await tester.pumpAndSettle();
@@ -115,7 +115,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dialog is dismissed and returned false
-      expect(find.text('Neues Projekt / Gebäude anlegen'), findsNothing);
+      expect(find.text('Neues Projekt / Auftrag anlegen'), findsNothing);
       expect(result, isFalse);
     });
   });

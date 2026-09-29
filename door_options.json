@@ -1,49 +1,10 @@
 {
-  "approvalNumber": {
-    "options": [
-      "?",
-      "Z-999-PROOF-APPROVAL"
-    ],
-    "default": "?"
-  },
-  "manufacturerNumber": {
-    "options": [
-      "?",
-      "H-88-PROOF"
-    ],
-    "default": "?"
-  },
-  "manufacturer": {
-    "options": [
-      "?",
-      "Hörmann",
-      "Schüco",
-      "SuperDoor-GmbH",
-      "Schüco ADS 80",
-      "Schüco ADS 65.Ni SP",
-      "Hueck-Alu",
-      "Schüco Jansen-Stahl",
-      "Forster Fuego-St.",
-      "Forster Presto-St.",
-      "MBB-Stahl",
-      "RP-Stahl",
-      "Hörmann-St.",
-      "Teckentrup-St.",
-      "Novoferm-St.",
-      "Schörghuber-Holz",
-      "Herholz-Holz",
-      "Specht-Holz",
-      "Schwarze-Stahl",
-      "Hoba-Holz"
-    ],
-    "default": "?"
-  },
   "doorType": {
     "options": [
       "?",
-      "T30-1",
       "MZT-1",
       "MZT-2",
+      "T30-1",
       "T30-2",
       "T30-1 RS",
       "T30-2 RS",
@@ -62,10 +23,17 @@
     ],
     "default": "?"
   },
+  "wingCount": {
+    "options": [
+      1,
+      2,
+      3
+    ],
+    "default": 1
+  },
   "material": {
     "options": [
       "?",
-      "Stahl",
       "Alurohrrahmen",
       "Stahlrohrrahmen",
       "Holzblatt",
@@ -76,52 +44,29 @@
     ],
     "default": "?"
   },
-  "lockDimensions": {
+  "manufacturer": {
     "options": [
       "?",
-      "35/92/9",
-      "30/92/9-20 U",
-      "34/92/9-24 U",
-      "35/92/9-20 U",
-      "35/92/9-28 F",
-      "35/72/9-20 U",
-      "40/92/9-20 U",
-      "30/92/9-20 F",
-      "35/92/9-20 F",
-      "40/92/9-20 F",
-      "40/72/9",
-      "45/72/9-24 FR",
-      "45/92/9-24 F",
-      "50/72/9-24 FR",
-      "55/72/9-24 FR",
-      "60/72/9-24 FR",
-      "65/72/9",
-      "65/92/9",
-      "Rollenschloß",
-      "235/24 - 72/65/50/9 FSR",
-      "270/24 - 92/35/65/9 FSE",
-      "245/24 - 72/35/60 U",
-      "235/20 - 72/65/50/9 FSR",
-      "30/92/9/24-245U",
-      "65/72/8/24-235FR",
-      "65/72/9/24-235FR",
-      "35/92/9/28-270F",
-      "30/72/9/24-245U",
-      "30/92/9/24-270Ff",
-      "35/92/9/24-270F",
-      "65/72/9/20-235FR",
-      "30/92/9/28-270F",
-      "65/72/9-24/235 FR"
+      "Schüco",
+      "Schüco ADS 80",
+      "Schüco ADS 65.Ni SP",
+      "Hueck-Alu",
+      "Schüco Jansen-Stahl",
+      "Forster Fuego-St.",
+      "Forster Presto-St.",
+      "MBB-Stahl",
+      "RP-Stahl",
+      "Hörmann-St.",
+      "Teckentrup-St.",
+      "Novoferm-St.",
+      "Schörghuber-Holz",
+      "Herholz-Holz",
+      "Specht-Holz",
+      "Schwarze-Stahl",
+      "Hoba-Holz",
+      "Türfabrik"
     ],
     "default": "?"
-  },
-  "wingCount": {
-    "options": [
-      1,
-      2,
-      3
-    ],
-    "default": 1
   },
   "dinConfiguration": {
     "options": [
@@ -248,7 +193,47 @@
       "G-N",
       "G-EMF",
       "G-EMR",
-      "GSR-RF 1"
+      "GSR-RF 1",
+      "SR 390 Hebel+2HM+2DM+1HAT",
+      "SR 390 Hebel."
+    ],
+    "default": "?"
+  },
+  "lockDimensions": {
+    "options": [
+      "?",
+      "30/92/9-20 U",
+      "34/92/9-24 U",
+      "35/92/9-20 U",
+      "35/92/9-28 F",
+      "35/72/9-20 U",
+      "40/92/9-20 U",
+      "30/92/9-20 F",
+      "35/92/9-20 F",
+      "40/92/9-20 F",
+      "40/72/9",
+      "45/72/9-24 FR",
+      "45/92/9-24 F",
+      "50/72/9-24 FR",
+      "55/72/9-24 FR",
+      "60/72/9-24 FR",
+      "65/72/9",
+      "65/92/9",
+      "Rollenschloß",
+      "235/24 - 72/65/50/9 FSR",
+      "270/24 - 92/35/65/9 FSE",
+      "245/24 - 72/35/60 U",
+      "235/20 - 72/65/50/9 FSR",
+      "30/92/9/24-245U",
+      "65/72/8/24-235FR",
+      "65/72/9/24-235FR",
+      "35/92/9/28-270F",
+      "30/72/9/24-245U",
+      "30/92/9/24-270Ff",
+      "35/92/9/24-270F",
+      "65/72/9/20-235FR",
+      "30/92/9/28-270F",
+      "65/72/9/24x235/FR"
     ],
     "default": "?"
   },
@@ -270,7 +255,8 @@
       "Ja ?",
       "KABA Evolo",
       "CES",
-      "U&Z"
+      "U&Z",
+      "AZS"
     ],
     "default": "Nein"
   },
@@ -300,6 +286,18 @@
       "SVP6000"
     ],
     "default": "Nein"
+  },
+  "approvalNumber": {
+    "options": [
+      "?"
+    ],
+    "default": "?"
+  },
+  "manufacturerNumber": {
+    "options": [
+      "?"
+    ],
+    "default": "?"
   },
   "lintelHeightValue": {
     "options": [

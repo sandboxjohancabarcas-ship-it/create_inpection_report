@@ -580,6 +580,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           jobNumber: job['jobNumber'] ?? 'N/A',
                           projectNumber: job['projectNumber']?.toString() ?? '',
                           date: job['date'] ?? '',
+                          orderType: job['orderType']?.toString() ?? 'Wartung',
+                          repairDate: job['repairDate']?.toString(),
                           doorCount: job['doorCount'] != null ? (job['doorCount'] as num).toInt() : null,
                           isLocked: job['isLocked'],
                           onToggleLock: () async {

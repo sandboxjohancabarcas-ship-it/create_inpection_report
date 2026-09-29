@@ -10,6 +10,8 @@ class InspectionSummaryCard extends StatelessWidget {
   final String jobNumber;
   final String? projectNumber;
   final String date;
+  final String orderType;
+  final String? repairDate;
   final int? doorCount;
   final dynamic isLocked;
   final VoidCallback? onEdit;
@@ -26,6 +28,8 @@ class InspectionSummaryCard extends StatelessWidget {
     required this.jobNumber,
     this.projectNumber,
     required this.date,
+    this.orderType = 'Wartung',
+    this.repairDate,
     this.doorCount,
     this.isLocked,
     this.onEdit,
@@ -47,16 +51,67 @@ class InspectionSummaryCard extends StatelessWidget {
     }
     final formattedDate = DateFormat('dd.MM.yyyy').format(parsedDate);
     final bool locked = InspectionYearUtils.isInspectionLocked(isLocked, date);
+    final bool isReparatur = orderType == 'Reparatur';
+    final bool isErledigt = orderType == 'Erledigt';
+
+    final Color badgeBg = isErledigt
+        ? Colors.green.shade50
+        : (isReparatur ? Colors.orange.shade100 : Colors.blue.shade50);
+    final Color badgeBorder = isErledigt
+        ? Colors.green.shade400
+        : (isReparatur ? Colors.orange.shade400 : Colors.blue.shade300);
+    final Color badgeTextColor = isErledigt
+        ? Colors.green.shade900
+        : (isReparatur ? Colors.orange.shade900 : Colors.blue.shade800);
+    final IconData badgeIcon = isErledigt
+        ? Icons.task_alt
+        : (isReparatur ? Icons.handyman_outlined : Icons.build_circle_outlined);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
       child: ListTile(
-        leading: const Icon(Icons.business, color: Colors.blue),
-        title: Row(
+        leading: Icon(
+          isErledigt
+              ? Icons.check_circle_outline
+              : (isReparatur ? Icons.handyman_outlined : Icons.business),
+          color: isErledigt
+              ? Colors.green.shade700
+              : (isReparatur ? Colors.orange.shade800 : Colors.blue),
+        ),
+        title: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 6,
+          runSpacing: 4,
           children: [
-            Expanded(child: Text(clientName, overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 8),
+            Text(clientName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: badgeBg,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: badgeBorder),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    badgeIcon,
+                    size: 11,
+                    color: badgeTextColor,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    orderType,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: badgeTextColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             GestureDetector(
               onTap: onToggleLock,
               child: Container(
@@ -92,10 +147,20 @@ class InspectionSummaryCard extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 2),
             Text('Auftrag: $jobNumber'),
             if (projectNumber != null && projectNumber!.isNotEmpty)
               Text('Projekt: $projectNumber'),
             Text('Datum: $formattedDate'),
+            if ((isReparatur || isErledigt) && repairDate != null && repairDate!.isNotEmpty)
+              Text(
+                'Reparaturdatum: $repairDate',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isErledigt ? Colors.green.shade900 : Colors.orange.shade900,
+                ),
+              ),
             if (doorCount != null) Text('Türen gesamt: $doorCount'),
           ],
         ),

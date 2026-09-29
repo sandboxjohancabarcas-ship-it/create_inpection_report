@@ -96,7 +96,7 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
     for (final file in files) {
       final ext = file.path.split('.').last.toLowerCase();
       if (['db', 'db3', 'sqlite', 'wartung'].contains(ext)) {
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(file.path, targetVersion: 16);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(file.path, targetVersion: 17);
         if (compat.hasVersionMismatch) {
           if (!mounted) return;
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(

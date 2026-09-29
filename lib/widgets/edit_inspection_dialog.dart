@@ -48,6 +48,8 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
   late TextEditingController _contactPersonController;
   late TextEditingController _inspectorNameController;
   late DateTime _selectedDate;
+  DateTime? _selectedRepairDate;
+  String _orderType = 'Wartung';
   bool _isLocked = false;
   bool _syncBuildingData = true;
   bool _isLoading = true;
@@ -80,6 +82,7 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     _contactPersonController.text = data['contactPerson']?.toString() ?? '';
     _inspectorNameController.text = data['inspectorName']?.toString() ?? '';
     _isLocked = InspectionYearUtils.isInspectionLocked(data['isLocked']);
+    _orderType = data['orderType']?.toString() ?? 'Wartung';
     
     final dateStr = data['date']?.toString();
     if (dateStr != null && dateStr.isNotEmpty) {
@@ -87,6 +90,15 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
         _selectedDate = DateTime.parse(dateStr);
       } catch (_) {
         _selectedDate = DateTime.now();
+      }
+    }
+
+    final repDateStr = data['repairDate']?.toString();
+    if (repDateStr != null && repDateStr.isNotEmpty) {
+      try {
+        _selectedRepairDate = DateTime.parse(repDateStr);
+      } catch (_) {
+        _selectedRepairDate = null;
       }
     }
   }
@@ -130,6 +142,20 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     }
   }
 
+  Future<void> _pickRepairDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedRepairDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedRepairDate = picked;
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -156,6 +182,10 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
         'objectAddress': _objectAddressController.text.trim(),
         'jobNumber': _jobNumberController.text.trim(),
         'projectNumber': _projectNumberController.text.trim(),
+        'orderType': _orderType,
+        'repairDate': (_orderType == 'Reparatur' || _orderType == 'Erledigt') && _selectedRepairDate != null
+            ? _selectedRepairDate!.toIso8601String()
+            : null,
         'date': _selectedDate.toIso8601String(),
         'contactPerson': _contactPersonController.text.trim(),
         'inspectorName': _inspectorNameController.text.trim(),
@@ -164,6 +194,12 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
 
       if (widget.isManagerMode) {
         await DatabaseService.updateInspection(updatedData);
+        if (_orderType == 'Erledigt') {
+          await DatabaseService.consolidateJobToErledigt(
+            jobNumber: _jobNumberController.text.trim(),
+            projectNumber: _projectNumberController.text.trim(),
+          );
+        }
         if (_syncBuildingData) {
           final originalProj = widget.initialData?['projectNumber']?.toString().trim() ?? _projectNumberController.text.trim();
           if (originalProj.isNotEmpty || _projectNumberController.text.trim().isNotEmpty) {
@@ -202,11 +238,18 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
     final dateFormat = DateFormat('dd.MM.yyyy');
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.edit_note, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('Auftrags-Metadaten bearbeiten'),
+          Icon(
+            _orderType == 'Erledigt'
+                ? Icons.task_alt
+                : (_orderType == 'Reparatur' ? Icons.handyman_outlined : Icons.edit_note),
+            color: _orderType == 'Erledigt'
+                ? Colors.green.shade700
+                : (_orderType == 'Reparatur' ? Colors.orange.shade700 : Colors.blue),
+          ),
+          const SizedBox(width: 8),
+          const Text('Auftrags-Metadaten bearbeiten'),
         ],
       ),
       content: _isLoading
@@ -219,7 +262,41 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                 key: _formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.isManagerMode) ...[
+                      const Text('Auftrags-Typ / Phase:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      SegmentedButton<String>(
+                        segments: [
+                          const ButtonSegment<String>(
+                            value: 'Wartung',
+                            icon: Icon(Icons.build_circle_outlined, color: Colors.blue),
+                            label: Text('Wartung'),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'Reparatur',
+                            icon: Icon(Icons.handyman_outlined, color: Colors.orange.shade800),
+                            label: const Text('Reparatur'),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'Erledigt',
+                            icon: Icon(Icons.task_alt, color: Colors.green.shade700),
+                            label: const Text('Erledigt'),
+                          ),
+                        ],
+                        selected: {_orderType},
+                        onSelectionChanged: (val) {
+                          setState(() {
+                            _orderType = val.first;
+                            if ((_orderType == 'Reparatur' || _orderType == 'Erledigt') && _selectedRepairDate == null) {
+                              _selectedRepairDate = DateTime.now();
+                            }
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     TextFormField(
                       controller: _clientNameController,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
@@ -247,10 +324,10 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                     TextFormField(
                       controller: _jobNumberController,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                      decoration: const InputDecoration(
-                        labelText: 'Auftragsnummer',
-                        prefixIcon: Icon(Icons.confirmation_number),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: _orderType == 'Reparatur' ? 'Reparatur-Auftragsnummer' : 'Auftragsnummer',
+                        prefixIcon: const Icon(Icons.confirmation_number),
+                        border: const OutlineInputBorder(),
                       ),
                       validator: (value) =>
                           value == null || value.trim().isEmpty ? 'Bitte Auftragsnummer eingeben' : null,
@@ -268,19 +345,52 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    InkWell(
-                      onTap: _pickDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Prüfdatum',
-                          prefixIcon: Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: _pickDate,
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: (_orderType == 'Reparatur' || _orderType == 'Erledigt') ? 'Prüfdatum (Bezug)' : 'Prüfdatum',
+                                prefixIcon: const Icon(Icons.calendar_today),
+                                border: const OutlineInputBorder(),
+                              ),
+                              child: Text(
+                                dateFormat.format(_selectedDate),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                              ),
+                            ),
+                          ),
                         ),
-                        child: Text(
-                          dateFormat.format(_selectedDate),
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                        ),
-                      ),
+                        if (_orderType == 'Reparatur' || _orderType == 'Erledigt') ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: InkWell(
+                              onTap: widget.isManagerMode ? _pickRepairDate : null,
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Reparatur-Datum',
+                                  prefixIcon: Icon(
+                                    Icons.build,
+                                    color: _orderType == 'Erledigt' ? Colors.green.shade700 : Colors.orange.shade800,
+                                  ),
+                                  border: const OutlineInputBorder(),
+                                ),
+                                child: Text(
+                                  _selectedRepairDate != null
+                                      ? dateFormat.format(_selectedRepairDate!)
+                                      : 'Nicht gesetzt',
+                                  style: TextStyle(
+                                    color: _orderType == 'Erledigt' ? Colors.green.shade900 : Colors.orange.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -296,10 +406,10 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                     TextFormField(
                       controller: _inspectorNameController,
                       style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                      decoration: const InputDecoration(
-                        labelText: 'Prüfer Name',
-                        prefixIcon: Icon(Icons.badge),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: _orderType == 'Reparatur' ? 'Techniker / Reparateur' : 'Prüfer Name',
+                        prefixIcon: const Icon(Icons.badge),
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     if (widget.isManagerMode) ...[

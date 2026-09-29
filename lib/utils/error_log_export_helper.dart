@@ -31,7 +31,7 @@ class ErrorLogExportHelper {
   /// Analyzes an incoming .db package for version and schema differences.
   static Future<CompatibilityCheckResult> checkPackageCompatibility(
     String packagePath, {
-    int targetVersion = 16,
+    int targetVersion = 17,
   }) async {
     if (!packagePath.toLowerCase().endsWith('.db') &&
         !packagePath.toLowerCase().endsWith('.sqlite') &&

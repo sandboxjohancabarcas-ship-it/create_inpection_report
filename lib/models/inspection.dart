@@ -361,7 +361,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         if (!mounted) return;
 
         // Check compatibility before import (Inspector result package uses local schema v16)
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 16);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 17);
         if (compat.hasVersionMismatch) {
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
             context,

@@ -403,7 +403,6 @@ class DoorValidator {
     checkTech('panicFunction', 'Panikfunktion', incoming.panicFunction, existing.panicFunction);
     checkTech('accessControl', 'Zutrittskontrolle',
         incoming.accessControl, existing.accessControl);
-    checkTech('notes', 'Notizen', incoming.notes, existing.notes);
 
     return conflicts;
   }

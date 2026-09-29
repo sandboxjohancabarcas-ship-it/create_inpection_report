@@ -461,6 +461,18 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
         final String client = insp['clientName'] ?? '';
         final String jobNumber = insp['jobNumber'] ?? '';
         final String notes = insp['junctionNotes'] ?? '';
+        final String orderType = insp['orderType']?.toString() ?? 'Wartung';
+        final String rawRepairDate = insp['repairDate']?.toString() ?? '';
+        String formattedRepairDate = '';
+        try {
+          if (rawRepairDate.isNotEmpty) {
+            final parsedRep = DateTime.parse(rawRepairDate);
+            formattedRepairDate = DateFormat('dd.MM.yyyy').format(parsedRep);
+          }
+        } catch (_) {}
+
+        final bool isErledigt = orderType == 'Erledigt';
+        final bool isReparatur = orderType == 'Reparatur';
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
@@ -482,7 +494,11 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: errorCount > 0 ? Colors.red.shade50 : Colors.green.shade50,
+                  color: isErledigt
+                      ? Colors.teal.shade50
+                      : (isReparatur
+                          ? Colors.orange.shade50
+                          : (errorCount > 0 ? Colors.red.shade50 : Colors.green.shade50)),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(12),
                     topRight: Radius.circular(12),
@@ -491,33 +507,81 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
                 child: Row(
                   children: [
                     Icon(
-                      errorCount > 0 ? Icons.error_outline : Icons.check_circle_outline,
-                      color: errorCount > 0 ? Colors.red.shade700 : Colors.green.shade700,
+                      isErledigt
+                          ? Icons.verified_outlined
+                          : (isReparatur
+                              ? Icons.handyman_outlined
+                              : (errorCount > 0 ? Icons.error_outline : Icons.check_circle_outline)),
+                      color: isErledigt
+                          ? Colors.teal.shade800
+                          : (isReparatur
+                              ? Colors.orange.shade800
+                              : (errorCount > 0 ? Colors.red.shade700 : Colors.green.shade700)),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Prüfung am $formattedDate',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: Colors.blueGrey.shade900,
-                            ),
+                          Row(
+                            children: [
+                              Text(
+                                isErledigt
+                                    ? 'Auftrag abgeschlossen (Erledigt)'
+                                    : (isReparatur ? 'Reparatur / Instandsetzung' : 'Prüfung am $formattedDate'),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: Colors.blueGrey.shade900,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isErledigt
+                                      ? Colors.green.shade100
+                                      : (isReparatur ? Colors.orange.shade100 : Colors.blue.shade100),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: isErledigt
+                                        ? Colors.green.shade600
+                                        : (isReparatur ? Colors.orange.shade400 : Colors.blue.shade300),
+                                  ),
+                                ),
+                                child: Text(
+                                  orderType,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isErledigt
+                                        ? Colors.green.shade900
+                                        : (isReparatur ? Colors.orange.shade900 : Colors.blue.shade900),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
-                            'Prüfer: $inspector ${jobNumber.isNotEmpty ? "• Auftrag: $jobNumber" : ""}',
+                            'Prüfer/Techniker: $inspector ${jobNumber.isNotEmpty ? "• Auftrag: $jobNumber" : ""}',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                           ),
+                          if (formattedRepairDate.isNotEmpty)
+                            Text(
+                              'Reparaturdatum: $formattedRepairDate ${isErledigt ? "(Bezugsprüfung: $formattedDate)" : ""}',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isErledigt ? Colors.teal.shade900 : Colors.orange.shade900),
+                            ),
                         ],
                       ),
                     ),
                     Chip(
-                      backgroundColor: errorCount > 0 ? Colors.red : Colors.green,
+                      backgroundColor: isErledigt
+                          ? Colors.teal.shade700
+                          : (errorCount > 0 ? Colors.red : Colors.green),
                       label: Text(
-                        errorCount > 0 ? '$errorCount Mängel' : 'Mängelfrei',
+                        isErledigt
+                            ? 'Erledigt'
+                            : (errorCount > 0 ? '$errorCount Mängel' : 'Mängelfrei'),
                         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                     ),

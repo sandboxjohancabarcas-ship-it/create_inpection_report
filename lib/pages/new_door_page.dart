@@ -90,13 +90,17 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   
   // Date field
   DateTime inspectionDate = DateTime.now();
+  DateTime? repairDate;
+  String orderType = 'Wartung';
   int? currentInspectionId;
   bool _isLoadingOptions = true;
   int _errorCount = 0;
+  int _openErrorCount = 0;
 
   bool get _canSave {
     if (_isFormReadOnly) return false;
-    if (!properFunction && _errorCount == 0) return false;
+    if (properFunction && _openErrorCount > 0) return false;
+    if (!properFunction && _openErrorCount == 0) return false;
     return true;
   }
 
@@ -267,6 +271,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     if (results.isNotEmpty) {
       final insp = results.first;
+      final repDateStr = insp['repairDate']?.toString();
       setState(() {
         currentInspectionId = widget.inspectionId ?? insp['inspectionId'];
         _isLocked = InspectionYearUtils.isInspectionLocked(insp['isLocked'], insp['date']);
@@ -277,6 +282,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         projectNumberController.text = insp['projectNumber'] ?? '';
         inspectorNameController.text = insp['inspectorName'] ?? '';
         inspectionDate = DateTime.tryParse(insp['date'] ?? '') ?? DateTime.now();
+        orderType = insp['orderType']?.toString() ?? 'Wartung';
+        repairDate = (repDateStr != null && repDateStr.isNotEmpty) ? DateTime.tryParse(repDateStr) : null;
       });
 
       // Calculate next available door position (pos) for this inspection if creating a new door
@@ -382,10 +389,19 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
         final newNotesText = consolidated.join('\n').trim();
 
+        int openErrors = 0;
+        for (final e in errors) {
+          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          if (status != 'resolved' && status != 'gelöst' && status != 'beholfen') {
+            openErrors++;
+          }
+        }
+
         if (mounted) {
           setState(() {
             _errorCount = errors.length;
-            if (errors.isNotEmpty) {
+            _openErrorCount = openErrors;
+            if (openErrors > 0) {
               properFunction = false;
             }
             notesController.text = newNotesText;
@@ -418,6 +434,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         if (mounted) {
           setState(() {
             _errorCount = 0;
+            _openErrorCount = 0;
           });
         }
       }
@@ -707,10 +724,17 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             backgroundColor: Colors.orange,
           ),
         );
-      } else if (!properFunction && _errorCount == 0) {
+      } else if (properFunction && _openErrorCount > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Funktion steht auf "Ja", aber es sind noch $_openErrorCount offene Mängel vorhanden. Bitte offene Mängel als "Gelöst" markieren oder Funktion auf "Nein" setzen.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } else if (!properFunction && _openErrorCount == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Wenn Bewertung auf "Nein" steht, müssen Mängel über "Fehler verwalten" erfasst werden, um speichern zu können.'),
+            content: Text('Wenn Bewertung auf "Nein" steht, muss mindestens ein offener Mangel über "Fehler verwalten" erfasst werden.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -729,6 +753,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       'clientName': customerNameController.text,
       'objectAddress': customerAddressController.text,
       'date': inspectionDate.toIso8601String(),
+      'orderType': orderType,
+      'repairDate': repairDate?.toIso8601String(),
       'contactPerson': contactPersonController.text,
       'inspectorName': inspectorNameController.text,
       'jobNumber': jobNumberController.text,
@@ -1146,6 +1172,49 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   }
                 } : null,
               ),
+            ),
+
+            // Reparatur-Datum
+            ListTile(
+              title: Text(
+                orderType == 'Wartung' && repairDate == null
+                    ? "Reparaturdatum: -"
+                    : "Reparaturdatum: ${repairDate != null ? '${repairDate!.day.toString().padLeft(2, '0')}.${repairDate!.month.toString().padLeft(2, '0')}.${repairDate!.year}' : '-'}",
+                style: TextStyle(
+                  color: orderType == 'Wartung' && repairDate == null
+                      ? Colors.grey.shade600
+                      : Colors.orange.shade900,
+                  fontWeight: orderType != 'Wartung' || repairDate != null
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+              ),
+              subtitle: Text(
+                orderType == 'Wartung' && repairDate == null
+                    ? "Nicht zutreffend (Wartungsphase)"
+                    : (orderType == 'Erledigt' ? "Instandsetzung abgeschlossen (Erledigt)" : "Instandsetzungsphase"),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: orderType == 'Wartung' && repairDate == null ? Colors.grey : Colors.orange.shade800,
+                ),
+              ),
+              trailing: (widget.isManagerMode && !_isFormReadOnly && orderType != 'Wartung')
+                  ? IconButton(
+                      icon: Icon(Icons.build, color: Colors.orange.shade800),
+                      tooltip: 'Reparaturdatum ändern',
+                      onPressed: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: repairDate ?? DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2100),
+                        );
+                        if (date != null) {
+                          setState(() => repairDate = date);
+                        }
+                      },
+                    )
+                  : null,
             ),
 
             const SizedBox(height: 20),
@@ -1645,21 +1714,39 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               title: const Text("Tür inkl. Komponenten in ordentlicher Funktion"),
               subtitle: Text(
                 properFunction
-                    ? "Ja (Keine Mängel)"
-                    : (_errorCount > 0 ? "Nein ($_errorCount Mängel erfasst)" : "Nein (Mängel müssen erfasst werden)"),
+                    ? (_openErrorCount > 0
+                        ? "Ja (Warnung: $_openErrorCount offene Mängel!)"
+                        : (_errorCount > 0 ? "Ja (Alle Mängel gelöst/behoben)" : "Ja (Keine Mängel)"))
+                    : (_openErrorCount > 0
+                        ? "Nein ($_openErrorCount offene Mängel)"
+                        : "Nein (Mängel müssen erfasst werden)"),
                 style: TextStyle(
                   fontSize: 12,
-                  color: properFunction ? Colors.green.shade700 : (_errorCount > 0 ? Colors.orange.shade800 : Colors.red.shade700),
+                  color: properFunction
+                      ? (_openErrorCount > 0 ? Colors.red.shade700 : Colors.green.shade700)
+                      : (_openErrorCount > 0 ? Colors.orange.shade800 : Colors.red.shade700),
                 ),
               ),
               value: properFunction,
               onChanged: (val) => setState(() => properFunction = val),
             ),
-            if (!_isFormReadOnly && !properFunction && _errorCount == 0) ...[
+            if (!_isFormReadOnly && properFunction && _openErrorCount > 0) ...[
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
                 child: Text(
-                  'Hinweis: Da die Tür nicht als ordnungsgemäß bewertet ist, muss mindestens ein Fehler hinzugefügt werden, um zu speichern.',
+                  'Hinweis: Die Tür ist als ordnungsgemäß (Ja) markiert, hat aber noch $_openErrorCount offene Mängel. Bitte Mängel auf "Gelöst" setzen oder Bewertung auf "Nein" ändern, um speichern zu können.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ] else if (!_isFormReadOnly && !properFunction && _openErrorCount == 0) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
+                child: Text(
+                  'Hinweis: Da die Tür nicht als ordnungsgemäß bewertet ist, muss mindestens ein offener Mangel über "Fehler verwalten" hinzugefügt werden, um zu speichern.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.red.shade700,

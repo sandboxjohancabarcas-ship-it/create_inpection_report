@@ -947,6 +947,28 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                 ),
                 TextButton.icon(
+                  onPressed: () async {
+                    final firstJob = projectInspections.first;
+                    final pNum = firstJob['projectNumber']?.toString().trim() ?? '';
+                    final addr = firstJob['objectAddress']?.toString().trim() ?? '';
+                    final client = firstJob['clientName']?.toString().trim() ?? '';
+                    final created = await CreateProjectDialog.show(
+                      context,
+                      initialProjectNumber: pNum.isNotEmpty ? pNum : null,
+                      initialObjectAddress: addr.isNotEmpty ? addr : null,
+                      initialClientName: client.isNotEmpty ? client : null,
+                    );
+                    if (created == true && mounted) {
+                      _loadData();
+                    }
+                  },
+                  icon: const Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 18),
+                  label: const Text(
+                    '+ Neuer Auftrag',
+                    style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton.icon(
                   onPressed: _isProcessing
                       ? null
                       : () async {
@@ -993,6 +1015,23 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               final id = job['inspectionId'] as int;
               final isSelected = _selectedInspectionIds.contains(id);
               final bool locked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
+              final orderType = job['orderType']?.toString() ?? 'Wartung';
+              final isReparatur = orderType == 'Reparatur';
+              final isErledigt = orderType == 'Erledigt';
+              final repairDateStr = job['repairDate']?.toString();
+
+              final Color badgeBg = isErledigt
+                  ? Colors.green.shade50
+                  : (isReparatur ? Colors.orange.shade100 : Colors.blue.shade50);
+              final Color badgeBorder = isErledigt
+                  ? Colors.green.shade400
+                  : (isReparatur ? Colors.orange.shade400 : Colors.blue.shade300);
+              final Color badgeTextColor = isErledigt
+                  ? Colors.green.shade900
+                  : (isReparatur ? Colors.orange.shade900 : Colors.blue.shade800);
+              final IconData badgeIcon = isErledigt
+                  ? Icons.task_alt
+                  : (isReparatur ? Icons.handyman_outlined : Icons.build_circle_outlined);
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1011,20 +1050,49 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     value: isSelected,
                     onChanged: (_) => _toggleInspectionSelection(id),
                   ),
-                  title: Row(
+                  title: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 4,
                     children: [
                       Text(
                         'Auftrag: ${job['jobNumber'] ?? "N/A"}',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                       ),
-                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: badgeBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              badgeIcon,
+                              size: 11,
+                              color: badgeTextColor,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              orderType,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: badgeTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       GestureDetector(
                         onTap: () async {
                           await DatabaseService.setInspectionLockStatus(id, !locked);
                           _loadData();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: locked ? Colors.red.shade50 : Colors.green.shade50,
                             border: Border.all(color: locked ? Colors.red.shade300 : Colors.green.shade300),
@@ -1035,10 +1103,10 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             children: [
                               Icon(
                                 locked ? Icons.lock : Icons.lock_open,
-                                size: 12,
+                                size: 11,
                                 color: locked ? Colors.red.shade900 : Colors.green.shade900,
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 3),
                               Text(
                                 locked ? 'Gesperrt' : 'Freigegeben',
                                 style: TextStyle(
@@ -1051,7 +1119,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
                       if (job['date'] != null && job['date'].toString().isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1081,6 +1148,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             'Objekt: ${job['objectAddress']}',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                           ),
+                        if ((isReparatur || isErledigt) && repairDateStr != null && repairDateStr.isNotEmpty)
+                          Text(
+                            'Reparaturdatum: $repairDateStr',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isErledigt ? Colors.green.shade900 : Colors.orange.shade900,
+                            ),
+                          ),
                         Text(
                           '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.blue.shade800),
@@ -1091,6 +1167,28 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!isErledigt)
+                        IconButton(
+                          icon: const Icon(Icons.task_alt, color: Colors.green),
+                          tooltip: 'Als "Erledigt" abschließen & konsolidieren',
+                          onPressed: () async {
+                            final jobNum = job['jobNumber']?.toString() ?? '';
+                            final projNum = job['projectNumber']?.toString();
+                            await DatabaseService.consolidateJobToErledigt(
+                              jobNumber: jobNum,
+                              projectNumber: projNum,
+                            );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Auftrag $jobNum erfolgreich als "Erledigt" abgeschlossen.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              _loadData();
+                            }
+                          },
+                        ),
                       IconButton(
                         icon: Icon(
                           locked ? Icons.lock : Icons.lock_open,

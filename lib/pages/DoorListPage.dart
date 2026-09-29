@@ -117,7 +117,7 @@ class _DoorListPageState extends State<DoorListPage> {
         if (!mounted) return;
 
         // Check compatibility before showing import options
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 16);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 17);
         if (compat.hasVersionMismatch) {
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
             context,
@@ -413,6 +413,8 @@ class _DoorListPageState extends State<DoorListPage> {
                   jobNumber: insp['jobNumber'] ?? 'N/A',
                   projectNumber: insp['projectNumber']?.toString() ?? '',
                   date: insp['date'] ?? '',
+                  orderType: insp['orderType']?.toString() ?? 'Wartung',
+                  repairDate: insp['repairDate']?.toString(),
                   doorCount: insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null,
                   isLocked: insp['isLocked'],
                   isSelected: isSelected,
