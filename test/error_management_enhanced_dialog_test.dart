@@ -9,6 +9,8 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/pages/error_management_page.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 
+import 'package:wartungstool/pages/new_door_page.dart';
+
 class MockPathProviderPlatform extends PathProviderPlatform
     with MockPlatformInterfaceMixin {
   @override
@@ -50,6 +52,7 @@ void main() {
     // Insert sample catalog errors across multiple categories
     await LocalDatabaseService.insertErrorCatalogItems([
       ErrorCatalog(
+        errorId: 1,
         code: '1.1.1',
         description: 'Türschließer verliert Öl',
         category: 'Türschließer',
@@ -57,6 +60,7 @@ void main() {
         status: 'Approved',
       ),
       ErrorCatalog(
+        errorId: 2,
         code: '1.1.2',
         description: 'Schließkraft unzureichend',
         category: 'Türschließer',
@@ -64,6 +68,7 @@ void main() {
         status: 'Approved',
       ),
       ErrorCatalog(
+        errorId: 3,
         code: '2.1.1',
         description: 'Schlossfalle defekt',
         category: 'Schloss',
@@ -71,6 +76,7 @@ void main() {
         status: 'Approved',
       ),
       ErrorCatalog(
+        errorId: 4,
         code: '3.1.1',
         description: 'Feststellanlage schließt nicht bei Auslösung',
         category: 'Feststellanlage',
@@ -82,6 +88,7 @@ void main() {
     await db.insert('doors', {
       'id': 1,
       'doorNumber': 'T-001',
+      'floor': 'EG',
       'doorType': 'T30-1',
     });
 
@@ -215,5 +222,60 @@ void main() {
     expect(find.text('2.1.1'), findsOneWidget);
     expect(find.text('Schlossfalle defekt'), findsOneWidget);
     expect(find.text('Notizen: Schlossfalle klemmt beim Zuziehen'), findsOneWidget);
+  });
+
+  testWidgets('DoorInspectionForm syncs door notes and appends [Gelöst] when error is resolved', (WidgetTester tester) async {
+    // Insert an open error and a resolved error
+    await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      inspectionDoorId: 1,
+      errorId: 1,
+      errorCode: '1.1.1',
+      notes: 'Am Gestänge undicht',
+      severity: 'high',
+      quantity: 1,
+      resolutionStatus: 'open',
+    ));
+
+    await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      inspectionDoorId: 1,
+      errorId: 3,
+      errorCode: '2.1.1',
+      notes: 'Feder erneuert',
+      severity: 'medium',
+      quantity: 1,
+      resolutionStatus: 'resolved',
+    ));
+
+    final door = Door.fromMap({
+      'id': 1,
+      'pos': 1,
+      'doorNumber': 'T-001',
+      'floor': 'EG',
+      'roomNumber': '101',
+      'roomDesignation': 'Büro',
+      'doorType': 'T30-1',
+      'notes': '',
+    });
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DoorInspectionForm(
+              door: door,
+              inspectionId: 1,
+              isManagerMode: false,
+            ),
+          ),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 600));
+    });
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify notes contain open error without [Gelöst] and resolved error with [Gelöst]
+    expect(find.textContaining('Türschließer verliert Öl: Am Gestänge undicht'), findsOneWidget);
+    expect(find.textContaining('Schlossfalle defekt: Feder erneuert [Gelöst]'), findsOneWidget);
   });
 }

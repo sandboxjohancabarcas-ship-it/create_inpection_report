@@ -345,53 +345,42 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: _pickDate,
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: (_orderType == 'Reparatur' || _orderType == 'Erledigt') ? 'Prüfdatum (Bezug)' : 'Prüfdatum',
-                                prefixIcon: const Icon(Icons.calendar_today),
-                                border: const OutlineInputBorder(),
-                              ),
-                              child: Text(
-                                dateFormat.format(_selectedDate),
-                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
-                              ),
+                    // Date Selection: Show only Reparatur-Datum for Reparatur/Erledigt-Reparatur, only Prüfdatum for Wartung/Erledigt-Wartung
+                    if (_orderType == 'Reparatur' || (_orderType == 'Erledigt' && _selectedRepairDate != null))
+                      InkWell(
+                        onTap: widget.isManagerMode ? _pickRepairDate : null,
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'Reparatur-Datum',
+                            prefixIcon: Icon(Icons.build, color: _orderType == 'Erledigt' ? Colors.green.shade700 : Colors.orange.shade800),
+                            border: const OutlineInputBorder(),
+                          ),
+                          child: Text(
+                            _selectedRepairDate != null
+                                ? dateFormat.format(_selectedRepairDate!)
+                                : dateFormat.format(_selectedDate),
+                            style: TextStyle(
+                              color: _orderType == 'Erledigt' ? Colors.green.shade900 : Colors.orange.shade900,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        if (_orderType == 'Reparatur' || _orderType == 'Erledigt') ...[
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: InkWell(
-                              onTap: widget.isManagerMode ? _pickRepairDate : null,
-                              child: InputDecorator(
-                                decoration: InputDecoration(
-                                  labelText: 'Reparatur-Datum',
-                                  prefixIcon: Icon(
-                                    Icons.build,
-                                    color: _orderType == 'Erledigt' ? Colors.green.shade700 : Colors.orange.shade800,
-                                  ),
-                                  border: const OutlineInputBorder(),
-                                ),
-                                child: Text(
-                                  _selectedRepairDate != null
-                                      ? dateFormat.format(_selectedRepairDate!)
-                                      : 'Nicht gesetzt',
-                                  style: TextStyle(
-                                    color: _orderType == 'Erledigt' ? Colors.green.shade900 : Colors.orange.shade900,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
+                      )
+                    else
+                      InkWell(
+                        onTap: _pickDate,
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Prüfdatum',
+                            prefixIcon: Icon(Icons.calendar_today, color: Colors.blueAccent),
+                            border: OutlineInputBorder(),
                           ),
-                        ],
-                      ],
-                    ),
+                          child: Text(
+                            dateFormat.format(_selectedDate),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _contactPersonController,

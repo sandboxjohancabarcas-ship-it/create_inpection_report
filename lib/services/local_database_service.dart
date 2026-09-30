@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:intl/intl.dart';
 
 class LocalDatabaseService {
   static Database? _db;
@@ -1066,8 +1067,8 @@ class LocalDatabaseService {
       SELECT 
         id.doorId,
         COUNT(ide.id) AS total_errors,
-        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) != 'resolved' THEN 1 ELSE 0 END) AS open_errors,
-        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) = 'resolved' THEN 1 ELSE 0 END) AS resolved_errors
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_errors,
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors
       FROM inspection_doors id
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
       WHERE id.inspectionId = ?
@@ -1175,6 +1176,17 @@ class LocalDatabaseService {
       'inspection_door_errors',
       error.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<int> updateInspectionDoorError(InspectionDoorError error) async {
+    final db = await getDb();
+    if (error.id == null) return 0;
+    return await db.update(
+      'inspection_door_errors',
+      error.toMap(),
+      where: 'id = ?',
+      whereArgs: [error.id],
     );
   }
 
@@ -1318,6 +1330,263 @@ class LocalDatabaseService {
     }
     return finalResults;
   }
+  static Future<List<Map<String, String>>> getAllLocalProjects() async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT 
+        COALESCE(projectNumber, '') as projectNumber,
+        COALESCE(objectAddress, '') as objectAddress,
+        COALESCE(clientName, '') as clientName
+      FROM inspections
+      WHERE (projectNumber IS NOT NULL AND TRIM(projectNumber) != '')
+         OR (objectAddress IS NOT NULL AND TRIM(objectAddress) != '')
+      ORDER BY projectNumber ASC, objectAddress ASC
+    ''');
+    return rows.map((r) => {
+      'projectNumber': (r['projectNumber'] as String? ?? '').trim(),
+      'objectAddress': (r['objectAddress'] as String? ?? '').trim(),
+      'clientName': (r['clientName'] as String? ?? '').trim(),
+    }).toList();
+  }
+
+  /// Fetches all errors for a set of inspection door IDs from Local DB
+  static Future<List<Map<String, dynamic>>> getErrorsForInspectionDoorIds(List<int> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await getDb();
+    final String idString = ids.join(',');
+    
+    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+    final List<String> selectCols = [];
+    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    for (final col in possibleCols) {
+      if (existingColumns.contains(col)) {
+        selectCols.add('ide.$col');
+      }
+    }
+    final String selectString = selectCols.join(', ');
+
+    final List<Map<String, dynamic>> results = await db.rawQuery('''
+      SELECT $selectString,
+             COALESCE(ec.code, ide.errorCode, 'UNKNOWN') AS code,
+             COALESCE(ec.description, ide.notes, 'Keine Beschreibung') AS description,
+             COALESCE(ec.category, '') AS category
+      FROM inspection_door_errors ide
+      LEFT JOIN error_catalog ec ON ide.errorId = ec.errorId
+      WHERE ide.inspectionDoorId IN ($idString)
+    ''');
+
+    final List<Map<String, dynamic>> finalResults = [];
+    for (final row in results) {
+      final int? errorId = row['id'] as int?;
+      String attachments = '';
+      if (errorId != null && existingColumns.contains('attachments')) {
+        try {
+          final attachmentQuery = await db.query(
+            'inspection_door_errors',
+            columns: ['attachments'],
+            where: 'id = ?',
+            whereArgs: [errorId],
+          );
+          if (attachmentQuery.isNotEmpty) {
+            attachments = attachmentQuery.first['attachments'] as String? ?? '';
+          }
+        } catch (e) {
+          attachments = await _fetchLargeAttachments(db, errorId);
+        }
+      }
+      final Map<String, dynamic> fullRow = Map<String, dynamic>.from(row);
+      fullRow['attachments'] = attachments;
+      finalResults.add(fullRow);
+    }
+    return finalResults;
+  }
+
+  /// Creates a new Auftrag ("Wartung" or "Reparatur") in Local DB (technician device).
+  /// If a previous event exists and cloneDoors is true:
+  /// - Copies all doors and technical properties.
+  /// - Inherits open defects with resolutionStatus 'Open'.
+  /// - Solved defects ("gelöst", "Resolved", etc.) are omitted and resolved notes cleared.
+  /// If no previous event exists, creates a blank event (0 doors, 0 errors).
+  static Future<int> createAuftragFromLatestInspection({
+    required String projectNumber,
+    required String objectAddress,
+    required String clientName,
+    required String jobNumber,
+    required DateTime date,
+    String orderType = 'Wartung', // 'Wartung' or 'Reparatur'
+    DateTime? repairDate,
+    String contactPerson = '',
+    String inspectorName = '',
+    bool cloneDoors = true,
+    int? sourceInspectionId,
+  }) async {
+    final db = await getDb();
+    final cleanProj = projectNumber.trim();
+    final cleanAddr = objectAddress.trim();
+    final cleanClient = clientName.trim();
+    final cleanJob = jobNumber.trim();
+
+    if (cleanJob.isEmpty) {
+      throw ArgumentError('Bitte eine Auftragsnummer eingeben.');
+    }
+
+    // 1. Validate Job Number Uniqueness in Local DB
+    final existingJobs = await db.query(
+      'inspections',
+      where: 'jobNumber = ?',
+      whereArgs: [cleanJob],
+      limit: 1,
+    );
+    if (existingJobs.isNotEmpty) {
+      throw ArgumentError('Ein Auftrag mit der Auftragsnummer "$cleanJob" existiert bereits. Bitte eine neue, eindeutige Nummer vergeben.');
+    }
+
+    // 2. Locate base previous inspection/event
+    Map<String, dynamic>? baseInspection;
+    if (sourceInspectionId != null) {
+      final found = await db.query(
+        'inspections',
+        where: 'inspectionId = ?',
+        whereArgs: [sourceInspectionId],
+        limit: 1,
+      );
+      if (found.isNotEmpty) baseInspection = found.first;
+    }
+    if (baseInspection == null && cleanProj.isNotEmpty) {
+      final found = await db.query(
+        'inspections',
+        where: 'projectNumber = ?',
+        whereArgs: [cleanProj],
+        orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
+        limit: 1,
+      );
+      if (found.isNotEmpty) baseInspection = found.first;
+    }
+    if (baseInspection == null && cleanAddr.isNotEmpty) {
+      final found = await db.query(
+        'inspections',
+        where: 'objectAddress = ?',
+        whereArgs: [cleanAddr],
+        orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
+        limit: 1,
+      );
+      if (found.isNotEmpty) baseInspection = found.first;
+    }
+    if (baseInspection == null && cloneDoors) {
+      final allLocal = await db.query(
+        'inspections',
+        orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
+        limit: 1,
+      );
+      if (allLocal.isNotEmpty) {
+        baseInspection = allLocal.first;
+      }
+    }
+
+    // 3. Validate Date Sequencing (subsequent event cannot be earlier than previous event)
+    final DateTime newEffectiveDate = (orderType == 'Reparatur' && repairDate != null) ? repairDate : date;
+    if (baseInspection != null) {
+      final String? prevDateStr = baseInspection['repairDate']?.toString().trim().isNotEmpty == true
+          ? baseInspection['repairDate']?.toString()
+          : baseInspection['date']?.toString();
+      if (prevDateStr != null && prevDateStr.isNotEmpty) {
+        try {
+          final prevDate = DateTime.parse(prevDateStr);
+          final newDatePure = DateTime(newEffectiveDate.year, newEffectiveDate.month, newEffectiveDate.day);
+          final prevDatePure = DateTime(prevDate.year, prevDate.month, prevDate.day);
+          if (newDatePure.isBefore(prevDatePure)) {
+            final fNew = DateFormat('dd.MM.yyyy').format(newEffectiveDate);
+            final fPrev = DateFormat('dd.MM.yyyy').format(prevDate);
+            throw ArgumentError('Das Datum des Folge-Auftrags ($fNew) darf nicht vor dem Datum des vorherigen Auftrags ($fPrev) liegen.');
+          }
+        } catch (e) {
+          if (e is ArgumentError) rethrow;
+        }
+      }
+    }
+
+    final resolvedProj = cleanProj.isNotEmpty
+        ? cleanProj
+        : (baseInspection != null ? (baseInspection['projectNumber']?.toString() ?? '') : '');
+    final resolvedAddr = cleanAddr.isNotEmpty
+        ? cleanAddr
+        : (baseInspection != null ? (baseInspection['objectAddress']?.toString() ?? '') : '');
+    final resolvedClient = cleanClient.isNotEmpty
+        ? cleanClient
+        : (baseInspection != null ? (baseInspection['clientName']?.toString() ?? '') : '');
+
+    // 4. Create the new inspection record
+    final inspectionData = {
+      'projectNumber': resolvedProj,
+      'objectAddress': resolvedAddr,
+      'clientName': resolvedClient,
+      'jobNumber': cleanJob,
+      'date': date.toIso8601String(),
+      'contactPerson': contactPerson.trim().isNotEmpty
+          ? contactPerson.trim()
+          : (baseInspection != null ? (baseInspection['contactPerson']?.toString() ?? '') : ''),
+      'inspectorName': inspectorName.trim().isNotEmpty
+          ? inspectorName.trim()
+          : (baseInspection != null ? (baseInspection['inspectorName']?.toString() ?? '') : ''),
+      'orderType': orderType,
+      'repairDate': orderType == 'Reparatur' && repairDate != null ? repairDate.toIso8601String() : null,
+      'isLocked': 0,
+    };
+
+    final newInspectionId = await insertInspection(inspectionData);
+
+    // 5. Clone doors and propagate open errors
+    if (cloneDoors && baseInspection != null) {
+      final prevInspId = baseInspection['inspectionId'] as int;
+      final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
+      final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
+      final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
+
+      bool isResolved(Map<String, dynamic> e) {
+        final res = (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
+        return res == 'resolved' || res == 'gelöst' || res == 'geloest' || res == 'beholfen' || res == 'erledigt';
+      }
+
+      for (final j in prevJunctions) {
+        final doorId = j['doorId'] as int;
+        final prevJunctionId = j['id'] as int;
+        final doorErrors = prevErrors.where((e) => e['inspectionDoorId'] == prevJunctionId).toList();
+
+        final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
+
+        String doorNote = '';
+        if (openErrors.isNotEmpty) {
+          doorNote = j['notes']?.toString() ?? '';
+        }
+
+        final newJunctionId = await insertInspectionDoor({
+          'inspectionId': newInspectionId,
+          'doorId': doorId,
+          'status': 'Pending',
+          'notes': doorNote,
+          'attachments': null,
+        });
+
+        for (final err in openErrors) {
+          final errorObj = InspectionDoorError(
+            id: null,
+            inspectionDoorId: newJunctionId,
+            errorId: err['errorId'] as int?,
+            errorCode: err['errorCode']?.toString() ?? '',
+            quantity: (err['quantity'] as num?)?.toInt() ?? 1,
+            severity: err['severity']?.toString() ?? 'medium',
+            notes: err['notes']?.toString() ?? '',
+            resolutionStatus: 'Open',
+            attachments: err['attachments']?.toString() ?? '',
+          );
+          await insertInspectionDoorError(errorObj);
+        }
+      }
+    }
+
+    return newInspectionId;
+  }
+
   static Future<void> deleteInspectionDoorError(int id) async {
     final db = await getDb();
     await db.delete('inspection_door_errors', where: 'id = ?', whereArgs: [id]);

@@ -414,7 +414,12 @@ class DoorOptionsService {
   /// Helper to get options as a list of strings.
   static List<String> getStringOptions(String key) {
     final raw = getOptions(key);
-    return raw.map((e) => e.toString()).toList();
+    return raw.map((e) {
+      if (e is Map) {
+        return (e['value'] ?? e['label'] ?? '').toString();
+      }
+      return e.toString();
+    }).toList();
   }
 
   /// Helper to get options as a list of integers.

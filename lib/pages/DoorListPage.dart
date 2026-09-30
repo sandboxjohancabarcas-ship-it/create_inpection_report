@@ -12,6 +12,7 @@ import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
 import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
+import '../widgets/create_project_dialog.dart';
 import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
 import 'door_conflict_review_page.dart';
@@ -394,10 +395,34 @@ class _DoorListPageState extends State<DoorListPage> {
               children: [
                 inspections.isEmpty
                     ? Center(
-                        child: Text(
-                          _searchController.text.isNotEmpty || _selectedClient != 'Alle'
-                              ? 'Keine passenden Aufträge gefunden'
-                              : 'Keine Aufträge geladen',
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 56, color: Colors.grey.shade400),
+                            const SizedBox(height: 12),
+                            Text(
+                              _searchController.text.isNotEmpty || _selectedClient != 'Alle'
+                                  ? 'Keine passenden Aufträge gefunden'
+                                  : 'Keine Aufträge vorhanden',
+                              style: TextStyle(fontSize: 15, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                            ),
+                            if (_searchController.text.isEmpty && _selectedClient == 'Alle') ...[
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.add),
+                                label: const Text('Neuen Auftrag anlegen'),
+                                onPressed: () async {
+                                  final created = await CreateProjectDialog.show(
+                                    context,
+                                    isInspectorMode: true,
+                                  );
+                                  if (created == true) {
+                                    loadInspections();
+                                  }
+                                },
+                              ),
+                            ],
+                          ],
                         ),
                       )
                     : ListView.builder(
@@ -488,6 +513,7 @@ class _DoorListPageState extends State<DoorListPage> {
             ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'fab_door_list',
+        tooltip: 'Neuen Auftrag anlegen',
         child: const Icon(Icons.add),
         onPressed: () async {
           int? targetInspId;
@@ -495,20 +521,19 @@ class _DoorListPageState extends State<DoorListPage> {
             targetInspId = _selectedIds.first;
           } else if (_selectedClient != 'Alle' && inspections.isNotEmpty) {
             targetInspId = inspections.first['inspectionId'] as int?;
-          } else if (inspections.length == 1) {
+          } else if (inspections.isNotEmpty) {
             targetInspId = inspections.first['inspectionId'] as int?;
           }
 
-          await Navigator.push(
+          final created = await CreateProjectDialog.show(
             context,
-            MaterialPageRoute(
-              builder: (_) => DoorInspectionForm(
-                isManagerMode: false,
-                inspectionId: targetInspId,
-              ),
-            ),
+            isInspectorMode: true,
+            sourceInspectionId: targetInspId,
           );
-          loadInspections();
+
+          if (created == true) {
+            loadInspections();
+          }
         },
       ),
     );

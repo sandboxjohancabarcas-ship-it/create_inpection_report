@@ -752,8 +752,29 @@ class DatabaseService {
   /// - Notes ("Anmerkung") are preserved from previous inspection.
   /// - All errors and their resolution status are copied as a guide for repair.
   /// - repairDate is stored in inspection metadata.
-  ///
-  /// If no previous inspection exists for this project, creates a blank Auftrag template.
+  /// Checks if a job number already exists in the inspections table.
+  static Future<bool> isJobNumberExists(String jobNumber) async {
+    final cleanJob = jobNumber.trim();
+    if (cleanJob.isEmpty) return false;
+    final db = await getDb();
+    final result = await db.query(
+      'inspections',
+      where: 'jobNumber = ?',
+      whereArgs: [cleanJob],
+      limit: 1,
+    );
+    return result.isNotEmpty;
+  }
+
+  /// Creates a new Auftrag ("Wartung" or "Reparatur") based on a previous event.
+  /// 
+  /// - The new event must have a new, unique job number (cannot already exist in DB).
+  /// - The date of the new event cannot be earlier than the previous event's date.
+  /// - Door technical specifications are passed over.
+  /// - Open errors ("Offen" / "Open") are passed to the new event with their notes preserved.
+  /// - Solved errors ("gelöst" / "Resolved") are NOT passed to the new event, and their notes are cleared.
+  /// 
+  /// If no previous event exists, creates a blank Auftrag template.
   static Future<int> createAuftragFromLatestInspection({
     required String projectNumber,
     required String objectAddress,
@@ -765,104 +786,161 @@ class DatabaseService {
     String contactPerson = '',
     String inspectorName = '',
     bool cloneDoors = true,
+    int? sourceInspectionId,
   }) async {
     final db = await getDb();
     final cleanProj = projectNumber.trim();
     final cleanAddr = objectAddress.trim();
     final cleanClient = clientName.trim();
+    final cleanJob = jobNumber.trim();
 
-    // 1. Locate the latest inspection for this project / address
-    List<Map<String, dynamic>> latestInspections = [];
-    if (cleanProj.isNotEmpty) {
-      latestInspections = await db.query(
+    if (cleanJob.isEmpty) {
+      throw ArgumentError('Bitte eine Auftragsnummer eingeben.');
+    }
+
+    // 1. Validate Job Number Uniqueness
+    final existingJobs = await db.query(
+      'inspections',
+      where: 'jobNumber = ?',
+      whereArgs: [cleanJob],
+      limit: 1,
+    );
+    if (existingJobs.isNotEmpty) {
+      throw ArgumentError('Ein Auftrag mit der Auftragsnummer "$cleanJob" existiert bereits. Bitte eine neue, eindeutige Nummer vergeben.');
+    }
+
+    // 2. Locate the base previous inspection/event for this project or address
+    Map<String, dynamic>? baseInspection;
+    if (sourceInspectionId != null) {
+      final found = await db.query(
+        'inspections',
+        where: 'inspectionId = ?',
+        whereArgs: [sourceInspectionId],
+        limit: 1,
+      );
+      if (found.isNotEmpty) baseInspection = found.first;
+    }
+    if (baseInspection == null && cleanProj.isNotEmpty) {
+      final found = await db.query(
         'inspections',
         where: 'projectNumber = ?',
         whereArgs: [cleanProj],
-        orderBy: 'date DESC, inspectionId DESC',
+        orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
+      if (found.isNotEmpty) baseInspection = found.first;
     }
-    if (latestInspections.isEmpty && cleanAddr.isNotEmpty) {
-      latestInspections = await db.query(
+    if (baseInspection == null && cleanAddr.isNotEmpty) {
+      final found = await db.query(
         'inspections',
         where: 'objectAddress = ?',
         whereArgs: [cleanAddr],
-        orderBy: 'date DESC, inspectionId DESC',
+        orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
+      if (found.isNotEmpty) baseInspection = found.first;
+    }
+
+    // 3. Validate Date Sequencing (subsequent event cannot be earlier than previous event)
+    final DateTime newEffectiveDate = (orderType == 'Reparatur' && repairDate != null) ? repairDate : date;
+    if (baseInspection != null) {
+      final String? prevDateStr = baseInspection['repairDate']?.toString().trim().isNotEmpty == true
+          ? baseInspection['repairDate']?.toString()
+          : baseInspection['date']?.toString();
+      if (prevDateStr != null && prevDateStr.isNotEmpty) {
+        try {
+          final prevDate = DateTime.parse(prevDateStr);
+          final newDatePure = DateTime(newEffectiveDate.year, newEffectiveDate.month, newEffectiveDate.day);
+          final prevDatePure = DateTime(prevDate.year, prevDate.month, prevDate.day);
+          if (newDatePure.isBefore(prevDatePure)) {
+            final fNew = DateFormat('dd.MM.yyyy').format(newEffectiveDate);
+            final fPrev = DateFormat('dd.MM.yyyy').format(prevDate);
+            throw ArgumentError('Das Datum des Folge-Auftrags ($fNew) darf nicht vor dem Datum des vorherigen Auftrags ($fPrev) liegen.');
+          }
+        } catch (e) {
+          if (e is ArgumentError) rethrow;
+        }
+      }
     }
 
     final resolvedProj = cleanProj.isNotEmpty
         ? cleanProj
-        : (latestInspections.isNotEmpty ? (latestInspections.first['projectNumber']?.toString() ?? '') : '');
+        : (baseInspection != null ? (baseInspection['projectNumber']?.toString() ?? '') : '');
     final resolvedAddr = cleanAddr.isNotEmpty
         ? cleanAddr
-        : (latestInspections.isNotEmpty ? (latestInspections.first['objectAddress']?.toString() ?? '') : '');
+        : (baseInspection != null ? (baseInspection['objectAddress']?.toString() ?? '') : '');
     final resolvedClient = cleanClient.isNotEmpty
         ? cleanClient
-        : (latestInspections.isNotEmpty ? (latestInspections.first['clientName']?.toString() ?? '') : '');
+        : (baseInspection != null ? (baseInspection['clientName']?.toString() ?? '') : '');
 
-    // 2. Create the new inspection record (does NOT overwrite existing previous jobs)
+    // 4. Create the new inspection record
     final inspectionData = {
       'projectNumber': resolvedProj,
       'objectAddress': resolvedAddr,
       'clientName': resolvedClient,
-      'jobNumber': jobNumber.trim(),
-      'date': date.toIso8601String(),
+      'jobNumber': cleanJob,
+      'date': (orderType == 'Wartung' || repairDate == null) ? date.toIso8601String() : date.toIso8601String(),
       'contactPerson': contactPerson.trim().isNotEmpty
           ? contactPerson.trim()
-          : (latestInspections.isNotEmpty ? (latestInspections.first['contactPerson']?.toString() ?? '') : ''),
+          : (baseInspection != null ? (baseInspection['contactPerson']?.toString() ?? '') : ''),
       'inspectorName': inspectorName.trim().isNotEmpty
           ? inspectorName.trim()
-          : (latestInspections.isNotEmpty ? (latestInspections.first['inspectorName']?.toString() ?? '') : ''),
+          : (baseInspection != null ? (baseInspection['inspectorName']?.toString() ?? '') : ''),
       'orderType': orderType,
-      'repairDate': repairDate != null ? repairDate.toIso8601String() : null,
+      'repairDate': orderType == 'Reparatur' && repairDate != null ? repairDate.toIso8601String() : null,
       'isLocked': 0,
     };
 
     final newInspectionId = await insertInspection(inspectionData);
 
-    // 3. Clone doors from the latest inspection if requested and present
-    if (cloneDoors && latestInspections.isNotEmpty) {
-      final prevInspId = latestInspections.first['inspectionId'] as int;
+    // 5. Clone doors and propagate open errors
+    if (cloneDoors && baseInspection != null) {
+      final prevInspId = baseInspection['inspectionId'] as int;
       final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
       final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
       final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
 
+      bool isResolved(Map<String, dynamic> e) {
+        final res = (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
+        return res == 'resolved' || res == 'gelöst' || res == 'geloest' || res == 'beholfen';
+      }
+
       for (final j in prevJunctions) {
         final doorId = j['doorId'] as int;
         final prevJunctionId = j['id'] as int;
+        final doorErrors = prevErrors.where((e) => e['inspectionDoorId'] == prevJunctionId).toList();
 
-        // For Wartung: notes must be empty!
-        // For Reparatur: notes are preserved as a guide!
-        final String note = (orderType == 'Reparatur') ? (j['notes']?.toString() ?? '') : '';
-        final String status = 'Pending';
+        final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
+
+        // Open error notes and door notes of the open error remain,
+        // but notes of resolved/gelöst errors are cleared.
+        String doorNote = '';
+        if (openErrors.isNotEmpty) {
+          doorNote = j['notes']?.toString() ?? '';
+        }
 
         final newJunctionId = await insertInspectionDoor({
           'inspectionId': newInspectionId,
           'doorId': doorId,
-          'status': status,
-          'notes': note,
+          'status': 'Pending',
+          'notes': doorNote,
           'attachments': null,
         });
 
-        // For Reparatur: Copy all recorded errors so inspector has them as repair guidance!
-        if (orderType == 'Reparatur') {
-          final doorErrors = prevErrors.where((e) => e['inspectionDoorId'] == prevJunctionId);
-          for (final err in doorErrors) {
-            final errorObj = InspectionDoorError(
-              id: null,
-              inspectionDoorId: newJunctionId,
-              errorId: err['errorId'] as int?,
-              errorCode: err['errorCode']?.toString() ?? '',
-              quantity: (err['quantity'] as num?)?.toInt() ?? 1,
-              severity: err['severity']?.toString() ?? 'medium',
-              notes: err['notes']?.toString() ?? '',
-              resolutionStatus: err['resolutionStatus']?.toString() ?? 'Open',
-              attachments: err['attachments']?.toString() ?? '',
-            );
-            await insertInspectionDoorError(errorObj);
-          }
+        // Pass open errors to the new event; solved errors are omitted
+        for (final err in openErrors) {
+          final errorObj = InspectionDoorError(
+            id: null,
+            inspectionDoorId: newJunctionId,
+            errorId: err['errorId'] as int?,
+            errorCode: err['errorCode']?.toString() ?? '',
+            quantity: (err['quantity'] as num?)?.toInt() ?? 1,
+            severity: err['severity']?.toString() ?? 'medium',
+            notes: err['notes']?.toString() ?? '',
+            resolutionStatus: 'Open',
+            attachments: err['attachments']?.toString() ?? '',
+          );
+          await insertInspectionDoorError(errorObj);
         }
       }
     }
@@ -924,8 +1002,11 @@ class DatabaseService {
         }
       }
 
-      if (bestRepairDate == null || bestRepairDate.isEmpty) {
-        bestRepairDate = DateTime.now().toIso8601String().substring(0, 10);
+      final bool hadReparatur = inspections.any((i) =>
+          i['orderType'] == 'Reparatur' ||
+          (i['repairDate'] != null && i['repairDate'].toString().trim().isNotEmpty));
+      if (!hadReparatur) {
+        bestRepairDate = null;
       }
 
       // Update primary inspection to 'Erledigt'
@@ -1397,8 +1478,8 @@ class DatabaseService {
       SELECT 
         id.doorId,
         COUNT(ide.id) AS total_errors,
-        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) != 'resolved' THEN 1 ELSE 0 END) AS open_errors,
-        SUM(CASE WHEN LOWER(COALESCE(ide.resolutionStatus, 'open')) = 'resolved' THEN 1 ELSE 0 END) AS resolved_errors
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_errors,
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors
       FROM inspection_doors id
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
       WHERE id.inspectionId = ?
@@ -2464,9 +2545,27 @@ class DatabaseService {
           }
         }
 
-        // 7. Auto-consolidate Reparatur jobs into a single 'Erledigt' Auftrag in master DB
-        for (final jobToConsolidate in reparaturJobsToConsolidate) {
-          await consolidateJobToErledigt(jobNumber: jobToConsolidate, executor: txn);
+        // 7. Auto-mark imported jobs as 'Erledigt' upon successful merge into Master DB
+        for (final entry in inspectionIdMap.entries) {
+          final masterInspId = entry.value;
+          await txn.update(
+            'inspections',
+            {'orderType': 'Erledigt'},
+            where: 'inspectionId = ?',
+            whereArgs: [masterInspId],
+          );
+        }
+
+        // Auto-consolidate multiple records of the same jobNumber if present
+        final Set<String> allImportedJobs = {};
+        for (final row in pInspections) {
+          final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '').toString().trim();
+          if (jobNum.isNotEmpty) {
+            allImportedJobs.add(jobNum);
+          }
+        }
+        for (final jobNum in allImportedJobs) {
+          await consolidateJobToErledigt(jobNumber: jobNum, executor: txn);
         }
 
         fileReports.add(InspectionFileReportItem(
@@ -3099,7 +3198,11 @@ class DatabaseService {
       }
 
       // Check for new dropdown options introduced in incoming data
-      final dropdownOptionConflicts = DoorValidator.detectDropdownOptionConflicts(incoming, existing: existingDoor);
+      final dropdownOptionConflicts = DoorValidator.detectDropdownOptionConflicts(
+        incoming,
+        existing: existingDoor,
+        sourceContext: sourceContext,
+      );
       if (dropdownOptionConflicts.isNotEmpty) {
         conflicts.addAll(dropdownOptionConflicts);
         continue;
@@ -3229,33 +3332,31 @@ class DatabaseService {
           final DateTime olderDate = incomingDate.isBefore(existingDate) ? incomingDate : existingDate;
           final double diffYears = recentDate.difference(olderDate).inDays / 365.25;
 
-          if (diffYears > 3.0) {
-            // Older than 3 years (4th year or older in the past) -> Auto-resolve without UI conflict
-            if (incomingDate.isAfter(existingDate)) {
-              // Incoming sheet is newer: overwrite DB properties with incoming values
-              await db.update(
-                'doors',
-                incoming.toMap()..remove('id'),
-                where: 'doorAlias = ?',
-                whereArgs: [alias],
-              );
-              cleanDoors.add(incoming.copyWith(id: existingDoor.id));
+          if (incomingDate.isBefore(existingDate)) {
+            // Existing DB inspection is newer than incoming sheet (historical import):
+            // Keep existing newer DB properties, do not raise conflicts for historical data
+            cleanDoors.add(existingDoor);
 
-              for (final conflict in fieldConflicts) {
-                if (conflict.type == DoorConflictType.technicalMismatch ||
-                    conflict.type == DoorConflictType.safetyFlagChange) {
-                  logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Incoming inspection is newer by ${diffYears.toStringAsFixed(1)} years).');
-                }
+            for (final conflict in fieldConflicts) {
+              if (conflict.type == DoorConflictType.technicalMismatch ||
+                  conflict.type == DoorConflictType.safetyFlagChange) {
+                logs.add('[SKIPPED STALE] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" ignored (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}"). DB inspection is newer by ${diffYears.toStringAsFixed(1)} years. Kept newer DB properties.');
               }
-            } else {
-              // Existing DB is newer: discard incoming properties, keep existing DB properties
-              cleanDoors.add(existingDoor);
+            }
+          } else if (diffYears > 3.0) {
+            // Incoming is newer by > 3 years (4th year or older in the past) -> Auto-resolve without UI conflict
+            await db.update(
+              'doors',
+              incoming.toMap()..remove('id'),
+              where: 'doorAlias = ?',
+              whereArgs: [alias],
+            );
+            cleanDoors.add(incoming.copyWith(id: existingDoor.id));
 
-              for (final conflict in fieldConflicts) {
-                if (conflict.type == DoorConflictType.technicalMismatch ||
-                    conflict.type == DoorConflictType.safetyFlagChange) {
-                  logs.add('[SKIPPED STALE] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" ignored (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}"). DB inspection is newer by ${diffYears.toStringAsFixed(1)} years. Kept newer DB properties.');
-                }
+            for (final conflict in fieldConflicts) {
+              if (conflict.type == DoorConflictType.technicalMismatch ||
+                  conflict.type == DoorConflictType.safetyFlagChange) {
+                logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Incoming inspection is newer by ${diffYears.toStringAsFixed(1)} years).');
               }
             }
           } else {
@@ -3408,6 +3509,13 @@ class DatabaseService {
               break;
 
             case DoorResolutionAction.keepExisting:
+              if (conflict.type == DoorConflictType.newDropdownOption &&
+                  conflict.existingValue.isNotEmpty &&
+                  conflict.existingValue != '(Nicht in Stammdaten)') {
+                propertyUpdates[fieldName] = conflict.existingValue;
+              }
+              break;
+
             case DoorResolutionAction.skip:
             case DoorResolutionAction.keepBoth:
               // Omit field from updates map (preserves existing DB value)
@@ -3423,13 +3531,25 @@ class DatabaseService {
           }
         }
 
-        if (alias != null && alias.isNotEmpty && propertyUpdates.isNotEmpty) {
-          await txn.update(
+        if (alias != null && alias.isNotEmpty) {
+          final existingRows = await txn.query(
             'doors',
-            propertyUpdates,
             where: 'doorAlias = ?',
             whereArgs: [alias],
+            limit: 1,
           );
+          if (existingRows.isEmpty) {
+            final doorMap = doorConflicts.first.incomingDoor.toMap()..remove('id');
+            doorMap.addAll(propertyUpdates);
+            await txn.insert('doors', doorMap, conflictAlgorithm: ConflictAlgorithm.replace);
+          } else if (propertyUpdates.isNotEmpty) {
+            await txn.update(
+              'doors',
+              propertyUpdates,
+              where: 'doorAlias = ?',
+              whereArgs: [alias],
+            );
+          }
         }
       }
     });

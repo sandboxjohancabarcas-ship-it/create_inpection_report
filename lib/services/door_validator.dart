@@ -407,12 +407,77 @@ class DoorValidator {
     return conflicts;
   }
 
+  /// Finds the closest matching standard option from [DoorOptionsService] for a given property key.
+  static String? findClosestOption(String key, String incomingVal) {
+    final options = DoorOptionsService.getStringOptions(key);
+    if (options.isEmpty) return null;
+
+    String normalize(String s) =>
+        s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').replaceAll('x', '');
+
+    final cleanIncoming = normalize(incomingVal);
+    if (cleanIncoming.isEmpty) return null;
+
+    // 1. Exact alphanumeric match (ignoring separators and dimensional 'x')
+    for (final opt in options) {
+      if (opt == '?' || opt.toLowerCase() == 'nein') continue;
+      if (normalize(opt) == cleanIncoming) {
+        return opt;
+      }
+    }
+
+    // 2. Score candidates by similarity and Levenshtein distance
+    String? bestMatch;
+    int minDistance = 999;
+
+    for (final opt in options) {
+      if (opt == '?' || opt.toLowerCase() == 'nein') continue;
+      final cleanOpt = normalize(opt);
+      final dist = _levenshtein(cleanOpt, cleanIncoming);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestMatch = opt;
+      }
+    }
+
+    if (minDistance <= 4) {
+      return bestMatch;
+    }
+
+    return null;
+  }
+
+  static int _levenshtein(String s, String t) {
+    if (s == t) return 0;
+    if (s.isEmpty) return t.length;
+    if (t.isEmpty) return s.length;
+
+    List<int> v0 = List<int>.generate(t.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(t.length + 1, 0);
+
+    for (int i = 0; i < s.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < t.length; j++) {
+        int cost = (s[i] == t[j]) ? 0 : 1;
+        v1[j + 1] = [v1[j] + 1, v0[j + 1] + 1, v0[j] + cost].reduce((a, b) => a < b ? a : b);
+      }
+      for (int j = 0; j <= t.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v1[t.length];
+  }
+
   /// Checks whether any dropdown properties in [incoming] contain a value that is NOT
   /// currently in [DoorOptionsService]'s master options for that key.
   /// If [existing] is provided, only properties that actually changed between Master DB
   /// and incoming inspection are evaluated to avoid false conflict prompts.
   /// Returns a list of [DoorConflict] with type [DoorConflictType.newDropdownOption].
-  static List<DoorConflict> detectDropdownOptionConflicts(Door incoming, {Door? existing}) {
+  static List<DoorConflict> detectDropdownOptionConflicts(
+    Door incoming, {
+    Door? existing,
+    String sourceContext = '',
+  }) {
     final conflicts = <DoorConflict>[];
 
     final Map<String, String> dropdownPropertyMap = {
@@ -489,16 +554,28 @@ class DoorValidator {
       final exists = existingOptions.any((opt) => opt.trim().toLowerCase() == val.toLowerCase());
 
       if (!exists) {
+        final closest = findClosestOption(key, val);
+        final String sheetLabel = sourceContext.isNotEmpty ? sourceContext : 'Excel-Import';
+        final String standardVal = closest ?? '(Nicht in Stammdaten)';
+        final String exVal = (existing != null && existingValues[key]?.isNotEmpty == true && existingValues[key] != '(leer)')
+            ? existingValues[key]!
+            : standardVal;
+
+        final String messageText = closest != null
+            ? 'Standardwert im Katalog ist: "$closest". Abweichender importierter Wert aus $sheetLabel ist: "$val".'
+            : 'Neuer Menüeintrag "$val" für "$label" erfasst aus $sheetLabel.';
+
         conflicts.add(DoorConflict(
           existingDoor: existing,
           incomingDoor: incoming,
           type: DoorConflictType.newDropdownOption,
           fieldName: key,
           fieldLabel: label,
-          existingValue: existing != null ? (existingValues[key] ?? '(Nicht in Stammdaten)') : '(Nicht in Stammdaten)',
+          existingValue: exVal,
           incomingValue: val,
           ruleCode: 'DROPDOWN_OPTION',
-          message: 'Neuer Menüeintrag "$val" für "$label" erfasst. Soll dieser Wert in das Haupt-Dropdown-Menü übernommen werden?',
+          message: messageText,
+          sourceContext: sourceContext,
           resolution: DoorResolutionAction.addToMasterOptions,
         ));
       }

@@ -434,14 +434,31 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                             text: TextSpan(
                               style: const TextStyle(fontSize: 12, color: Colors.black),
                               children: [
-                                const TextSpan(text: 'DB: ', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+                                TextSpan(
+                                  text: conflict.type == DoorConflictType.newDropdownOption
+                                      ? 'Katalog-Standard: '
+                                      : 'DB: ',
+                                  style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                                ),
                                 TextSpan(text: '"${conflict.existingValue}"'),
                                 const TextSpan(text: '  ➔  '),
-                                const TextSpan(text: 'Import: ', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                TextSpan(
+                                  text: (conflict.sourceContext != null && conflict.sourceContext!.isNotEmpty)
+                                      ? 'Import (${conflict.sourceContext}): '
+                                      : 'Import: ',
+                                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                                ),
                                 TextSpan(text: '"${conflict.incomingValue}"'),
                               ],
                             ),
                           ),
+                          if (conflict.message.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              conflict.message,
+                              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.blueGrey.shade800),
+                            ),
+                          ],
                         ],
 
                         const SizedBox(height: 8),
@@ -451,7 +468,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                         // Property Individual Decision Options
                         RadioListTile<DoorResolutionAction>(
                           dense: true,
-                          title: Text('Bestehenden Wert behalten ("${conflict.existingValue.isEmpty ? '(leer)' : conflict.existingValue}")'),
+                          title: Text(
+                            conflict.type == DoorConflictType.newDropdownOption
+                                ? 'Standardwert verwenden ("${conflict.existingValue.isEmpty ? '(leer)' : conflict.existingValue}")'
+                                : 'Bestehenden Wert behalten ("${conflict.existingValue.isEmpty ? '(leer)' : conflict.existingValue}")',
+                          ),
                           value: DoorResolutionAction.keepExisting,
                           groupValue: fieldAction,
                           onChanged: (val) {

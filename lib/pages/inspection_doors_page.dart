@@ -15,7 +15,7 @@ import '../widgets/master_portal_home_button.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
-enum InspectionDoorFilter { all, inspected, pending, withErrors, errorFree }
+enum InspectionDoorFilter { all, inspected, pending, withErrors, resolved, errorFree }
 
 class InspectionDoorsPage extends StatefulWidget {
   final int inspectionId;
@@ -768,7 +768,8 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 final totalCount = _doors.length;
                 final inspectedCount = _doors.where((d) => _isDoorInspected(d)).length;
                 final pendingCount = totalCount - inspectedCount;
-                final doorsWithErrorsCount = _doors.where((d) => (_errorSummaries[d.id]?.openErrors ?? 0) > 0 || (_errorSummaries[d.id]?.totalErrors ?? 0) > 0).length;
+                final doorsWithErrorsCount = _doors.where((d) => (_errorSummaries[d.id]?.openErrors ?? 0) > 0).length;
+                final doorsResolvedCount = _doors.where((d) => (_errorSummaries[d.id]?.resolvedErrors ?? 0) > 0).length;
                 final doorsErrorFreeCount = _doors.where((d) => _isDoorInspected(d) && (_errorSummaries[d.id]?.totalErrors ?? 0) == 0).length;
                 final progress = totalCount > 0 ? (inspectedCount / totalCount) : 0.0;
 
@@ -869,6 +870,14 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                             ),
                             const SizedBox(width: 6),
                             ChoiceChip(
+                              avatar: Icon(Icons.task_alt, size: 14, color: _filter == InspectionDoorFilter.resolved ? Colors.white : Colors.amber.shade900),
+                              label: Text('Gelöst ($doorsResolvedCount)'),
+                              selected: _filter == InspectionDoorFilter.resolved,
+                              selectedColor: Colors.amber.shade900,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.resolved),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
                               avatar: Icon(Icons.check_circle_outline, size: 14, color: _filter == InspectionDoorFilter.errorFree ? Colors.white : Colors.teal.shade700),
                               label: Text('Mängelfrei ($doorsErrorFreeCount)'),
                               selected: _filter == InspectionDoorFilter.errorFree,
@@ -901,7 +910,13 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                               }
                               if (_filter == InspectionDoorFilter.withErrors) {
                                 final summary = _errorSummaries[door.id];
-                                if (summary == null || (summary.openErrors == 0 && summary.totalErrors == 0)) {
+                                if (summary == null || summary.openErrors == 0) {
+                                  return false;
+                                }
+                              }
+                              if (_filter == InspectionDoorFilter.resolved) {
+                                final summary = _errorSummaries[door.id];
+                                if (summary == null || summary.resolvedErrors == 0) {
                                   return false;
                                 }
                               }

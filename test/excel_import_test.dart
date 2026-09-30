@@ -428,5 +428,30 @@ void main() {
       ''');
       expect(door3Errors, isNotEmpty);
     });
+
+    test('Importing Hammerbrookstraße file provides clear discrepancy explanation for Schlossabmessungen', () async {
+      final file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße 63-65, Türliste Mängelbeseitigung.xlsm');
+      if (!file.existsSync()) {
+        fail('Test file not found: ${file.path}');
+      }
+
+      await DatabaseService.checkAndInitializeCatalog();
+      final result = await ExcelDataImporter.importFromFile(file);
+
+      print('Hammerbrookstraße door conflicts count: ${result.doorConflicts.length}');
+      for (final conflict in result.doorConflicts) {
+        print('Conflict: Door=${conflict.incomingDoor.doorAlias} (${conflict.incomingDoor.doorNumber}), Type=${conflict.type}, Field=${conflict.fieldName} (${conflict.fieldLabel}), Incoming="${conflict.incomingValue}", Existing/Standard="${conflict.existingValue}", Message=${conflict.message}');
+      }
+
+      final lockConflicts = result.doorConflicts.where((c) => c.fieldName == 'lockDimensions').toList();
+      expect(lockConflicts, isNotEmpty, reason: 'Custom lock format 65/72/9/24x235/FR differs from catalog 65/72/9/24-235FR');
+
+      final firstLockConflict = lockConflicts.first;
+      expect(firstLockConflict.incomingValue, equals('65/72/9/24x235/FR'));
+      expect(firstLockConflict.existingValue, equals('65/72/9/24-235FR'));
+      expect(firstLockConflict.message, contains('Standardwert im Katalog ist: "65/72/9/24-235FR"'));
+      expect(firstLockConflict.message, contains('65/72/9/24x235/FR'));
+      expect(firstLockConflict.message, contains('Türlisten'));
+    });
   });
 }

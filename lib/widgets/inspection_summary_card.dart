@@ -151,16 +151,17 @@ class InspectionSummaryCard extends StatelessWidget {
             Text('Auftrag: $jobNumber'),
             if (projectNumber != null && projectNumber!.isNotEmpty)
               Text('Projekt: $projectNumber'),
-            Text('Datum: $formattedDate'),
-            if ((isReparatur || isErledigt) && repairDate != null && repairDate!.isNotEmpty)
+            if (isReparatur || (isErledigt && repairDate != null && repairDate!.isNotEmpty))
               Text(
-                'Reparaturdatum: $repairDate',
+                'Reparaturdatum: ${repairDate ?? formattedDate}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                   color: isErledigt ? Colors.green.shade900 : Colors.orange.shade900,
                 ),
-              ),
+              )
+            else
+              Text('Prüfdatum: $formattedDate'),
             if (doorCount != null) Text('Türen gesamt: $doorCount'),
           ],
         ),

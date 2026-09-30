@@ -88,10 +88,10 @@ void main() {
     expect(junctions.isEmpty, isTrue);
   });
 
-  test('Wartung Auftrag cloned from latest inspection resets notes and errors', () async {
-    // 1. Prepare an initial inspection with a door and an error
+  test('Open errors are passed to next event, solved errors are dropped, resolved notes cleared', () async {
+    // 1. Base Event: Wartung with 1 open error and 1 solved error
     final baseInspId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: 'PRJ-WARTUNG-CYCLE-01',
+      projectNumber: 'PRJ-ERROR-CHAIN-01',
       objectAddress: 'Bavariaring 10, 80336 München',
       clientName: 'Bavaria Real Estate',
       jobNumber: 'WARTUNG-2025-01',
@@ -103,7 +103,7 @@ void main() {
     final baseDoor = _createTestDoor(
       doorNumber: 'T-101',
       roomDesignation: 'Serverraum',
-      notes: 'Schloss klemmt stark - 2025 Notiz',
+      notes: 'Türschließer defekt & Scharnier geölt',
       doorFunctionOK: false,
     );
     final doorId = await DatabaseService.insertDoor(baseDoor);
@@ -111,22 +111,32 @@ void main() {
       'inspectionId': baseInspId,
       'doorId': doorId,
       'status': 'Pending',
-      'notes': 'Schloss klemmt stark - 2025 Notiz',
+      'notes': 'Türschließer defekt & Scharnier geölt',
     });
 
-    final error = InspectionDoorError(
+    // Error 1: Open
+    await DatabaseService.insertInspectionDoorError(InspectionDoorError(
       inspectionDoorId: junctionId,
-      errorCode: 'DEF_LOCK_01',
-      notes: 'Schloss defekt',
+      errorCode: 'DEF_CLOSER_OPEN',
+      notes: 'Türschließer verliert Öl',
       severity: 'high',
       quantity: 1,
       resolutionStatus: 'open',
-    );
-    await DatabaseService.insertInspectionDoorError(error);
+    ));
 
-    // 2. Prepare new Wartung Auftrag for 2026 cloning from latest inspection
-    final newInspId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: 'PRJ-WARTUNG-CYCLE-01',
+    // Error 2: Solved / Gelöst
+    await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+      inspectionDoorId: junctionId,
+      errorCode: 'DEF_HINGE_SOLVED',
+      notes: 'Scharnier quietscht - behoben',
+      severity: 'low',
+      quantity: 1,
+      resolutionStatus: 'gelöst',
+    ));
+
+    // 2. Next Event: Follow-up Wartung (or Reparatur) for 2026
+    final nextInspId = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-ERROR-CHAIN-01',
       objectAddress: 'Bavariaring 10, 80336 München',
       clientName: 'Bavaria Real Estate',
       jobNumber: 'WARTUNG-2026-01',
@@ -135,290 +145,203 @@ void main() {
       cloneDoors: true,
     );
 
-    expect(newInspId, isPositive);
-    expect(newInspId, isNot(baseInspId));
+    expect(nextInspId, isPositive);
+    final nextJunctions = await DatabaseService.getInspectionDoorsByInspectionId(nextInspId);
+    expect(nextJunctions.length, 1);
 
-    final newInsp = await DatabaseService.getInspectionById(newInspId);
-    expect(newInsp!['orderType'], 'Wartung');
-    expect(newInsp['repairDate'], isNull);
+    final nextErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(nextJunctions.first['id'] as int);
+    // Rule: Open error is passed, solved error is NOT passed
+    expect(nextErrors.length, 1);
+    expect(nextErrors.first['errorCode'], 'DEF_CLOSER_OPEN');
+    expect(nextErrors.first['notes'], 'Türschließer verliert Öl');
+    expect(nextErrors.first['resolutionStatus'], 'Open');
 
-    final newJunctions = await DatabaseService.getInspectionDoorsByInspectionId(newInspId);
-    expect(newJunctions.length, 1);
-    final clonedDoorId = newJunctions.first['doorId'] as int;
-    final db = await DatabaseService.getDb();
-    final doorMaps = await db.query('doors', where: 'id = ?', whereArgs: [clonedDoorId]);
-    expect(doorMaps.isNotEmpty, isTrue);
-    final clonedDoor = Door.fromMap(doorMaps.first);
-
-    expect(clonedDoor.doorNumber, 'T-101');
-    expect(clonedDoor.roomDesignation, 'Serverraum');
-    // Wartung rule: Notes in junction must start empty for the new inspection cycle
-    final junctionNote = (newJunctions.first['notes']?.toString() ?? '');
-    expect(junctionNote.isEmpty, isTrue);
-
-    // Wartung rule: Errors must start empty for the new inspection cycle
-    final errors = await DatabaseService.getDetailedErrorsForInspectionDoor(newJunctions.first['id'] as int);
-    expect(errors.isEmpty, isTrue);
+    // Rule: Door notes for the open error remain
+    final nextJunctionNote = nextJunctions.first['notes']?.toString() ?? '';
+    expect(nextJunctionNote, contains('Türschließer defekt'));
   });
 
-  test('Reparatur Auftrag cloned from latest inspection preserves notes and errors as guide', () async {
-    // 1. Prepare initial inspection with open defect
-    final baseInspId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: 'PRJ-REP-CYCLE-01',
-      objectAddress: 'Sonnenstr. 5, 80331 München',
-      clientName: 'City Center GmbH',
-      jobNumber: 'WARTUNG-2026-BASE',
-      date: DateTime(2026, 3, 1),
+  test('Job number uniqueness is strictly enforced', () async {
+    await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-UNIQUE-01',
+      objectAddress: 'Alsterufer 1, Hamburg',
+      clientName: 'Alster Properties',
+      jobNumber: 'AUFTRAG-DUPLICATE-TEST',
+      date: DateTime(2026, 1, 10),
       orderType: 'Wartung',
       cloneDoors: false,
     );
 
-    final door = _createTestDoor(
-      doorNumber: 'T-202',
-      roomDesignation: 'Fluchtweg EG',
-      notes: 'Türschließer verliert Öl',
-      doorFunctionOK: false,
+    // Attempting to create another job with the exact same jobNumber must throw ArgumentError
+    expect(
+      () => DatabaseService.createAuftragFromLatestInspection(
+        projectNumber: 'PRJ-UNIQUE-01',
+        objectAddress: 'Alsterufer 1, Hamburg',
+        clientName: 'Alster Properties',
+        jobNumber: 'AUFTRAG-DUPLICATE-TEST',
+        date: DateTime(2026, 2, 10),
+        orderType: 'Reparatur',
+        cloneDoors: true,
+      ),
+      throwsA(isA<ArgumentError>()),
     );
-    final doorId = await DatabaseService.insertDoor(door);
-    final junctionId = await DatabaseService.insertInspectionDoor({
-      'inspectionId': baseInspId,
-      'doorId': doorId,
-      'status': 'Pending',
-      'notes': 'Türschließer verliert Öl',
-    });
-
-    final error = InspectionDoorError(
-      inspectionDoorId: junctionId,
-      errorCode: 'CLOSER_LEAK_01',
-      notes: 'Hydrauliköl läuft aus',
-      severity: 'critical',
-      quantity: 1,
-      resolutionStatus: 'open',
-    );
-    await DatabaseService.insertInspectionDoorError(error);
-
-    // 2. Manager creates Reparatur Auftrag based on this project
-    final repDate = DateTime(2026, 3, 15);
-    final repInspId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: 'PRJ-REP-CYCLE-01',
-      objectAddress: 'Sonnenstr. 5, 80331 München',
-      clientName: 'City Center GmbH',
-      jobNumber: 'REP-2026-02',
-      date: DateTime(2026, 3, 1),
-      orderType: 'Reparatur',
-      repairDate: repDate,
-      cloneDoors: true,
-    );
-
-    expect(repInspId, isPositive);
-    final repInsp = await DatabaseService.getInspectionById(repInspId);
-    expect(repInsp!['orderType'], 'Reparatur');
-    expect(repInsp['repairDate'], repDate.toIso8601String());
-
-    final repJunctions = await DatabaseService.getInspectionDoorsByInspectionId(repInspId);
-    expect(repJunctions.length, 1);
-    final repDoorId = repJunctions.first['doorId'] as int;
-    final db = await DatabaseService.getDb();
-    final repDoorMaps = await db.query('doors', where: 'id = ?', whereArgs: [repDoorId]);
-    expect(repDoorMaps.isNotEmpty, isTrue);
-    final repDoor = Door.fromMap(repDoorMaps.first);
-
-    expect(repDoor.doorNumber, 'T-202');
-    // Reparatur rule: Notes and errors preserved as guide for repair technician
-    final repJunctionNote = (repJunctions.first['notes']?.toString() ?? '');
-    expect(repJunctionNote, 'Türschließer verliert Öl');
-
-    final repErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(repJunctions.first['id'] as int);
-    expect(repErrors.length, 1);
-    expect(repErrors.first['errorCode'], 'CLOSER_LEAK_01');
-    expect(repErrors.first['notes'], 'Hydrauliköl läuft aus');
   });
 
-  test('Consolidate parallel Wartung & Reparatur cards into a single Erledigt card', () async {
-    final jobNumber = 'JOB-CONSOLIDATE-2026';
-    final projectNumber = 'PRJ-CONSOLIDATE-01';
-
-    // 1. Create Wartung job
-    final wartungId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: projectNumber,
-      objectAddress: 'Hauptstr. 100, Hamburg',
-      clientName: 'Hanseatic Living GmbH',
-      jobNumber: jobNumber,
-      date: DateTime(2026, 4, 1),
+  test('Subsequent event date cannot be earlier than previous event date', () async {
+    await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-DATE-SEQ-01',
+      objectAddress: 'Odeonsplatz 4, München',
+      clientName: 'Bavaria Heritage',
+      jobNumber: 'JOB-FIRST-2026',
+      date: DateTime(2026, 6, 15),
       orderType: 'Wartung',
       cloneDoors: false,
     );
 
-    final door = _createTestDoor(
-      doorNumber: 'T-303',
-      roomDesignation: 'Haupteingang',
-      notes: 'Scharnier locker',
-      doorFunctionOK: false,
+    // Attempting to create a subsequent event dated 2026-06-10 (before 2026-06-15) must throw ArgumentError
+    expect(
+      () => DatabaseService.createAuftragFromLatestInspection(
+        projectNumber: 'PRJ-DATE-SEQ-01',
+        objectAddress: 'Odeonsplatz 4, München',
+        clientName: 'Bavaria Heritage',
+        jobNumber: 'JOB-SECOND-2026',
+        date: DateTime(2026, 6, 10),
+        orderType: 'Reparatur',
+        repairDate: DateTime(2026, 6, 10),
+        cloneDoors: true,
+      ),
+      throwsA(isA<ArgumentError>()),
     );
-    final doorId = await DatabaseService.insertDoor(door);
-    await DatabaseService.insertInspectionDoor({
-      'inspectionId': wartungId,
-      'doorId': doorId,
-      'status': 'Pending',
-      'notes': 'Scharnier locker',
-    });
-
-    // 2. Create parallel Reparatur job for the same jobNumber
-    final repDate = DateTime(2026, 4, 15);
-    final reparaturId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: projectNumber,
-      objectAddress: 'Hauptstr. 100, Hamburg',
-      clientName: 'Hanseatic Living GmbH',
-      jobNumber: jobNumber,
-      date: DateTime(2026, 4, 1),
-      orderType: 'Reparatur',
-      repairDate: repDate,
-      cloneDoors: true,
-    );
-
-    // Before consolidation: 2 separate jobs exist for this jobNumber
-    final beforeJobs = await DatabaseService.searchInspections(jobNumber);
-    expect(beforeJobs.length, 2);
-
-    // 3. Manager consolidates when Reparatur report is imported / marked as completed
-    final consolidatedId = await DatabaseService.consolidateJobToErledigt(
-      jobNumber: jobNumber,
-      projectNumber: projectNumber,
-    );
-
-    expect(consolidatedId, isNotNull);
-
-    // After consolidation: Exactly 1 card exists for this jobNumber with orderType = 'Erledigt'
-    final afterJobs = await DatabaseService.searchInspections(jobNumber);
-    expect(afterJobs.length, 1);
-    final finalJob = afterJobs.first;
-    expect(finalJob['orderType'], 'Erledigt');
-    expect(finalJob['jobNumber'], jobNumber);
-    expect(finalJob['repairDate'], isNotNull);
-    expect(finalJob['repairDate'], contains('2026-04-15'));
-    expect(finalJob['date'], contains('2026-04-01'));
-
-    // Verify door junctions are preserved
-    final finalJunctions = await DatabaseService.getInspectionDoorsByInspectionId(finalJob['inspectionId'] as int);
-    expect(finalJunctions.length, 1);
-    expect(finalJunctions.first['doorId'], doorId);
-
-    // 4. Verify Door History ("Tür-Inventar" Audit Trail) has the complete history
-    final historyData = await DatabaseService.getDoorHistoryData(doorId: doorId);
-    expect(historyData, isNotNull);
-    final historyItems = historyData!['historyItems'] as List;
-    expect(historyItems.isNotEmpty, isTrue);
-    final firstHist = historyItems.first as Map<String, dynamic>;
-    final inspData = firstHist['inspection'] as Map<String, dynamic>;
-    expect(inspData['jobNumber'], jobNumber);
-    expect(inspData['orderType'], 'Erledigt');
-    expect(inspData['repairDate'], isNotNull);
   });
 
-  test('Inspector processes Reparatur and exports package; Manager imports it and card auto-consolidates into single Erledigt card', () async {
-    final jobNumber = 'JOB-EXPORT-IMPORT-2026';
-    final projectNumber = 'PRJ-AUTO-CONSOLIDATE-02';
-
-    // 1. Master DB: Manager prepares Wartung and parallel Reparatur Aufträge
-    final wartungId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: projectNumber,
-      objectAddress: 'Leopoldstr. 200, München',
-      clientName: 'Alpha Real Estate',
-      jobNumber: jobNumber,
-      date: DateTime(2026, 6, 1),
+  test('Chain: Wartung -> Reparatur -> Wartung -> Reparatur with error state transitions', () async {
+    // 1. Wartung (Jan 2026): records 2 defects
+    final w1Id = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-CHAIN-01',
+      objectAddress: 'Maximilianstr. 20, München',
+      clientName: 'Max Luxury',
+      jobNumber: 'W-2026-01',
+      date: DateTime(2026, 1, 10),
       orderType: 'Wartung',
       cloneDoors: false,
     );
-
-    final door = _createTestDoor(
-      doorNumber: 'T-999',
-      roomDesignation: 'Technikzentrale',
-      notes: 'Türschloss defekt',
-      doorFunctionOK: false,
-    );
-    final doorId = await DatabaseService.insertDoor(door);
-    final wartungJuncId = await DatabaseService.insertInspectionDoor({
-      'inspectionId': wartungId,
+    final doorId = await DatabaseService.insertDoor(_createTestDoor(doorNumber: 'T-1', roomDesignation: 'Lobby'));
+    final w1JuncId = await DatabaseService.insertInspectionDoor({
+      'inspectionId': w1Id,
       'doorId': doorId,
       'status': 'Failed',
-      'notes': 'Türschloss defekt',
+      'notes': 'Zwei Mängel festgestellt',
     });
-
     await DatabaseService.insertInspectionDoorError(InspectionDoorError(
-      inspectionDoorId: wartungJuncId,
-      errorCode: 'DEF_LOCK_DEFECT',
-      notes: 'Schloss schnappt nicht ein',
-      severity: 'high',
+      inspectionDoorId: w1JuncId,
+      errorCode: 'DEF_1',
+      notes: 'Mangel 1',
       quantity: 1,
+      severity: 'medium',
+      resolutionStatus: 'open',
+    ));
+    await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+      inspectionDoorId: w1JuncId,
+      errorCode: 'DEF_2',
+      notes: 'Mangel 2',
+      quantity: 1,
+      severity: 'medium',
       resolutionStatus: 'open',
     ));
 
-    // Parallel Reparatur order created by Manager
-    final reparaturId = await DatabaseService.createAuftragFromLatestInspection(
-      projectNumber: projectNumber,
-      objectAddress: 'Leopoldstr. 200, München',
-      clientName: 'Alpha Real Estate',
-      jobNumber: jobNumber,
-      date: DateTime(2026, 6, 1),
+    // 2. Reparatur (Feb 2026): repairs DEF_1 (resolved), but DEF_2 remains open
+    final r1Id = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-CHAIN-01',
+      objectAddress: 'Maximilianstr. 20, München',
+      clientName: 'Max Luxury',
+      jobNumber: 'R-2026-01',
+      date: DateTime(2026, 1, 10),
       orderType: 'Reparatur',
-      repairDate: DateTime(2026, 6, 10),
+      repairDate: DateTime(2026, 2, 10),
       cloneDoors: true,
     );
+    final r1Juncs = await DatabaseService.getInspectionDoorsByInspectionId(r1Id);
+    final r1Errors = await DatabaseService.getDetailedErrorsForInspectionDoor(r1Juncs.first['id'] as int);
+    expect(r1Errors.length, 2);
 
-    // Inspector marks the defect as resolved during repair
-    final repJunctions = await DatabaseService.getInspectionDoorsByInspectionId(reparaturId);
-    final repErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(repJunctions.first['id'] as int);
-    expect(repErrors.length, 1);
-    final repErrorId = repErrors.first['id'] as int;
+    // Mark DEF_1 as resolved during repair
+    final def1Id = r1Errors.firstWhere((e) => e['errorCode'] == 'DEF_1')['id'] as int;
     await DatabaseService.insertInspectionDoorError(InspectionDoorError(
-      id: repErrorId,
-      inspectionDoorId: repJunctions.first['id'] as int,
-      errorCode: 'DEF_LOCK_DEFECT',
-      notes: 'Schloss repariert & gefettet',
-      severity: 'high',
+      id: def1Id,
+      inspectionDoorId: r1Juncs.first['id'] as int,
+      errorCode: 'DEF_1',
+      notes: 'Mangel 1 behoben',
       quantity: 1,
+      severity: 'medium',
       resolutionStatus: 'Resolved',
     ));
 
-    // Verify 2 parallel cards in Master DB before inspector syncs
-    final beforeImport = await DatabaseService.searchInspections(jobNumber);
-    expect(beforeImport.length, 2);
+    // 3. Follow-up Wartung (Mar 2026): Only open error (DEF_2) must be passed over
+    final w2Id = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-CHAIN-01',
+      objectAddress: 'Maximilianstr. 20, München',
+      clientName: 'Max Luxury',
+      jobNumber: 'W-2026-02',
+      date: DateTime(2026, 3, 10),
+      orderType: 'Wartung',
+      cloneDoors: true,
+    );
+    final w2Juncs = await DatabaseService.getInspectionDoorsByInspectionId(w2Id);
+    final w2Errors = await DatabaseService.getDetailedErrorsForInspectionDoor(w2Juncs.first['id'] as int);
+    expect(w2Errors.length, 1);
+    expect(w2Errors.first['errorCode'], 'DEF_2');
 
-    // 2. Export package containing the Reparatur job (simulate inspector export)
-    final tempDbPath = 'test_reparatur_export_${DateTime.now().millisecondsSinceEpoch}.db';
-    await DatabaseService.exportJobPackage([reparaturId], destinationPath: tempDbPath);
+    // 4. Follow-up Reparatur (Apr 2026): Repairs DEF_2
+    final r2Id = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-CHAIN-01',
+      objectAddress: 'Maximilianstr. 20, München',
+      clientName: 'Max Luxury',
+      jobNumber: 'R-2026-02',
+      date: DateTime(2026, 3, 10),
+      orderType: 'Reparatur',
+      repairDate: DateTime(2026, 4, 10),
+      cloneDoors: true,
+    );
+    final r2Juncs = await DatabaseService.getInspectionDoorsByInspectionId(r2Id);
+    final r2Errors = await DatabaseService.getDetailedErrorsForInspectionDoor(r2Juncs.first['id'] as int);
+    expect(r2Errors.length, 1);
+    expect(r2Errors.first['errorCode'], 'DEF_2');
+  });
 
-    // 3. Manager imports the exported package via importAndMergePackage
+  test('Importing an inspection package marks the job as Erledigt in Master DB', () async {
+    final tempDbPath = 'test_wartung_erledigt_export_${DateTime.now().millisecondsSinceEpoch}.db';
+
+    // 1. Create a Wartung job and export it
+    final inspId = await DatabaseService.createAuftragFromLatestInspection(
+      projectNumber: 'PRJ-ERLEDIGT-IMPORT-01',
+      objectAddress: 'Berliner Str. 50, Berlin',
+      clientName: 'Capital Immo',
+      jobNumber: 'W-BERLIN-01',
+      date: DateTime(2026, 5, 1),
+      orderType: 'Wartung',
+      cloneDoors: false,
+    );
+    final doorId = await DatabaseService.insertDoor(_createTestDoor(doorNumber: 'T-B1', roomDesignation: 'Eingang'));
+    await DatabaseService.insertInspectionDoor({
+      'inspectionId': inspId,
+      'doorId': doorId,
+      'status': 'Passed',
+      'notes': 'Alles in Ordnung',
+    });
+
+    await DatabaseService.exportJobPackage([inspId], destinationPath: tempDbPath);
+
+    // 2. Clear master DB and import the package as manager
+    await DatabaseService.clearDatabase();
     final report = await DatabaseService.importAndMergePackage(tempDbPath);
-    expect(report.packageName, isNotEmpty);
+    expect(report.newInspectionsCount + report.updatedInspectionsCount, 1);
 
-    // 4. Assert: Exactly 1 card remains for this jobNumber in Master DB with orderType = 'Erledigt'
-    final afterImport = await DatabaseService.searchInspections(jobNumber);
-    expect(afterImport.length, 1, reason: 'Parallel Wartung and Reparatur should auto-consolidate into 1 card upon Manager import');
+    // 3. Verify the imported inspection now has orderType = 'Erledigt'
+    final importedInsps = await DatabaseService.searchInspections('W-BERLIN-01');
+    expect(importedInsps.length, 1);
+    expect(importedInsps.first['orderType'], 'Erledigt');
 
-    final consolidatedJob = afterImport.first;
-    expect(consolidatedJob['orderType'], 'Erledigt');
-    expect(consolidatedJob['jobNumber'], jobNumber);
-    expect(consolidatedJob['repairDate'], isNotNull);
-    expect(consolidatedJob['repairDate'], contains('2026-06-10'));
-    expect(consolidatedJob['date'], contains('2026-06-01'));
-
-    // 5. Assert: The door on the consolidated card has EXACTLY 1 error entry with status Resolved (NO DUPLICATE open error)
-    final consolidatedJunctions = await DatabaseService.getInspectionDoorsByInspectionId(consolidatedJob['inspectionId'] as int);
-    expect(consolidatedJunctions.length, 1);
-    final consolidatedErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(consolidatedJunctions.first['id'] as int);
-    expect(consolidatedErrors.length, 1, reason: 'Should only have 1 defect record with latest state, not duplicate open and resolved copies');
-    expect(consolidatedErrors.first['errorCode'], 'DEF_LOCK_DEFECT');
-    expect(consolidatedErrors.first['resolutionStatus'], 'Resolved');
-    expect(consolidatedErrors.first['notes'], 'Schloss repariert & gefettet');
-
-    // 6. Door History audit trail check
-    final historyData = await DatabaseService.getDoorHistoryData(doorId: doorId);
-    expect(historyData, isNotNull);
-    final historyItems = historyData!['historyItems'] as List;
-    expect(historyItems.isNotEmpty, isTrue);
-
-    // Clean up temporary exported db file
+    // Clean up temp file
     final tempFile = File(tempDbPath);
     if (tempFile.existsSync()) {
       tempFile.deleteSync();

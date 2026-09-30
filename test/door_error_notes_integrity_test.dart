@@ -29,7 +29,10 @@ bool isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog, List<String>
   if (line.startsWith('M-') || line.startsWith('ERR_') || line.startsWith('PROP-') || line.startsWith('ALT-')) {
     return true;
   }
-  final cleanLine = line.toLowerCase();
+  final cleanLine = line
+      .replaceAll(RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
+      .trim()
+      .toLowerCase();
   for (final cat in allCatalog) {
     final desc = cat.description.trim().toLowerCase();
     final code = cat.code.trim().toLowerCase();
@@ -63,12 +66,16 @@ String reconcileNotes({
   for (final e in errors) {
     final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '').toString().trim();
     final note = (e['notes'] ?? '').toString().trim();
+    final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+    final isResolved = (status == 'resolved' || status == 'gelöst' || status == 'beholfen');
+    final statusSuffix = isResolved ? ' [Gelöst]' : '';
+
     if (desc.isNotEmpty && note.isNotEmpty) {
-      formattedEntries.add('$desc: $note');
+      formattedEntries.add('$desc: $note$statusSuffix');
     } else if (desc.isNotEmpty) {
-      formattedEntries.add(desc);
+      formattedEntries.add('$desc$statusSuffix');
     } else if (note.isNotEmpty) {
-      formattedEntries.add(note);
+      formattedEntries.add('$note$statusSuffix');
     }
   }
 
@@ -226,6 +233,77 @@ void main() {
       expect(updatedDoor.notes, equals(reconciledAfterDelete));
       expect(updatedDoor.notes!.contains('Dichtung beschädigt'), isFalse);
       expect(updatedDoor.notes!.contains('Manueller Hinweis'), isTrue);
+    });
+
+    test('Door notes append [Gelöst] when error resolutionStatus is set to resolved', () async {
+      final db = await LocalDatabaseService.getDb();
+      final allCatalog = await LocalDatabaseService.getAllErrorCatalog();
+
+      final inspId = await db.insert('inspections', {
+        'clientName': 'Testkunde',
+        'objectAddress': 'Teststraße 1',
+        'date': DateTime.now().toIso8601String(),
+        'jobNumber': 'JOB-02',
+      });
+
+      final doorId = await db.insert('doors', {
+        'doorNumber': 'T-102',
+        'doorAlias': 'ALIAS-102',
+        'floor': '1.OG',
+        'roomDesignation': 'Besprechung',
+        'roomNumber': '201',
+        'notes': 'Manuelle Vorabnotiz',
+      });
+
+      final inspDoorId = await db.insert('inspection_doors', {
+        'inspectionId': inspId,
+        'doorId': doorId,
+        'status': 'Pending',
+        'notes': 'Manuelle Vorabnotiz',
+      });
+
+      // Insert error initially as open
+      final errId = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+        inspectionDoorId: inspDoorId,
+        errorId: allCatalog[0].errorId ?? 1,
+        errorCode: allCatalog[0].code,
+        notes: 'Schloss schließt schwer',
+        quantity: 1,
+        severity: 'medium',
+        resolutionStatus: 'open',
+      ));
+
+      var activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      var syncedNotes = reconcileNotes(
+        currentNotes: 'Manuelle Vorabnotiz',
+        allCatalog: allCatalog,
+        errors: activeErrors,
+      );
+
+      expect(syncedNotes, contains('Türblatt verzogen / schließt nicht: Schloss schließt schwer'));
+      expect(syncedNotes.contains('[Gelöst]'), isFalse);
+
+      // Mark error as resolved
+      await LocalDatabaseService.updateInspectionDoorError(InspectionDoorError(
+        id: errId,
+        inspectionDoorId: inspDoorId,
+        errorId: allCatalog[0].errorId ?? 1,
+        errorCode: allCatalog[0].code,
+        notes: 'Schloss schließt schwer',
+        quantity: 1,
+        severity: 'medium',
+        resolutionStatus: 'resolved',
+      ));
+
+      activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      var reconciledResolved = reconcileNotes(
+        currentNotes: syncedNotes,
+        allCatalog: allCatalog,
+        errors: activeErrors,
+      );
+
+      expect(reconciledResolved, contains('Manuelle Vorabnotiz'));
+      expect(reconciledResolved, contains('Türblatt verzogen / schließt nicht: Schloss schließt schwer [Gelöst]'));
     });
   });
 }

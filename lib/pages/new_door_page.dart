@@ -356,12 +356,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
         for (final e in errors) {
           final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '').toString().trim();
           final note = (e['notes'] ?? '').toString().trim();
+          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          final isResolved = (status == 'resolved' || status == 'gelöst' || status == 'beholfen');
+          final statusSuffix = isResolved ? ' [Gelöst]' : '';
+
           if (desc.isNotEmpty && note.isNotEmpty) {
-            formattedEntries.add('$desc: $note');
+            formattedEntries.add('$desc: $note$statusSuffix');
           } else if (desc.isNotEmpty) {
-            formattedEntries.add(desc);
+            formattedEntries.add('$desc$statusSuffix');
           } else if (note.isNotEmpty) {
-            formattedEntries.add(note);
+            formattedEntries.add('$note$statusSuffix');
           }
         }
 
@@ -454,7 +458,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       return true;
     }
     // Match against any known catalog error description or code prefix
-    final cleanLine = line.toLowerCase();
+    final cleanLine = line
+        .replaceAll(RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
+        .trim()
+        .toLowerCase();
     for (final cat in allCatalog) {
       final desc = cat.description.trim().toLowerCase();
       final code = cat.code.trim().toLowerCase();
@@ -1154,68 +1161,60 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               ),
             ),
             
-            // Inspection date
-            ListTile(
-              title: Text("Inspektionsdatum: ${inspectionDate.day.toString().padLeft(2, '0')}.${inspectionDate.month.toString().padLeft(2, '0')}.${inspectionDate.year}"),
-              subtitle: !widget.isManagerMode ? const Text("Schreibgeschützt für Inspektor", style: TextStyle(fontSize: 12, color: Colors.grey)) : null,
-              trailing: IconButton(
-                icon: const Icon(Icons.calendar_today),
-                onPressed: (widget.isManagerMode && !_isFormReadOnly) ? () async {
-                  final date = await showDatePicker(
-                    context: context,
-                    initialDate: inspectionDate,
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now(),
-                  );
-                  if (date != null) {
-                    setState(() => inspectionDate = date);
-                  }
-                } : null,
-              ),
-            ),
-
-            // Reparatur-Datum
-            ListTile(
-              title: Text(
-                orderType == 'Wartung' && repairDate == null
-                    ? "Reparaturdatum: -"
-                    : "Reparaturdatum: ${repairDate != null ? '${repairDate!.day.toString().padLeft(2, '0')}.${repairDate!.month.toString().padLeft(2, '0')}.${repairDate!.year}' : '-'}",
-                style: TextStyle(
-                  color: orderType == 'Wartung' && repairDate == null
-                      ? Colors.grey.shade600
-                      : Colors.orange.shade900,
-                  fontWeight: orderType != 'Wartung' || repairDate != null
-                      ? FontWeight.bold
-                      : FontWeight.normal,
+            // Date Section: Exactly one date is displayed based on whether the event is a Reparatur or Wartung
+            if (orderType == 'Reparatur' || (orderType == 'Erledigt' && repairDate != null))
+              ListTile(
+                title: Text(
+                  "Reparaturdatum: ${repairDate != null ? '${repairDate!.day.toString().padLeft(2, '0')}.${repairDate!.month.toString().padLeft(2, '0')}.${repairDate!.year}' : '-'}",
+                  style: TextStyle(
+                    color: Colors.orange.shade900,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: Text(
+                  orderType == 'Erledigt' ? "Instandsetzung abgeschlossen (Erledigt)" : "Instandsetzungsphase",
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+                trailing: (widget.isManagerMode && !_isFormReadOnly)
+                    ? IconButton(
+                        icon: Icon(Icons.build, color: Colors.orange.shade800),
+                        tooltip: 'Reparaturdatum ändern',
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: repairDate ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2100),
+                          );
+                          if (date != null) {
+                            setState(() => repairDate = date);
+                          }
+                        },
+                      )
+                    : null,
+              )
+            else
+              ListTile(
+                title: Text("Inspektionsdatum: ${inspectionDate.day.toString().padLeft(2, '0')}.${inspectionDate.month.toString().padLeft(2, '0')}.${inspectionDate.year}"),
+                subtitle: !widget.isManagerMode ? const Text("Schreibgeschützt für Inspektor", style: TextStyle(fontSize: 12, color: Colors.grey)) : null,
+                trailing: IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: (widget.isManagerMode && !_isFormReadOnly) ? () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: inspectionDate,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() => inspectionDate = date);
+                    }
+                  } : null,
                 ),
               ),
-              subtitle: Text(
-                orderType == 'Wartung' && repairDate == null
-                    ? "Nicht zutreffend (Wartungsphase)"
-                    : (orderType == 'Erledigt' ? "Instandsetzung abgeschlossen (Erledigt)" : "Instandsetzungsphase"),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: orderType == 'Wartung' && repairDate == null ? Colors.grey : Colors.orange.shade800,
-                ),
-              ),
-              trailing: (widget.isManagerMode && !_isFormReadOnly && orderType != 'Wartung')
-                  ? IconButton(
-                      icon: Icon(Icons.build, color: Colors.orange.shade800),
-                      tooltip: 'Reparaturdatum ändern',
-                      onPressed: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: repairDate ?? DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2100),
-                        );
-                        if (date != null) {
-                          setState(() => repairDate = date);
-                        }
-                      },
-                    )
-                  : null,
-            ),
 
             const SizedBox(height: 20),
 
