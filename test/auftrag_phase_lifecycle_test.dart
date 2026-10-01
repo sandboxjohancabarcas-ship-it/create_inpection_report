@@ -336,10 +336,10 @@ void main() {
     final report = await DatabaseService.importAndMergePackage(tempDbPath);
     expect(report.newInspectionsCount + report.updatedInspectionsCount, 1);
 
-    // 3. Verify the imported inspection now has orderType = 'Erledigt'
+    // 3. Verify the imported inspection preserves orderType = 'Wartung'
     final importedInsps = await DatabaseService.searchInspections('W-BERLIN-01');
     expect(importedInsps.length, 1);
-    expect(importedInsps.first['orderType'], 'Erledigt');
+    expect(importedInsps.first['orderType'], 'Wartung');
 
     // Clean up temp file
     final tempFile = File(tempDbPath);

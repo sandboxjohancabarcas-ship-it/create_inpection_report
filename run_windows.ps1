@@ -106,7 +106,11 @@ if ($Mode -eq "clean") {
     Write-Host "[2/3] Preserving existing database and inspection data." -ForegroundColor Cyan
 }
 
-# 4. Launch Flutter
+# 4. Synchronize Version & Build Date
+Write-Host "Synchronizing version & build timestamp..." -ForegroundColor DarkGray
+& "$PSScriptRoot\scripts\update_version.ps1"
+
+# 5. Launch Flutter
 Write-Host ""
 Write-Host "[3/3] Launching application on Windows..." -ForegroundColor Cyan
 $flutterArgs = @("run", "-d", "Windows", "--no-enable-impeller")

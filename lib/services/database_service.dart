@@ -2241,8 +2241,38 @@ class DatabaseService {
     final List<String> newCatalogProposals = [];
     final List<InspectionFileReportItem> fileReports = [];
     final List<DoorConflict> packageDoorConflicts = [];
+    final List<LegacyMigrationAudit> legacyAudits = [];
 
     try {
+      int packageVersion = 0;
+      try {
+        final verResult = await packageDb.rawQuery('PRAGMA user_version');
+        if (verResult.isNotEmpty) {
+          packageVersion = (verResult.first.values.first as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+      const int targetVersion = 27;
+
+      final Set<String> packageDoorCols = await _getTableColumns(packageDb, 'doors');
+      final Set<String> packageInspCols = await _getTableColumns(packageDb, 'inspections');
+
+      final List<String> convertedProperties = [];
+      if (packageDoorCols.contains('lintelHeightUnder1m')) {
+        convertedProperties.add('Altes Attribut "lintelHeightUnder1m" (unter 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+      }
+      if (packageDoorCols.contains('lintelHeightOver1m')) {
+        convertedProperties.add('Altes Attribut "lintelHeightOver1m" (über 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+      }
+      if (packageDoorCols.contains('customerName')) {
+        convertedProperties.add('Metadatum "customerName" in Türzeilen erkannt und kompatibel überführt');
+      }
+      if (!packageInspCols.contains('orderType')) {
+        convertedProperties.add('Fehlende Auftragsphase ("orderType") in Prüfungen automatisch mit "Wartung" initialisiert');
+      }
+      if (!packageInspCols.contains('isLocked')) {
+        convertedProperties.add('Sperrstatus ("isLocked") für Altdaten automatisch mit entsperrt (0) initialisiert');
+      }
+
       await masterDb.transaction((txn) async {
         // 1. Get all data from package
         final pDoors = await packageDb.query('doors');
@@ -2293,6 +2323,117 @@ class DatabaseService {
 
         // Import ALL catalog entries (not just Pending) to enable errorId remapping
         final pCatalog = await packageDb.query('error_catalog');
+        if (pCatalog.isNotEmpty) {
+          convertedProperties.add('ID-Remapping für ${pCatalog.length} Mängelkatalog-Einträge via Fehlercode durchgeführt (FK-Konsistenz)');
+        }
+
+        // Check for placeholder properties in doors
+        int placeholderApprovalCount = 0;
+        int placeholderManufacturerNumCount = 0;
+        int placeholderDopCount = 0;
+        int placeholderYearCount = 0;
+        int placeholderFireProtCount = 0;
+        int placeholderSmokeProtCount = 0;
+        final List<String> placeholderSampleDoors = [];
+
+        for (final row in pDoors) {
+          final doorNum = (row['doorNumber'] ?? row['doorAlias'] ?? '').toString().trim();
+          bool hasPlaceholder = false;
+
+          final appNo = (row['approvalNumber'] ?? '').toString().trim();
+          if (appNo == '?' || appNo.isEmpty) {
+            placeholderApprovalCount++;
+            hasPlaceholder = true;
+          }
+          final mfgNo = (row['manufacturerNumber'] ?? '').toString().trim();
+          if (mfgNo == '?' || mfgNo.isEmpty) {
+            placeholderManufacturerNumCount++;
+            hasPlaceholder = true;
+          }
+          final dop = (row['dopNumber'] ?? '').toString().trim();
+          if (dop == '?' || dop.isEmpty) {
+            placeholderDopCount++;
+            hasPlaceholder = true;
+          }
+          final year = (row['manufactureYear'] ?? '').toString().trim();
+          if (year == '?' || year.isEmpty) {
+            placeholderYearCount++;
+            hasPlaceholder = true;
+          }
+          final fp = (row['fireProtection'] ?? '').toString().trim();
+          if (fp == '?') {
+            placeholderFireProtCount++;
+            hasPlaceholder = true;
+          }
+          final sp = (row['smokeProtection'] ?? '').toString().trim();
+          if (sp == '?') {
+            placeholderSmokeProtCount++;
+            hasPlaceholder = true;
+          }
+
+          if (hasPlaceholder && placeholderSampleDoors.length < 8 && doorNum.isNotEmpty) {
+            if (!placeholderSampleDoors.contains(doorNum)) {
+              placeholderSampleDoors.add(doorNum);
+            }
+          }
+        }
+
+        final Map<String, int> placeholderDoorProperties = {};
+        if (placeholderApprovalCount > 0) {
+          placeholderDoorProperties['Zulassungsnummer (approvalNumber)'] = placeholderApprovalCount;
+        }
+        if (placeholderManufacturerNumCount > 0) {
+          placeholderDoorProperties['Herstellernummer (manufacturerNumber)'] = placeholderManufacturerNumCount;
+        }
+        if (placeholderDopCount > 0) {
+          placeholderDoorProperties['Leistungserklärung / DoP (dopNumber)'] = placeholderDopCount;
+        }
+        if (placeholderYearCount > 0) {
+          placeholderDoorProperties['Baujahr (manufactureYear)'] = placeholderYearCount;
+        }
+        if (placeholderFireProtCount > 0) {
+          placeholderDoorProperties['Brandschutzklasse (fireProtection)'] = placeholderFireProtCount;
+        }
+        if (placeholderSmokeProtCount > 0) {
+          placeholderDoorProperties['Rauchschutzklasse (smokeProtection)'] = placeholderSmokeProtCount;
+        }
+
+        final bool isLegacy = packageVersion < targetVersion ||
+            convertedProperties.isNotEmpty ||
+            placeholderDoorProperties.isNotEmpty;
+        if (isLegacy) {
+          final firstInsp = pInspections.isNotEmpty ? pInspections.first : <String, dynamic>{};
+          final firstJobNum = (firstInsp['jobNumber'] ?? firstInsp['auftragsnummer'] ?? '').toString();
+          final firstClient = (firstInsp['clientName'] ?? '').toString();
+          final firstAddress = (firstInsp['objectAddress'] ?? '').toString();
+          final firstRepairDate = firstInsp['repairDate']?.toString();
+
+          legacyAudits.add(LegacyMigrationAudit(
+            fileName: basename(packagePath),
+            packageVersion: packageVersion,
+            targetVersion: targetVersion,
+            jobNumber: firstJobNum,
+            clientName: firstClient,
+            objectAddress: firstAddress,
+            defaultOrderType: 'Wartung',
+            repairDate: firstRepairDate,
+            newFeatures: const [
+              'Mehrstufige Auftragsphasen (Wartung ➔ Reparatur ➔ Erledigt) mit getrenntem Reparaturdatum',
+              'Auftragssperre & Schreibschutz (isLocked) für Revisionssicherheit',
+              'Erweiterte Sturzhöhen-Parameter (Innen/Außen getrennt, inkl. Messwerte)',
+              'Dynamische Dropdown-Optionen mit Whitelist-Validierung',
+            ],
+            convertedProperties: convertedProperties,
+            placeholderDoorProperties: placeholderDoorProperties,
+            placeholderSampleDoors: placeholderSampleDoors,
+            managerActionHints: const [
+              '1. Überprüfen Sie den importierten Auftrag in der Auftragsübersicht (Standardmäßig als Phase "Wartung" angelegt).',
+              '2. Öffnen Sie die Türverwaltung im Master-Portal, um bei Bedarf mit "?" markierte Felder (z.B. Zulassungsnummer, Herstellernummer, Baujahr) manuell nachzupflegen.',
+              '3. Falls eine Reparatur durchgeführt wurde oder wird, wechseln Sie die Phase auf "Reparatur" bzw. tragen Sie das Reparaturdatum ein.',
+              '4. Nach Abschluss aller Nacharbeiten kann der Auftrag über das Schloss-Symbol gesperrt (isLocked) werden.',
+            ],
+          ));
+        }
 
         // 2. Merge ALL Catalog Entries and build catalogIdMap (packageId → masterId)
         //    Keyed by `code` so IDs are remapped correctly across different DBs.
@@ -2387,8 +2528,11 @@ class DatabaseService {
         for (var row in pInspections) {
           final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
           final packageId = row['inspectionId'] as int;
-          final incomingOrderType = row['orderType']?.toString() ?? '';
-          final incomingRepairDate = row['repairDate']?.toString() ?? '';
+          var incomingOrderType = row['orderType']?.toString()?.trim();
+          if (incomingOrderType == null || incomingOrderType.isEmpty) {
+            incomingOrderType = 'Wartung';
+          }
+          final incomingRepairDate = row['repairDate']?.toString()?.trim() ?? '';
 
           if (incomingOrderType == 'Reparatur' || incomingOrderType == 'Erledigt' || incomingRepairDate.isNotEmpty) {
             if (jobNum.trim().isNotEmpty) {
@@ -2413,6 +2557,7 @@ class DatabaseService {
           final data = Map<String, dynamic>.from(row)
             ..remove('inspectionId')
             ..remove('doorCount');
+          data['orderType'] = incomingOrderType;
           data.removeWhere((key, _) => !masterInspectionColumns.contains(key));
 
           if (existing.isNotEmpty) {
@@ -2562,18 +2707,7 @@ class DatabaseService {
           }
         }
 
-        // 7. Auto-mark imported jobs as 'Erledigt' upon successful merge into Master DB
-        for (final entry in inspectionIdMap.entries) {
-          final masterInspId = entry.value;
-          await txn.update(
-            'inspections',
-            {'orderType': 'Erledigt'},
-            where: 'inspectionId = ?',
-            whereArgs: [masterInspId],
-          );
-        }
-
-        // Auto-consolidate multiple records of the same jobNumber if present
+        // Auto-consolidate multiple records of the same jobNumber if multiple phases exist
         final Set<String> allImportedJobs = {};
         for (final row in pInspections) {
           final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '').toString().trim();
@@ -2582,7 +2716,10 @@ class DatabaseService {
           }
         }
         for (final jobNum in allImportedJobs) {
-          await consolidateJobToErledigt(jobNumber: jobNum, executor: txn);
+          final existingInspections = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum]);
+          if (existingInspections.length > 1 || reparaturJobsToConsolidate.contains(jobNum)) {
+            await consolidateJobToErledigt(jobNumber: jobNum, executor: txn);
+          }
         }
 
         fileReports.add(InspectionFileReportItem(
@@ -2613,6 +2750,7 @@ class DatabaseService {
         newCatalogProposals: newCatalogProposals,
         fileReports: fileReports,
         doorConflicts: packageDoorConflicts,
+        legacyAudits: legacyAudits,
       );
     } finally {
       await packageDb.close();

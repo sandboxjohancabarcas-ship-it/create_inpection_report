@@ -1847,7 +1847,8 @@ class LocalDatabaseService {
       databaseFactory = databaseFactoryFfi;
     }
 
-    final packageDb = await openDatabase(packagePath, readOnly: true);
+    final absolutePackagePath = File(packagePath).absolute.path;
+    final packageDb = await openDatabase(absolutePackagePath, readOnly: true);
 
     int newDoorsCount = 0;
     int updatedDoorsCount = 0;
@@ -1857,8 +1858,8 @@ class LocalDatabaseService {
     int totalAttachmentsImported = 0;
     final List<DoorChangeItem> doorChanges = [];
     final List<String> newCatalogProposals = [];
-
     final List<DoorConflict> packageDoorConflicts = [];
+    final List<LegacyMigrationAudit> legacyAudits = [];
 
     try {
       // Validate structure
@@ -1868,12 +1869,153 @@ class LocalDatabaseService {
         throw Exception('Die Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
       }
 
+      int packageVersion = 0;
+      try {
+        final verResult = await packageDb.rawQuery('PRAGMA user_version');
+        if (verResult.isNotEmpty) {
+          packageVersion = (verResult.first.values.first as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {}
+      const int targetVersion = 17;
+
+      final Set<String> packageDoorCols = await _getTableColumns(packageDb, 'doors');
+      final Set<String> packageInspCols = await _getTableColumns(packageDb, 'inspections');
+
+      final List<String> convertedProperties = [];
+      if (packageDoorCols.contains('lintelHeightUnder1m')) {
+        convertedProperties.add('Altes Attribut "lintelHeightUnder1m" (unter 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+      }
+      if (packageDoorCols.contains('lintelHeightOver1m')) {
+        convertedProperties.add('Altes Attribut "lintelHeightOver1m" (über 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+      }
+      if (packageDoorCols.contains('customerName')) {
+        convertedProperties.add('Metadatum "customerName" in Türzeilen erkannt und kompatibel überführt');
+      }
+      if (!packageInspCols.contains('orderType')) {
+        convertedProperties.add('Fehlende Auftragsphase ("orderType") in Prüfungen automatisch mit "Wartung" initialisiert');
+      }
+      if (!packageInspCols.contains('isLocked')) {
+        convertedProperties.add('Sperrstatus ("isLocked") für Altdaten automatisch mit entsperrt (0) initialisiert');
+      }
+
       await localDb.transaction((txn) async {
         final pInspections = await packageDb.query('inspections');
         final pDoors = await packageDb.query('doors');
         final pJunctions = await packageDb.query('inspection_doors');
         final pErrors = await packageDb.query('inspection_door_errors');
         final pCatalog = await packageDb.query('error_catalog');
+
+        if (pCatalog.isNotEmpty) {
+          convertedProperties.add('ID-Remapping für ${pCatalog.length} Mängelkatalog-Einträge via Fehlercode durchgeführt');
+        }
+
+        // Check for placeholder properties in doors
+        int placeholderApprovalCount = 0;
+        int placeholderManufacturerNumCount = 0;
+        int placeholderDopCount = 0;
+        int placeholderYearCount = 0;
+        int placeholderFireProtCount = 0;
+        int placeholderSmokeProtCount = 0;
+        final List<String> placeholderSampleDoors = [];
+
+        for (final row in pDoors) {
+          final doorNum = (row['doorNumber'] ?? row['doorAlias'] ?? '').toString().trim();
+          bool hasPlaceholder = false;
+
+          final appNo = (row['approvalNumber'] ?? '').toString().trim();
+          if (appNo == '?' || appNo.isEmpty) {
+            placeholderApprovalCount++;
+            hasPlaceholder = true;
+          }
+          final mfgNo = (row['manufacturerNumber'] ?? '').toString().trim();
+          if (mfgNo == '?' || mfgNo.isEmpty) {
+            placeholderManufacturerNumCount++;
+            hasPlaceholder = true;
+          }
+          final dop = (row['dopNumber'] ?? '').toString().trim();
+          if (dop == '?' || dop.isEmpty) {
+            placeholderDopCount++;
+            hasPlaceholder = true;
+          }
+          final year = (row['manufactureYear'] ?? '').toString().trim();
+          if (year == '?' || year.isEmpty) {
+            placeholderYearCount++;
+            hasPlaceholder = true;
+          }
+          final fp = (row['fireProtection'] ?? '').toString().trim();
+          if (fp == '?') {
+            placeholderFireProtCount++;
+            hasPlaceholder = true;
+          }
+          final sp = (row['smokeProtection'] ?? '').toString().trim();
+          if (sp == '?') {
+            placeholderSmokeProtCount++;
+            hasPlaceholder = true;
+          }
+
+          if (hasPlaceholder && placeholderSampleDoors.length < 8 && doorNum.isNotEmpty) {
+            if (!placeholderSampleDoors.contains(doorNum)) {
+              placeholderSampleDoors.add(doorNum);
+            }
+          }
+        }
+
+        final Map<String, int> placeholderDoorProperties = {};
+        if (placeholderApprovalCount > 0) {
+          placeholderDoorProperties['Zulassungsnummer (approvalNumber)'] = placeholderApprovalCount;
+        }
+        if (placeholderManufacturerNumCount > 0) {
+          placeholderDoorProperties['Herstellernummer (manufacturerNumber)'] = placeholderManufacturerNumCount;
+        }
+        if (placeholderDopCount > 0) {
+          placeholderDoorProperties['Leistungserklärung / DoP (dopNumber)'] = placeholderDopCount;
+        }
+        if (placeholderYearCount > 0) {
+          placeholderDoorProperties['Baujahr (manufactureYear)'] = placeholderYearCount;
+        }
+        if (placeholderFireProtCount > 0) {
+          placeholderDoorProperties['Brandschutzklasse (fireProtection)'] = placeholderFireProtCount;
+        }
+        if (placeholderSmokeProtCount > 0) {
+          placeholderDoorProperties['Rauchschutzklasse (smokeProtection)'] = placeholderSmokeProtCount;
+        }
+
+        final bool isLegacy = packageVersion < targetVersion ||
+            convertedProperties.isNotEmpty ||
+            placeholderDoorProperties.isNotEmpty;
+        if (isLegacy) {
+          final firstInsp = pInspections.isNotEmpty ? pInspections.first : <String, dynamic>{};
+          final firstJobNum = (firstInsp['jobNumber'] ?? firstInsp['auftragsnummer'] ?? '').toString();
+          final firstClient = (firstInsp['clientName'] ?? '').toString();
+          final firstAddress = (firstInsp['objectAddress'] ?? '').toString();
+          final firstRepairDate = firstInsp['repairDate']?.toString();
+
+          legacyAudits.add(LegacyMigrationAudit(
+            fileName: basename(packagePath),
+            packageVersion: packageVersion,
+            targetVersion: targetVersion,
+            jobNumber: firstJobNum,
+            clientName: firstClient,
+            objectAddress: firstAddress,
+            defaultOrderType: 'Wartung',
+            repairDate: firstRepairDate,
+            newFeatures: const [
+              'Mehrstufige Auftragsphasen (Wartung ➔ Reparatur ➔ Erledigt) mit getrenntem Reparaturdatum',
+              'Auftragssperre & Schreibschutz (isLocked) für Revisionssicherheit',
+              'Erweiterte Sturzhöhen-Parameter (Innen/Außen getrennt, inkl. Messwerte)',
+              'Dynamische Dropdown-Optionen mit Whitelist-Validierung',
+            ],
+            convertedProperties: convertedProperties,
+            placeholderDoorProperties: placeholderDoorProperties,
+            placeholderSampleDoors: placeholderSampleDoors,
+            managerActionHints: const [
+              '1. Überprüfen Sie den importierten Auftrag in der Auftragsübersicht (Standardmäßig als Phase "Wartung" angelegt).',
+              '2. Öffnen Sie die Türverwaltung im Master-Portal, um bei Bedarf mit "?" markierte Felder (z.B. Zulassungsnummer, Herstellernummer, Baujahr) manuell nachzupflegen.',
+              '3. Falls eine Reparatur durchgeführt wurde oder wird, wechseln Sie die Phase auf "Reparatur" bzw. tragen Sie das Reparaturdatum ein.',
+              '4. Nach Abschluss aller Nacharbeiten kann der Auftrag über das Schloss-Symbol gesperrt (isLocked) werden.',
+            ],
+          ));
+        }
 
         // 1. Merge catalog
         final localCatalogColumns = await _getTableColumns(txn, 'error_catalog');
@@ -1895,6 +2037,9 @@ class LocalDatabaseService {
         for (var insp in pInspections) {
           final data = Map<String, dynamic>.from(insp);
           data.remove('doorCount');
+          if (data['orderType'] == null || data['orderType'].toString().trim().isEmpty) {
+            data['orderType'] = 'Wartung';
+          }
           data.removeWhere((k, _) => !localInspectionColumns.contains(k));
           final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '') as String;
           final existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
@@ -1986,6 +2131,7 @@ class LocalDatabaseService {
         doorChanges: doorChanges,
         newCatalogProposals: newCatalogProposals,
         doorConflicts: packageDoorConflicts,
+        legacyAudits: legacyAudits,
       );
     } finally {
       await packageDb.close();

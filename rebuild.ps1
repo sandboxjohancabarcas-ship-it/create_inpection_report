@@ -46,8 +46,9 @@ foreach ($path in $transformPaths) {
 }
 Start-Sleep -Seconds 2
 
-# 4. Flutter clean & dependencies
-Write-Host "[4/5] Running flutter clean and fetching dependencies..." -ForegroundColor Gray
+# 4. Synchronize Version & Build Date, clean & dependencies
+Write-Host "[4/5] Updating version and build date timestamp..." -ForegroundColor Gray
+& "$PSScriptRoot\scripts\update_version.ps1"
 flutter clean
 flutter pub get
 

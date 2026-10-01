@@ -9,11 +9,15 @@ Write-Host "[1/4] Stopping existing app instances and build tools..." -Foregroun
 Get-Process "WartungsTool" -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process "MSBuild" -ErrorAction SilentlyContinue | Stop-Process -Force
 
-# 2. Environment Refresh
-Write-Host "[2/4] Fetching dependencies..." -ForegroundColor Gray
+# 2. Synchronize Version & Build Date
+Write-Host "[2/5] Updating version and build date timestamp..." -ForegroundColor Gray
+& "$PSScriptRoot\scripts\update_version.ps1"
+
+# 3. Environment Refresh
+Write-Host "[3/5] Fetching dependencies..." -ForegroundColor Gray
 flutter pub get
 
-# 3. Asset Verification
+# 4. Asset Verification
 if (!(Test-Path "error_catalog.json")) {
     Write-Host "Warning: error_catalog.json not found in root. Windows build may fail to bundle assets." -ForegroundColor Yellow
 }

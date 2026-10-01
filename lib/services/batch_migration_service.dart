@@ -254,6 +254,7 @@ class BatchMigrationService {
     final List<InspectionFileReportItem> fileReports = [];
     final List<DoorConflict> doorConflicts = [];
     final List<ImportConflict> catalogConflicts = [];
+    final List<LegacyMigrationAudit> legacyAudits = [];
 
     int compliantProcessed = 0;
     int skippedCount = 0;
@@ -290,6 +291,9 @@ class BatchMigrationService {
       fileReports.addAll(singleResult.fileReports);
       doorConflicts.addAll(singleResult.doorConflicts);
       catalogConflicts.addAll(singleResult.catalogConflicts);
+      if (singleResult.importReport != null && singleResult.importReport!.legacyAudits.isNotEmpty) {
+        legacyAudits.addAll(singleResult.importReport!.legacyAudits);
+      }
     }
 
     final aggregatedReport = ImportReport(
@@ -304,6 +308,8 @@ class BatchMigrationService {
       doorChanges: doorChanges,
       newCatalogProposals: newCatalogProposals,
       fileReports: fileReports,
+      doorConflicts: doorConflicts,
+      legacyAudits: legacyAudits,
     );
 
     return BatchMigrationResult(

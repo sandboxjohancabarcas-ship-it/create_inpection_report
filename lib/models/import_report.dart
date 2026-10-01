@@ -67,6 +67,96 @@ class InspectionFileReportItem {
       doorChanges.where((d) => !d.isProcessed).toList();
 }
 
+class LegacyMigrationAudit {
+  final String fileName;
+  final int packageVersion;
+  final int targetVersion;
+  final String jobNumber;
+  final String clientName;
+  final String objectAddress;
+  final String defaultOrderType;
+  final String? repairDate;
+  final List<String> newFeatures;
+  final List<String> convertedProperties;
+  final Map<String, int> placeholderDoorProperties;
+  final List<String> placeholderSampleDoors;
+  final List<String> managerActionHints;
+
+  LegacyMigrationAudit({
+    required this.fileName,
+    required this.packageVersion,
+    required this.targetVersion,
+    this.jobNumber = '',
+    this.clientName = '',
+    this.objectAddress = '',
+    this.defaultOrderType = 'Wartung',
+    this.repairDate,
+    this.newFeatures = const [],
+    this.convertedProperties = const [],
+    this.placeholderDoorProperties = const {},
+    this.placeholderSampleDoors = const [],
+    this.managerActionHints = const [],
+  });
+
+  bool get isLegacyPackage =>
+      packageVersion < targetVersion ||
+      convertedProperties.isNotEmpty ||
+      newFeatures.isNotEmpty ||
+      placeholderDoorProperties.isNotEmpty;
+
+  String generateFormattedReportText() {
+    final buffer = StringBuffer();
+    buffer.writeln('================================================================================');
+    buffer.writeln('  ALTDATEN-KOMPATIBILITÄTS- & MIGRATIONSBERICHT (Legacy Package Audit)');
+    buffer.writeln('================================================================================');
+    buffer.writeln('• Datei: $fileName');
+    buffer.writeln('• Paket-Version: v$packageVersion (Legacy) ➔ Ziel-Version: v$targetVersion (Aktuell)');
+    if (jobNumber.isNotEmpty) buffer.writeln('• Auftrag: $jobNumber');
+    if (clientName.isNotEmpty) buffer.writeln('• Kunde: $clientName');
+    if (objectAddress.isNotEmpty) buffer.writeln('• Liegenschaft: $objectAddress');
+    buffer.writeln('• Standard-Auftragsphase: $defaultOrderType');
+    if (repairDate != null && repairDate!.isNotEmpty) buffer.writeln('• Reparaturdatum: $repairDate');
+    buffer.writeln('--------------------------------------------------------------------------------');
+
+    if (newFeatures.isNotEmpty) {
+      buffer.writeln('1. NEUE FUNKTIONEN DER AKTUELLEN VERSION (im Altdaten-Paket nicht enthalten):');
+      for (final f in newFeatures) {
+        buffer.writeln('   • $f');
+      }
+      buffer.writeln('--------------------------------------------------------------------------------');
+    }
+
+    if (convertedProperties.isNotEmpty) {
+      buffer.writeln('2. DURCHGEFÜHRTE ATTRIBUT-KONVERTIERUNGEN & WHITELISTING:');
+      for (final c in convertedProperties) {
+        buffer.writeln('   • $c');
+      }
+      buffer.writeln('--------------------------------------------------------------------------------');
+    }
+
+    if (placeholderDoorProperties.isNotEmpty) {
+      buffer.writeln('3. ZUR MANUELLEN PRÜFUNG / ERGÄNZUNG DURCH DEN MANAGER:');
+      placeholderDoorProperties.forEach((prop, count) {
+        buffer.writeln('   • $count Tür(en) mit Platzhalter/fehlender Angabe in "$prop"');
+      });
+      if (placeholderSampleDoors.isNotEmpty) {
+        buffer.writeln('   • Beispiel betroffene Türen: ${placeholderSampleDoors.join(', ')}');
+      }
+      buffer.writeln('--------------------------------------------------------------------------------');
+    }
+
+    if (managerActionHints.isNotEmpty) {
+      buffer.writeln('4. HANDLUNGSEMPFEHLUNGEN FÜR DEN MANAGER IM MASTER-PORTAL:');
+      for (final h in managerActionHints) {
+        buffer.writeln('   • $h');
+      }
+      buffer.writeln('================================================================================');
+    }
+
+    return buffer.toString();
+  }
+}
+
 class ImportReport {
   final String packageName;
   final DateTime importedAt;
@@ -80,6 +170,7 @@ class ImportReport {
   final List<String> newCatalogProposals;
   final List<InspectionFileReportItem> fileReports;
   final List<DoorConflict> doorConflicts;
+  final List<LegacyMigrationAudit> legacyAudits;
 
   ImportReport({
     required this.packageName,
@@ -94,6 +185,7 @@ class ImportReport {
     required this.newCatalogProposals,
     this.fileReports = const [],
     this.doorConflicts = const [],
+    this.legacyAudits = const [],
   });
 
   int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;
@@ -104,4 +196,10 @@ class ImportReport {
 
   /// Whether there are any unprocessed doors in the imported package.
   bool get hasUnprocessedDoors => unprocessedDoors.isNotEmpty;
+
+  /// Whether any legacy packages were audited during this import.
+  bool get hasLegacyAudit => legacyAudits.isNotEmpty;
+
+  /// Convenient access to the first legacy audit if present.
+  LegacyMigrationAudit? get legacyAudit => legacyAudits.firstOrNull;
 }

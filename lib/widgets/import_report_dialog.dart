@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/import_report.dart';
+import '../utils/file_export_helper.dart';
 
 class ImportReportDialog extends StatelessWidget {
   final ImportReport report;
@@ -25,16 +29,18 @@ class ImportReportDialog extends StatelessWidget {
 
     final bool hasFileReports = report.fileReports.isNotEmpty;
     final bool hasCatalogProposals = report.newCatalogProposals.isNotEmpty;
+    final bool hasLegacyAudit = report.hasLegacyAudit;
 
     int tabCount = 1; // Doors tab by default
+    if (hasLegacyAudit) tabCount++;
     if (hasFileReports) tabCount++;
     if (hasCatalogProposals) tabCount++;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 760,
-        height: 680,
+        width: 820,
+        height: 720,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -56,9 +62,39 @@ class ImportReportDialog extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Import- & Migrations-Bericht',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      Row(
+                        children: [
+                          const Text(
+                            'Import- & Migrations-Bericht',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          ),
+                          if (hasLegacyAudit) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade100,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.amber.shade400),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.history_toggle_off, size: 13, color: Colors.amber.shade900),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Altdaten-Migration (Legacy)',
+                                    style: TextStyle(
+                                      color: Colors.amber.shade900,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -168,7 +204,19 @@ class ImportReportDialog extends StatelessWidget {
                       labelColor: theme.primaryColor,
                       unselectedLabelColor: Colors.grey.shade600,
                       indicatorColor: theme.primaryColor,
+                      isScrollable: tabCount > 3,
                       tabs: [
+                        if (hasLegacyAudit)
+                          Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.assignment_turned_in, size: 16),
+                                const SizedBox(width: 6),
+                                Text('Altdaten-Audit (${report.legacyAudits.length})'),
+                              ],
+                            ),
+                          ),
                         if (hasFileReports)
                           Tab(text: 'Inspektions-Dateien (${report.fileReports.length})'),
                         Tab(text: 'Alle Türen (${report.doorChanges.length})'),
@@ -180,6 +228,9 @@ class ImportReportDialog extends StatelessWidget {
                     Expanded(
                       child: TabBarView(
                         children: [
+                          if (hasLegacyAudit)
+                            _buildLegacyAuditTab(context, report.legacyAudits),
+
                           if (hasFileReports)
                             _buildPerFileReportList(context),
 
@@ -305,21 +356,327 @@ class ImportReportDialog extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Footer Action
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.check),
-                label: const Text('Fertig'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (hasLegacyAudit)
+                  OutlinedButton.icon(
+                    onPressed: () => _copyAllLegacyReports(context),
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('Migrationsbericht kopieren'),
+                  )
+                else
+                  const SizedBox.shrink(),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.check),
+                  label: const Text('Fertig'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _copyAllLegacyReports(BuildContext context) {
+    final allText = report.legacyAudits.map((a) => a.generateFormattedReportText()).join('\n\n');
+    Clipboard.setData(ClipboardData(text: allText));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Altdaten-Migrationsbericht in die Zwischenablage kopiert.'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget _buildLegacyAuditTab(BuildContext context, List<LegacyMigrationAudit> audits) {
+    return ListView.separated(
+      itemCount: audits.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 16),
+      itemBuilder: (context, index) {
+        final audit = audits[index];
+        return Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.blue.shade200),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Header with Info & Actions
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: Colors.blue.shade50,
+                      child: const Icon(Icons.published_with_changes, color: Colors.blue),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            audit.fileName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.blue.shade300),
+                                ),
+                                child: Text(
+                                  'Paket-Version: v${audit.packageVersion} ➔ Ziel-Version: v${audit.targetVersion}',
+                                  style: TextStyle(color: Colors.blue.shade900, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              if (audit.jobNumber.isNotEmpty)
+                                _buildMetaChip(Icons.assignment_outlined, 'Auftrag: ${audit.jobNumber}'),
+                              if (audit.clientName.isNotEmpty)
+                                _buildMetaChip(Icons.business_outlined, audit.clientName),
+                              if (audit.objectAddress.isNotEmpty)
+                                _buildMetaChip(Icons.location_on_outlined, audit.objectAddress),
+                              _buildMetaChip(Icons.flag_outlined, 'Phase: ${audit.defaultOrderType}'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Bericht kopieren',
+                          icon: const Icon(Icons.copy, size: 20),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: audit.generateFormattedReportText()));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Bericht für "${audit.fileName}" kopiert.'),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Als Textdatei exportieren',
+                          icon: const Icon(Icons.download, size: 20),
+                          onPressed: () async {
+                            final text = audit.generateFormattedReportText();
+                            final defaultName = '${FileExportHelper.sanitizePathComponent(audit.jobNumber, fallback: "migration")}_audit_${DateFormat("yyyyMMdd_HHmmss").format(DateTime.now())}.txt';
+                            await FileExportHelper.saveFileSafely(
+                              defaultFileName: defaultName,
+                              dialogTitle: 'Migrationsbericht speichern',
+                              fileBytes: Uint8List.fromList(utf8.encode(text)),
+                              allowedExtensions: ['txt'],
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                const Divider(),
+                const SizedBox(height: 10),
+
+                // 1. New features
+                if (audit.newFeatures.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.new_releases, size: 16, color: Colors.indigo.shade700),
+                      const SizedBox(width: 6),
+                      Text(
+                        '1. Neue Funktionen der aktuellen Version (im Altdaten-Paket nicht enthalten):',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.indigo.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.indigo.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.indigo.shade100),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: audit.newFeatures
+                          .map((f) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('• ', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    Expanded(child: Text(f, style: const TextStyle(fontSize: 12))),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // 2. Converted properties
+                if (audit.convertedProperties.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.sync_alt, size: 16, color: Colors.teal.shade700),
+                      const SizedBox(width: 6),
+                      Text(
+                        '2. Durchgeführte Attribut-Konvertierungen & Whitelisting:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.teal.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.teal.shade100),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: audit.convertedProperties
+                          .map((c) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.check_circle_outline, size: 14, color: Colors.teal),
+                                    const SizedBox(width: 6),
+                                    Expanded(child: Text(c, style: const TextStyle(fontSize: 12))),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // 3. Placeholder properties
+                if (audit.placeholderDoorProperties.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.edit_note, size: 18, color: Colors.orange.shade800),
+                      const SizedBox(width: 6),
+                      Text(
+                        '3. Zur manuellen Prüfung / Ergänzung durch den Manager:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ...audit.placeholderDoorProperties.entries.map((entry) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.shade100,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      '${entry.value} Türen',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold, fontSize: 11, color: Colors.orange.shade900),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'mit Platzhalter/fehlender Angabe in "${entry.key}"',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                        if (audit.placeholderSampleDoors.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Beispiel betroffene Türen: ${audit.placeholderSampleDoors.join(', ')}',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // 4. Manager action hints
+                if (audit.managerActionHints.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Icon(Icons.checklist_rounded, size: 16, color: Colors.green.shade800),
+                      const SizedBox(width: 6),
+                      Text(
+                        '4. Handlungsempfehlungen für den Manager im Master-Portal:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green.shade900),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: audit.managerActionHints
+                          .map((h) => Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                child: Text(h, style: const TextStyle(fontSize: 12)),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
