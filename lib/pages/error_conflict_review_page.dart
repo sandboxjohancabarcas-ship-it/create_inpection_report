@@ -418,9 +418,17 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
 
   @override
   Widget build(BuildContext context) {
+    final singleFileName = (widget.sourceFiles != null && widget.sourceFiles!.isNotEmpty)
+        ? widget.sourceFiles!.first.path.split(Platform.pathSeparator).last
+        : null;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Fehlerkatalog-Konflikte lösen (${_uniqueConflicts.length})'),
+        title: Text(
+          singleFileName != null
+              ? 'Fehlerkatalog-Konflikte lösen ($singleFileName - ${_uniqueConflicts.length})'
+              : 'Fehlerkatalog-Konflikte lösen (${_uniqueConflicts.length})',
+        ),
         backgroundColor: Colors.blueGrey.shade900,
         foregroundColor: Colors.white,
         actions: const [
@@ -444,7 +452,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Unbekannte Mängel/Hinweise in Importdatei festgestellt',
+                              singleFileName != null
+                                  ? 'Unbekannte Mängel/Hinweise in "$singleFileName" festgestellt'
+                                  : 'Unbekannte Mängel/Hinweise in Importdatei festgestellt',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.orange.shade900,

@@ -123,15 +123,15 @@ class DoorOptionsService {
       "default": "?"
     },
     "lintelHeightValue": {
-      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     },
     "lintelHeightInsideValue": {
-      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     },
     "lintelHeightOutsideValue": {
-      "options": ["?", "0,5m", "1m", "2m", "3m", "4m", "5m", ">5m"],
+      "options": ["?", "1m", "2m", "3m", "4m", "5m", ">5m"],
       "default": "?"
     }
   };
@@ -213,12 +213,15 @@ class DoorOptionsService {
       }
     });
 
-    // Remove legacy / erroneous '0,5' and '0.5' without 'm' from lintel height dropdowns
+    // Remove legacy / erroneous '0,5', '0.5', '0,5m', and '0.5m' from lintel height dropdowns
     const lintelKeys = ['lintelHeightValue', 'lintelHeightInsideValue', 'lintelHeightOutsideValue'];
     for (final k in lintelKeys) {
       if (_options.containsKey(k) && _options[k]['options'] is List) {
         final list = _options[k]['options'] as List;
-        list.removeWhere((e) => e.toString().trim() == '0,5' || e.toString().trim() == '0.5');
+        list.removeWhere((e) {
+          final s = e.toString().trim();
+          return s == '0,5' || s == '0.5' || s == '0,5m' || s == '0.5m';
+        });
         list.sort(compareOptions);
       }
     }

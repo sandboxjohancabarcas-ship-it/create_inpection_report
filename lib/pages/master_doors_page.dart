@@ -47,11 +47,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadData(isInitial: true);
   }
 
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData({bool isInitial = false}) async {
+    if (isInitial || (_masterDoors.isEmpty && _inspections.isEmpty)) {
+      setState(() => _isLoading = true);
+    }
     try {
       final projectsList = await DatabaseService.getAllMasterProjects();
       final doorsList = await DatabaseService.searchMasterDoorsDetailed(
@@ -890,6 +892,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     final projectKeys = grouped.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return ListView.builder(
+      key: const PageStorageKey('master_project_inspections_list'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       itemCount: projectKeys.length,
       itemBuilder: (context, index) {
@@ -921,6 +924,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           elevation: 2,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
+            key: PageStorageKey('project_group_${projectGroupTitle}_$index'),
             initiallyExpanded: true,
             leading: Checkbox(
               value: isAllProjectSelected
@@ -1502,6 +1506,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                 )
               : ListView.builder(
+                  key: const PageStorageKey('master_door_inventory_list'),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   itemCount: displayDoors.length,
                   itemBuilder: (context, index) {

@@ -29,6 +29,52 @@ class BatchMigrationResult {
   bool get hasConflicts => doorConflicts.isNotEmpty || catalogConflicts.isNotEmpty;
 }
 
+class SingleFileMigrationResult {
+  final File file;
+  final String fileName;
+  final bool isSuccess;
+  final bool isSkipped;
+  final String? errorMessage;
+  final int newDoorsCount;
+  final int updatedDoorsCount;
+  final int newInspectionsCount;
+  final int updatedInspectionsCount;
+  final int totalErrorsImported;
+  final int totalAttachmentsImported;
+  final List<DoorChangeItem> doorChanges;
+  final List<String> newCatalogProposals;
+  final List<InspectionFileReportItem> fileReports;
+  final List<DoorConflict> doorConflicts;
+  final List<ImportConflict> catalogConflicts;
+  final ImportReport? importReport;
+  final ExcelImportResult? excelResult;
+
+  SingleFileMigrationResult({
+    required this.file,
+    required this.fileName,
+    this.isSuccess = false,
+    this.isSkipped = false,
+    this.errorMessage,
+    this.newDoorsCount = 0,
+    this.updatedDoorsCount = 0,
+    this.newInspectionsCount = 0,
+    this.updatedInspectionsCount = 0,
+    this.totalErrorsImported = 0,
+    this.totalAttachmentsImported = 0,
+    this.doorChanges = const [],
+    this.newCatalogProposals = const [],
+    this.fileReports = const [],
+    this.doorConflicts = const [],
+    this.catalogConflicts = const [],
+    this.importReport,
+    this.excelResult,
+  });
+
+  bool get hasConflicts => doorConflicts.isNotEmpty || catalogConflicts.isNotEmpty;
+  bool get hasDoorConflicts => doorConflicts.isNotEmpty;
+  bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
+}
+
 class BatchMigrationService {
   static const Set<String> packageExtensions = {'db', 'db3', 'wartung', 'sqlite'};
   static const Set<String> excelExtensions = {'xlsx', 'xls', 'xlsm', 'xlms', 'csv'};
@@ -61,6 +107,137 @@ class BatchMigrationService {
     return files;
   }
 
+  /// Migrates a single file and returns detailed per-file results and conflicts.
+  static Future<SingleFileMigrationResult> migrateSingleFile(
+    File file, {
+    List<ConflictResolution>? resolutions,
+  }) async {
+    final fileName = file.path.split(Platform.pathSeparator).last;
+
+    if (!isCompliantFile(file.path)) {
+      return SingleFileMigrationResult(
+        file: file,
+        fileName: fileName,
+        isSkipped: true,
+        errorMessage: 'Nicht unterstützt',
+        fileReports: [
+          InspectionFileReportItem(
+            fileName: fileName,
+            status: 'Übersprungen (Nicht unterstützt)',
+          ),
+        ],
+      );
+    }
+
+    final ext = file.path.split('.').last.toLowerCase();
+    try {
+      if (packageExtensions.contains(ext)) {
+        final report = await DatabaseService.importAndMergePackage(file.path);
+        final fileReports = report.fileReports.isNotEmpty
+            ? report.fileReports
+            : [
+                InspectionFileReportItem(
+                  fileName: fileName,
+                  newDoorsCount: report.newDoorsCount,
+                  updatedDoorsCount: report.updatedDoorsCount,
+                  defectsRecordedCount: report.totalErrorsImported,
+                  attachmentsCount: report.totalAttachmentsImported,
+                  doorChanges: report.doorChanges,
+                  status: 'Erfolgreich',
+                ),
+              ];
+
+        return SingleFileMigrationResult(
+          file: file,
+          fileName: fileName,
+          isSuccess: true,
+          newDoorsCount: report.newDoorsCount,
+          updatedDoorsCount: report.updatedDoorsCount,
+          newInspectionsCount: report.newInspectionsCount,
+          updatedInspectionsCount: report.updatedInspectionsCount,
+          totalErrorsImported: report.totalErrorsImported,
+          totalAttachmentsImported: report.totalAttachmentsImported,
+          doorChanges: report.doorChanges,
+          newCatalogProposals: report.newCatalogProposals,
+          fileReports: fileReports,
+          doorConflicts: report.doorConflicts,
+          importReport: report,
+        );
+      } else if (excelExtensions.contains(ext)) {
+        final excelResult = await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
+        final doorCount = excelResult.doorsImported;
+        final excelDoorItems = [
+          DoorChangeItem(
+            doorAlias: 'Excel-Import: $fileName',
+            doorNumber: '$doorCount Türen',
+            roomDesignation: 'Excel Import (${excelResult.sheetsProcessed} Blätter)',
+            changeType: 'new',
+          )
+        ];
+
+        String statusStr = 'Erfolgreich';
+        final conflictParts = <String>[];
+        if (excelResult.hasDoorConflicts) {
+          conflictParts.add('${excelResult.doorConflicts.length} Türkonflikte');
+        }
+        if (excelResult.hasCatalogConflicts) {
+          conflictParts.add('${excelResult.catalogConflicts.length} Katalogkonflikte');
+        }
+        if (conflictParts.isNotEmpty) {
+          statusStr = 'Konflikte zur Überprüfung (${conflictParts.join(", ")})';
+        }
+
+        return SingleFileMigrationResult(
+          file: file,
+          fileName: fileName,
+          isSuccess: true,
+          newDoorsCount: doorCount,
+          totalErrorsImported: excelResult.errorsLinked,
+          doorChanges: excelDoorItems,
+          fileReports: [
+            InspectionFileReportItem(
+              fileName: fileName,
+              newDoorsCount: doorCount,
+              defectsRecordedCount: excelResult.errorsLinked,
+              doorChanges: excelDoorItems,
+              status: statusStr,
+            ),
+          ],
+          doorConflicts: excelResult.doorConflicts,
+          catalogConflicts: excelResult.catalogConflicts,
+          excelResult: excelResult,
+        );
+      }
+    } catch (e) {
+      return SingleFileMigrationResult(
+        file: file,
+        fileName: fileName,
+        isSuccess: false,
+        isSkipped: true,
+        errorMessage: 'Fehler: $e',
+        fileReports: [
+          InspectionFileReportItem(
+            fileName: fileName,
+            status: 'Fehler: $e',
+          ),
+        ],
+      );
+    }
+
+    return SingleFileMigrationResult(
+      file: file,
+      fileName: fileName,
+      isSkipped: true,
+      errorMessage: 'Unbekanntes Dateiformat',
+      fileReports: [
+        InspectionFileReportItem(
+          fileName: fileName,
+          status: 'Übersprungen (Unbekanntes Format)',
+        ),
+      ],
+    );
+  }
+
   /// Processes a list of files sequentially, updating progress via callback.
   static Future<BatchMigrationResult> migrateFiles(
     List<File> files, {
@@ -91,99 +268,28 @@ class BatchMigrationService {
         onProgress(i + 1, files.length, fileName);
       }
 
-      if (!isCompliantFile(file.path)) {
+      final singleResult = await migrateSingleFile(file);
+
+      if (singleResult.isSkipped) {
         skippedCount++;
-        skippedNames.add(fileName);
-        fileReports.add(InspectionFileReportItem(
-          fileName: fileName,
-          status: 'Übersprungen (Nicht unterstützt)',
-        ));
+        skippedNames.add(singleResult.errorMessage != null ? '$fileName (${singleResult.errorMessage})' : fileName);
+        fileReports.addAll(singleResult.fileReports);
         continue;
       }
 
-      final ext = file.path.split('.').last.toLowerCase();
-      try {
-        if (packageExtensions.contains(ext)) {
-          final report = await DatabaseService.importAndMergePackage(file.path);
-          newDoorsCount += report.newDoorsCount;
-          updatedDoorsCount += report.updatedDoorsCount;
-          newInspectionsCount += report.newInspectionsCount;
-          updatedInspectionsCount += report.updatedInspectionsCount;
-          totalErrorsImported += report.totalErrorsImported;
-          totalAttachmentsImported += report.totalAttachmentsImported;
-          doorChanges.addAll(report.doorChanges);
-          newCatalogProposals.addAll(report.newCatalogProposals);
-          if (report.doorConflicts.isNotEmpty) {
-            doorConflicts.addAll(report.doorConflicts);
-          }
-          fileReports.addAll(report.fileReports.isNotEmpty
-              ? report.fileReports
-              : [
-                  InspectionFileReportItem(
-                    fileName: fileName,
-                    newDoorsCount: report.newDoorsCount,
-                    updatedDoorsCount: report.updatedDoorsCount,
-                    defectsRecordedCount: report.totalErrorsImported,
-                    attachmentsCount: report.totalAttachmentsImported,
-                    doorChanges: report.doorChanges,
-                    status: 'Erfolgreich',
-                  ),
-                ]);
-          compliantProcessed++;
-          processedNames.add(fileName);
-        } else if (excelExtensions.contains(ext)) {
-          final excelResult = await ExcelDataImporter.importFromFile(file);
-          final doorCount = excelResult.doorsImported;
-          newDoorsCount += doorCount;
-
-          if (excelResult.hasDoorConflicts) {
-            doorConflicts.addAll(excelResult.doorConflicts);
-          }
-          if (excelResult.hasCatalogConflicts) {
-            catalogConflicts.addAll(excelResult.catalogConflicts);
-          }
-
-          final excelDoorItems = [
-            DoorChangeItem(
-              doorAlias: 'Excel-Import: $fileName',
-              doorNumber: '$doorCount Türen',
-              roomDesignation: 'Excel Import (${excelResult.sheetsProcessed} Blätter)',
-              changeType: 'new',
-            )
-          ];
-
-          doorChanges.addAll(excelDoorItems);
-
-          String statusStr = 'Erfolgreich';
-          final conflictParts = <String>[];
-          if (excelResult.hasDoorConflicts) {
-            conflictParts.add('${excelResult.doorConflicts.length} Türkonflikte');
-          }
-          if (excelResult.hasCatalogConflicts) {
-            conflictParts.add('${excelResult.catalogConflicts.length} Katalogkonflikte');
-          }
-          if (conflictParts.isNotEmpty) {
-            statusStr = 'Konflikte zur Überprüfung (${conflictParts.join(", ")})';
-          }
-
-          fileReports.add(InspectionFileReportItem(
-            fileName: fileName,
-            newDoorsCount: doorCount,
-            defectsRecordedCount: excelResult.errorsLinked,
-            doorChanges: excelDoorItems,
-            status: statusStr,
-          ));
-          compliantProcessed++;
-          processedNames.add(fileName);
-        }
-      } catch (e) {
-        skippedCount++;
-        skippedNames.add('$fileName (Fehler: $e)');
-        fileReports.add(InspectionFileReportItem(
-          fileName: fileName,
-          status: 'Fehler: $e',
-        ));
-      }
+      compliantProcessed++;
+      processedNames.add(fileName);
+      newDoorsCount += singleResult.newDoorsCount;
+      updatedDoorsCount += singleResult.updatedDoorsCount;
+      newInspectionsCount += singleResult.newInspectionsCount;
+      updatedInspectionsCount += singleResult.updatedInspectionsCount;
+      totalErrorsImported += singleResult.totalErrorsImported;
+      totalAttachmentsImported += singleResult.totalAttachmentsImported;
+      doorChanges.addAll(singleResult.doorChanges);
+      newCatalogProposals.addAll(singleResult.newCatalogProposals);
+      fileReports.addAll(singleResult.fileReports);
+      doorConflicts.addAll(singleResult.doorConflicts);
+      catalogConflicts.addAll(singleResult.catalogConflicts);
     }
 
     final aggregatedReport = ImportReport(

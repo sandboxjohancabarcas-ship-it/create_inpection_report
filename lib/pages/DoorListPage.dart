@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../services/local_database_service.dart';
 import '../widgets/inspection_summary_card.dart';
@@ -13,9 +11,7 @@ import '../widgets/app_version_dialog.dart';
 import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
 import '../widgets/create_project_dialog.dart';
-import 'new_door_page.dart';
 import 'inspection_doors_page.dart';
-import 'door_conflict_review_page.dart';
 
 class DoorListPage extends StatefulWidget {
   const DoorListPage({super.key});
@@ -200,14 +196,27 @@ class _DoorListPageState extends State<DoorListPage> {
     setState(() => _isSyncing = true);
     String? tempExportPath;
     try {
-      // Resolve all Door IDs belonging to the selected inspections
-      List<int> doorIdsToExport = [];
+      // Resolve all Doors and statuses belonging to the selected inspections
+      List<Door> doorsToExport = [];
+      Map<int, String> statuses = {};
       for (int inspId in _selectedIds) {
         final doors = await LocalDatabaseService.getDoorsByInspectionId(inspId);
-        doorIdsToExport.addAll(doors.map((d) => d.id!));
+        doorsToExport.addAll(doors);
+        final inspStatuses = await LocalDatabaseService.getDoorInspectionStatuses(inspId);
+        statuses.addAll(inspStatuses);
       }
 
-      if (doorIdsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
+      if (doorsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
+
+      final canProceed = await FileExportHelper.confirmUnprocessedDoors(
+        context: context,
+        doors: doorsToExport,
+        statuses: statuses,
+        actionName: 'Paket-Export',
+      );
+      if (!canProceed) return;
+
+      List<int> doorIdsToExport = doorsToExport.map((d) => d.id!).toList();
 
       Map<String, dynamic>? inspData;
       if (_selectedIds.isNotEmpty) {
@@ -426,6 +435,7 @@ class _DoorListPageState extends State<DoorListPage> {
                         ),
                       )
                     : ListView.builder(
+              key: const PageStorageKey('inspector_job_list'),
               itemCount: inspections.length,
               itemBuilder: (context, index) {
                 final insp = inspections[index];

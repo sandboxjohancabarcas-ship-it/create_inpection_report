@@ -359,6 +359,7 @@ class _DoorHistoryPageState extends State<DoorHistoryPage> {
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
+        key: PageStorageKey('door_specs_${door.id}'),
         leading: const Icon(Icons.build_circle_outlined, color: Colors.blueGrey),
         title: const Text(
           'Technische Stammdaten',

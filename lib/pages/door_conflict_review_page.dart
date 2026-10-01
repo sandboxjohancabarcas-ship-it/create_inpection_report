@@ -6,10 +6,12 @@ import '../widgets/master_portal_home_button.dart';
 
 class DoorConflictReviewPage extends StatefulWidget {
   final List<DoorConflict> conflicts;
+  final String? fileName;
 
   const DoorConflictReviewPage({
     super.key,
     required this.conflicts,
+    this.fileName,
   });
 
   @override
@@ -93,7 +95,11 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Türdatenkonflikte lösen (${_doorKeys.length} Türen)'),
+        title: Text(
+          widget.fileName != null && widget.fileName!.isNotEmpty
+              ? 'Türdatenkonflikte lösen (${widget.fileName} - ${_doorKeys.length} Türen)'
+              : 'Türdatenkonflikte lösen (${_doorKeys.length} Türen)',
+        ),
         backgroundColor: Colors.blueGrey.shade900,
         foregroundColor: Colors.white,
         actions: const [
@@ -115,7 +121,9 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Konflikte bei ${_doorKeys.length} Türen festgestellt',
+                        widget.fileName != null && widget.fileName!.isNotEmpty
+                            ? 'Konflikte bei ${_doorKeys.length} Türen in "${widget.fileName}" festgestellt'
+                            : 'Konflikte bei ${_doorKeys.length} Türen festgestellt',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.amber.shade900,
@@ -319,10 +327,31 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                       ),
                       if (firstConflict.sourceContext != null && firstConflict.sourceContext!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Herkunft: ${firstConflict.sourceContext}',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blueGrey.shade800),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey.shade100.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.blueGrey.shade300, width: 0.5),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.insert_drive_file_outlined, size: 14, color: Colors.blueGrey.shade800),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  firstConflict.sourceContext!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blueGrey.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ],

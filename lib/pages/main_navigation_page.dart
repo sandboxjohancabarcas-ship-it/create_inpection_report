@@ -32,6 +32,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
         selectedItemColor: Theme.of(context).colorScheme.primary,
         unselectedItemColor: Colors.grey.shade600,
         onTap: (index) {
+          ScaffoldMessenger.of(context).clearSnackBars();
           setState(() {
             _currentIndex = index;
           });

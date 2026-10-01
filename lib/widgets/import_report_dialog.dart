@@ -33,8 +33,8 @@ class ImportReportDialog extends StatelessWidget {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 720,
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.88),
+        width: 760,
+        height: 680,
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -74,7 +74,7 @@ class ImportReportDialog extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
             // Overview Metric Cards
             Row(
@@ -107,7 +107,56 @@ class ImportReportDialog extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
+
+            // Warning Banner for Unprocessed Doors
+            if (report.hasUnprocessedDoors) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade400, width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Warnung: ${report.unprocessedDoors.length} unbearbeitete / nicht geprüfte Tür(en) im Paket!',
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 75),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          report.unprocessedDoors.map((d) {
+                            final loc = [if (d.floor.isNotEmpty) d.floor, if (d.roomDesignation.isNotEmpty) d.roomDesignation].join(' | ');
+                            final locStr = loc.isNotEmpty ? ' ($loc)' : '';
+                            return '• Tür ${d.doorNumber.isNotEmpty ? d.doorNumber : d.doorAlias}$locStr [ID: ${d.doorAlias}]';
+                          }).join('\n'),
+                          style: TextStyle(color: Colors.brown.shade800, fontSize: 11, height: 1.3),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
 
             // Tabbed / Section Details
             DefaultTabController(
@@ -143,6 +192,7 @@ class ImportReportDialog extends StatelessWidget {
                                   itemBuilder: (context, index) {
                                     final door = report.doorChanges[index];
                                     final isNew = door.changeType == 'new';
+                                    final isProcessed = door.isProcessed;
                                     return ListTile(
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       leading: CircleAvatar(
@@ -164,6 +214,36 @@ class ImportReportDialog extends StatelessWidget {
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            margin: const EdgeInsets.only(right: 6),
+                                            decoration: BoxDecoration(
+                                              color: isProcessed ? Colors.green.shade50 : Colors.orange.shade50,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(
+                                                color: isProcessed ? Colors.green.shade400 : Colors.orange.shade400,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  isProcessed ? Icons.check_circle : Icons.pending_actions,
+                                                  size: 11,
+                                                  color: isProcessed ? Colors.green.shade800 : Colors.orange.shade800,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  isProcessed ? 'Geprüft' : 'Nicht geprüft',
+                                                  style: TextStyle(
+                                                    color: isProcessed ? Colors.green.shade800 : Colors.orange.shade800,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                           if (door.errorCount > 0)
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -326,6 +406,28 @@ class ImportReportDialog extends StatelessWidget {
                         _buildFileStat('Fotos / Anhänge', '${item.attachmentsCount}', Colors.teal),
                       ],
                     ),
+                    if (item.unprocessedDoors.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber.shade900),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${item.unprocessedDoors.length} Tür(en) nicht geprüft / offen im Paket',
+                              style: TextStyle(color: Colors.amber.shade900, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (item.doorChanges.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       const Text('Enthaltene Türen:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
@@ -344,9 +446,31 @@ class ImportReportDialog extends StatelessWidget {
                             final door = item.doorChanges[dIdx];
                             return Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              child: Text(
-                                '• ${door.doorNumber.isNotEmpty ? "Tür ${door.doorNumber}" : door.doorAlias} (${door.roomDesignation})',
-                                style: const TextStyle(fontSize: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '• ${door.doorNumber.isNotEmpty ? "Tür ${door.doorNumber}" : door.doorAlias} (${door.roomDesignation})',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: door.isProcessed ? Colors.green.shade50 : Colors.orange.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: door.isProcessed ? Colors.green.shade300 : Colors.orange.shade300),
+                                    ),
+                                    child: Text(
+                                      door.isProcessed ? 'Geprüft' : 'Nicht geprüft',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: door.isProcessed ? Colors.green.shade800 : Colors.orange.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           },

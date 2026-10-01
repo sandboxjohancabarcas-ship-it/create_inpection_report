@@ -63,7 +63,13 @@
       "Herholz-Holz",
       "Specht-Holz",
       "Schwarze-Stahl",
-      "Hoba-Holz"
+      "Hoba-Holz",
+      "Schüco System Royal 70",
+      "Gütergemeinschaft",
+      "Schüco Royal 65",
+      "Heroal-Johann",
+      "Westag&Getalit",
+      "Hörmann"
     ],
     "default": "?"
   },
@@ -193,8 +199,14 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
+      "GSR-EMR-2+2xDM",
+      "Antrrieb+RMZ+2RM",
       "SR 390 Hebel+2HM+2DM+1HAT",
-      "SR 390 Hebel."
+      "SR 390 Hebel.",
+      "SR Hebel",
+      "GSR-EMR+THM",
+      "Do GSR-EMF+ Do RMZ",
+      "GSR-EMF+RMZ"
     ],
     "default": "?"
   },
@@ -231,7 +243,16 @@
       "30/92/9/24-270Ff",
       "35/92/9/24-270F",
       "65/72/9/20-235FR",
-      "30/92/9/28-270F"
+      "30/92/9/28-270F",
+      "65/72/9-24 FR",
+      "40/92/9-24 F",
+      "35/92/9-24",
+      "35/92/9-24 F",
+      "65/72/9/24x235/FR",
+      "60/72/9/24x235/FR",
+      "35/92/8-24 F",
+      "65/72/8/20-235",
+      "Nemef/65/72/9/24x235/FR"
     ],
     "default": "?"
   },
@@ -266,7 +287,8 @@
       "D-Stoßgriff",
       "Blind",
       "AP-Pushbar",
-      "AP-Touchbar"
+      "AP-Touchbar",
+      "K-K"
     ],
     "default": "Nein"
   },
@@ -300,7 +322,6 @@
   "lintelHeightValue": {
     "options": [
       "?",
-      "0,5m",
       "1m",
       "2m",
       "3m",
@@ -313,7 +334,6 @@
   "lintelHeightInsideValue": {
     "options": [
       "?",
-      "0,5m",
       "1m",
       "2m",
       "3m",
@@ -326,7 +346,6 @@
   "lintelHeightOutsideValue": {
     "options": [
       "?",
-      "0,5m",
       "1m",
       "2m",
       "3m",

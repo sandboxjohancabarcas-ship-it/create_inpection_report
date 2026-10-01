@@ -841,7 +841,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       list.add(currentValue);
     }
     if (key.startsWith('lintelHeight')) {
-      list.removeWhere((e) => e == '0,5' || e == '0.5');
+      list.removeWhere((e) => e == '0,5' || e == '0.5' || e == '0,5m' || e == '0.5m');
       list.sort(DoorOptionsService.compareOptions);
     }
     return list;
@@ -1550,16 +1550,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               onChanged: (val) => setState(() => closerOnOppositeSide = val),
             ),
 
-            // Lintel height inside over 0,5m
+            // Lintel height inside over 1m
             SwitchListTile(
-              title: const Text("Sturzhöhe auf Bandseite innen über 0,5m"),
+              title: const Text("Sturzhöhe auf Bandseite innen über 1m"),
               value: lintelHeightInsideOver1m,
               onChanged: (val) => setState(() {
                 lintelHeightInsideOver1m = val;
                 if (!val) {
                   lintelHeightInsideValue = null;
                 } else if (lintelHeightInsideValue == null) {
-                  lintelHeightInsideValue = '0,5m';
+                  lintelHeightInsideValue = '1m';
                 }
               }),
             ),
@@ -1584,16 +1584,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 ),
               ),
 
-            // Lintel height outside over 0,5m
+            // Lintel height outside over 1m
             SwitchListTile(
-              title: const Text("Sturzhöhe auf Bandgegenseite außen über 0,5m"),
+              title: const Text("Sturzhöhe auf Bandgegenseite außen über 1m"),
               value: lintelHeightOutsideOver1m,
               onChanged: (val) => setState(() {
                 lintelHeightOutsideOver1m = val;
                 if (!val) {
                   lintelHeightOutsideValue = null;
                 } else if (lintelHeightOutsideValue == null) {
-                  lintelHeightOutsideValue = '0,5m';
+                  lintelHeightOutsideValue = '1m';
                 }
               }),
             ),

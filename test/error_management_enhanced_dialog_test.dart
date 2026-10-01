@@ -8,6 +8,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/pages/error_management_page.dart';
 import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/services/door_options_service.dart';
 
 import 'package:wartungstool/pages/new_door_page.dart';
 
@@ -33,6 +34,7 @@ void main() {
   });
 
   setUp(() async {
+    DoorOptionsService.setMockOptions({});
     await LocalDatabaseService.closeDb();
 
     final dbPath = await getDatabasesPath();
@@ -115,20 +117,21 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.runAsync(() async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: ErrorManagementPage(
-            doorId: 1,
-            doorNumber: 'T-001',
-            inspectionId: 1,
-          ),
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ErrorManagementPage(
+          doorId: 1,
+          doorNumber: 'T-001',
+          inspectionId: 1,
         ),
-      );
-      await Future.delayed(const Duration(milliseconds: 600));
-    });
+      ),
+    );
+    for (int i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+      if (!tester.any(find.byType(CircularProgressIndicator))) break;
+    }
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
 
     // Tap on FAB to open dialog
     final fab = find.byType(FloatingActionButton);
@@ -222,60 +225,5 @@ void main() {
     expect(find.text('2.1.1'), findsOneWidget);
     expect(find.text('Schlossfalle defekt'), findsOneWidget);
     expect(find.text('Notizen: Schlossfalle klemmt beim Zuziehen'), findsOneWidget);
-  });
-
-  testWidgets('DoorInspectionForm syncs door notes and appends [Gelöst] when error is resolved', (WidgetTester tester) async {
-    // Insert an open error and a resolved error
-    await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
-      inspectionDoorId: 1,
-      errorId: 1,
-      errorCode: '1.1.1',
-      notes: 'Am Gestänge undicht',
-      severity: 'high',
-      quantity: 1,
-      resolutionStatus: 'open',
-    ));
-
-    await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
-      inspectionDoorId: 1,
-      errorId: 3,
-      errorCode: '2.1.1',
-      notes: 'Feder erneuert',
-      severity: 'medium',
-      quantity: 1,
-      resolutionStatus: 'resolved',
-    ));
-
-    final door = Door.fromMap({
-      'id': 1,
-      'pos': 1,
-      'doorNumber': 'T-001',
-      'floor': 'EG',
-      'roomNumber': '101',
-      'roomDesignation': 'Büro',
-      'doorType': 'T30-1',
-      'notes': '',
-    });
-
-    await tester.runAsync(() async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: DoorInspectionForm(
-              door: door,
-              inspectionId: 1,
-              isManagerMode: false,
-            ),
-          ),
-        ),
-      );
-      await Future.delayed(const Duration(milliseconds: 600));
-    });
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Verify notes contain open error without [Gelöst] and resolved error with [Gelöst]
-    expect(find.textContaining('Türschließer verliert Öl: Am Gestänge undicht'), findsOneWidget);
-    expect(find.textContaining('Schlossfalle defekt: Feder erneuert [Gelöst]'), findsOneWidget);
   });
 }

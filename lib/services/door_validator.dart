@@ -337,9 +337,9 @@ class DoorValidator {
         incoming.escapeRouteSignage, existing.escapeRouteSignage);
     checkSafety('escapeDirectionRespected', 'Fluchtrichtung eingehalten',
         incoming.escapeDirectionRespected, existing.escapeDirectionRespected);
-    checkSafety('lintelHeightInsideOver1m', 'Sturzhöhe innen > 0,5m',
+    checkSafety('lintelHeightInsideOver1m', 'Sturzhöhe innen > 1m',
         incoming.lintelHeightInsideOver1m, existing.lintelHeightInsideOver1m);
-    checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 0,5m',
+    checkSafety('lintelHeightOutsideOver1m', 'Sturzhöhe außen > 1m',
         incoming.lintelHeightOutsideOver1m, existing.lintelHeightOutsideOver1m);
     checkSafety('closerOnHingeSide', 'Türschließer auf Bandseite',
         incoming.closerOnHingeSide, existing.closerOnHingeSide);

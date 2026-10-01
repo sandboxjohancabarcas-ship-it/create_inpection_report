@@ -349,6 +349,7 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   ),
                 ),
                 child: ExpansionTile(
+                  key: PageStorageKey('provisional_error_${item.errorId ?? index}'),
                   leading: CircleAvatar(
                     backgroundColor: collision != null
                         ? Colors.red.shade100

@@ -720,12 +720,20 @@ class ExcelDataImporter {
       }
 
       // ── Run conflict-aware merge for all doors in this sheet ─────────────
+      final String clientStr = (meta['clientName'] ?? '').trim();
+      final String jobStr = (meta['jobNumber'] ?? '').trim();
+      final String dateStr = (meta['date'] ?? '').trim();
+      final String sheetSourceContext = 'Datei: "$fileName" (Blatt: "$sheetName")'
+          '${clientStr.isNotEmpty ? " | Kunde: $clientStr" : ""}'
+          '${jobStr.isNotEmpty ? " | Auftragsnr.: $jobStr" : ""}'
+          '${dateStr.isNotEmpty ? " | Datum: $dateStr" : ""}';
+
       final mergeResult = await DatabaseService.mergeDoors(
         sheetDoors,
         jobNumber: meta['jobNumber'] ?? '',
         clientName: meta['clientName'] ?? '',
         objectAddress: meta['objectAddress'] ?? '',
-        sourceContext: 'Arbeitsblatt: "$sheetName"',
+        sourceContext: sheetSourceContext,
         currentInspectionDate: meta['date'] ?? '',
       );
 

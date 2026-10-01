@@ -20,14 +20,14 @@ void main() {
       expect(DoorOptionsService.getIntOptions('wingCount'), contains(1));
       
       final insideOptions = DoorOptionsService.getStringOptions('lintelHeightInsideValue');
-      expect(insideOptions, contains('0,5m'));
+      expect(insideOptions, isNot(contains('0,5m')));
       expect(insideOptions, isNot(contains('0,5')));
-      expect(insideOptions, equals(['?', '0,5m', '1m', '2m', '3m', '4m', '5m', '>5m']));
+      expect(insideOptions, equals(['?', '1m', '2m', '3m', '4m', '5m', '>5m']));
 
       final outsideOptions = DoorOptionsService.getStringOptions('lintelHeightOutsideValue');
-      expect(outsideOptions, contains('0,5m'));
+      expect(outsideOptions, isNot(contains('0,5m')));
       expect(outsideOptions, isNot(contains('0,5')));
-      expect(outsideOptions, equals(['?', '0,5m', '1m', '2m', '3m', '4m', '5m', '>5m']));
+      expect(outsideOptions, equals(['?', '1m', '2m', '3m', '4m', '5m', '>5m']));
 
       expect(DoorOptionsService.getDefault('doorType'), equals('?'));
       expect(DoorOptionsService.getDefault('wingCount'), equals(1));

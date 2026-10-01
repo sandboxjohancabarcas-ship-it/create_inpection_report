@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:intl/intl.dart';
 import 'package:collection/collection.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
@@ -48,17 +45,20 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   @override
   void initState() {
     super.initState();
-    _loadDoors();
+    _loadDoors(isInitial: true);
   }
 
   @override
   void dispose() {
+    ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadDoors() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadDoors({bool isInitial = false}) async {
+    if (isInitial || _doors.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     List<Door> doors;
     Map<int, DoorErrorSummary> errorSummaries;
     Map<int, String> statuses;
@@ -150,8 +150,102 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     _loadDoors();
   }
 
+  Future<void> _toggleDoorInspectionStatus(Door door) async {
+    if (door.id == null || !_isEditable) return;
+    final isCurrentlyInspected = _isDoorInspected(door);
+    final newStatus = isCurrentlyInspected ? 'Pending' : 'Inspected';
+
+    if (widget.isManagerMode) {
+      await DatabaseService.setDoorInspectionStatus(
+        inspectionId: widget.inspectionId,
+        doorId: door.id!,
+        status: newStatus,
+      );
+    } else {
+      await LocalDatabaseService.setDoorInspectionStatus(
+        inspectionId: widget.inspectionId,
+        doorId: door.id!,
+        status: newStatus,
+      );
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          content: Text(
+            isCurrentlyInspected
+                ? 'Tür ${door.doorNumber} als "Offen" (nicht geprüft) markiert.'
+                : 'Tür ${door.doorNumber} als "Geprüft" markiert.',
+          ),
+          backgroundColor: isCurrentlyInspected ? Colors.orange.shade800 : Colors.green.shade700,
+          action: SnackBarAction(
+            label: 'Rückgängig',
+            textColor: Colors.white,
+            onPressed: () => _toggleDoorInspectionStatus(door),
+          ),
+        ),
+      );
+      await _loadDoors();
+    }
+  }
+
+  Future<void> _handleBatchSetStatus(String newStatus) async {
+    if (_selectedDoorIds.isEmpty || !_isEditable) return;
+    final count = _selectedDoorIds.length;
+    for (final doorId in _selectedDoorIds) {
+      if (widget.isManagerMode) {
+        await DatabaseService.setDoorInspectionStatus(
+          inspectionId: widget.inspectionId,
+          doorId: doorId,
+          status: newStatus,
+        );
+      } else {
+        await LocalDatabaseService.setDoorInspectionStatus(
+          inspectionId: widget.inspectionId,
+          doorId: doorId,
+          status: newStatus,
+        );
+      }
+    }
+    if (mounted) {
+      final isInspected = newStatus.toLowerCase() == 'inspected';
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          content: Text(
+            isInspected
+                ? '$count Tür(en) als "Geprüft" markiert.'
+                : '$count Tür(en) als "Offen" (nicht geprüft) markiert.',
+          ),
+          backgroundColor: isInspected ? Colors.green.shade700 : Colors.orange.shade800,
+        ),
+      );
+      setState(() => _selectedDoorIds.clear());
+      _loadDoors();
+    }
+  }
+
   Future<void> _handleExportDoors() async {
     if (_selectedDoorIds.isEmpty) return;
+
+    if (!widget.isManagerMode) {
+      final selectedDoors = _doors.where((d) => _selectedDoorIds.contains(d.id)).toList();
+      final canProceed = await FileExportHelper.confirmUnprocessedDoors(
+        context: context,
+        doors: selectedDoors.isNotEmpty ? selectedDoors : _doors,
+        statuses: _doorInspectionStatuses,
+        actionName: 'Türen-Export',
+      );
+      if (!canProceed) return;
+    }
+
     setState(() => _isSyncing = true);
     String? tempExportPath;
     try {
@@ -494,56 +588,56 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     );
   }
 
-  Widget _buildInspectionStatusBadge(bool isInspected) {
-    if (isInspected) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: Colors.green.shade50,
+  Widget _buildInspectionStatusBadge(Door door, bool isInspected) {
+    return Tooltip(
+      message: _isEditable
+          ? (isInspected ? 'Klicken: Status auf "Offen" (nicht geprüft) zurücksetzen' : 'Klicken: Als "Geprüft" markieren')
+          : (isInspected ? 'Geprüft' : 'Offen'),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.green.shade400),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, size: 12, color: Colors.green.shade800),
-            const SizedBox(width: 4),
-            Text(
-              'Geprüft',
-              style: TextStyle(
-                color: Colors.green.shade800,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+          onTap: _isEditable ? () => _toggleDoorInspectionStatus(door) : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: isInspected ? Colors.green.shade50 : Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isInspected ? Colors.green.shade400 : Colors.orange.shade300,
               ),
             ),
-          ],
-        ),
-      );
-    } else {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: Colors.orange.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.shade300),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.hourglass_top, size: 12, color: Colors.orange.shade900),
-            const SizedBox(width: 4),
-            Text(
-              'Offen',
-              style: TextStyle(
-                color: Colors.orange.shade900,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isInspected ? Icons.check_circle : Icons.hourglass_top,
+                  size: 12,
+                  color: isInspected ? Colors.green.shade800 : Colors.orange.shade900,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isInspected ? 'Geprüft' : 'Offen',
+                  style: TextStyle(
+                    color: isInspected ? Colors.green.shade800 : Colors.orange.shade900,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (_isEditable) ...[
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.sync_alt,
+                    size: 10,
+                    color: isInspected ? Colors.green.shade700 : Colors.orange.shade800,
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
-      );
-    }
+      ),
+    );
   }
 
   Widget _buildLeadingIcon(Door door, DoorErrorSummary summary, bool isSelected, bool isSelectionMode, int doorId) {
@@ -940,6 +1034,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                       }
 
                       return ListView.builder(
+                        key: PageStorageKey('inspection_doors_${widget.inspectionId}'),
                         itemCount: displayDoors.length,
                         itemBuilder: (context, index) {
                           final door = displayDoors[index];
@@ -977,7 +1072,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                         ),
                                         if (!widget.isManagerMode) ...[
                                           const SizedBox(width: 8),
-                                          _buildInspectionStatusBadge(isInspected),
+                                          _buildInspectionStatusBadge(door, isInspected),
                                         ],
                                       ],
                                     ),
@@ -994,6 +1089,18 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                   : Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
+                                        if (!widget.isManagerMode && _isEditable)
+                                          IconButton(
+                                            icon: Icon(
+                                              isInspected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                              color: isInspected ? Colors.green.shade700 : Colors.orange.shade800,
+                                              size: 22,
+                                            ),
+                                            tooltip: isInspected
+                                                ? 'Als "Offen" (nicht geprüft) markieren'
+                                                : 'Als "Geprüft" markieren',
+                                            onPressed: () => _toggleDoorInspectionStatus(door),
+                                          ),
                                         if (door.notes.isNotEmpty)
                                           IconButton(
                                             icon: const Icon(Icons.note_alt_outlined, color: Colors.blue, size: 20),
@@ -1071,6 +1178,20 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                     icon: Icon(Icons.delete_outline, color: _isEditable ? Colors.red : Colors.grey),
                     tooltip: 'Löschen',
                   ),
+                  if (_isEditable) ...[
+                    const VerticalDivider(),
+                    TextButton.icon(
+                      onPressed: _isSyncing ? null : () => _handleBatchSetStatus('Inspected'),
+                      icon: const Icon(Icons.check_circle, color: Colors.green),
+                      label: const Text('Als Geprüft', style: TextStyle(color: Colors.green)),
+                    ),
+                    const VerticalDivider(),
+                    TextButton.icon(
+                      onPressed: _isSyncing ? null : () => _handleBatchSetStatus('Pending'),
+                      icon: const Icon(Icons.hourglass_empty, color: Colors.orange),
+                      label: const Text('Als Offen', style: TextStyle(color: Colors.orange)),
+                    ),
+                  ],
                   const VerticalDivider(),
                   TextButton.icon(
                     onPressed: _isSyncing ? null : _handleExportDoors,

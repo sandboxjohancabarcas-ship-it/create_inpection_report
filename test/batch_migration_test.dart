@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
 
@@ -15,6 +16,17 @@ void main() {
       expect(BatchMigrationService.isCompliantFile('customer_spec.pdf'), isFalse);
       expect(BatchMigrationService.isCompliantFile('notes.txt'), isFalse);
       expect(BatchMigrationService.isCompliantFile('archive.zip'), isFalse);
+    });
+
+    test('migrateSingleFile correctly skips unsupported files with itemized report', () async {
+      final dummyFile = File('test_unsupported.txt');
+      final result = await BatchMigrationService.migrateSingleFile(dummyFile);
+
+      expect(result.isSkipped, isTrue);
+      expect(result.isSuccess, isFalse);
+      expect(result.fileName, 'test_unsupported.txt');
+      expect(result.fileReports.length, 1);
+      expect(result.fileReports.first.status, contains('Nicht unterstützt'));
     });
   });
 }

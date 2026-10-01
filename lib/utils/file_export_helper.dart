@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -117,5 +118,168 @@ class FileExportHelper {
   static Future<String> getTempFilePath(String fileName) async {
     final tempDir = await getTemporaryDirectory();
     return p.join(tempDir.path, fileName);
+  }
+
+  /// Checks whether all doors in [doors] are marked as processed/inspected.
+  /// If any doors are unprocessed, prompts the user with an alert dialog listing the specific doors
+  /// and asks if they want to export anyway or continue editing.
+  /// Returns `true` if export should proceed, `false` if user cancelled to correct the issue.
+  static Future<bool> confirmUnprocessedDoors({
+    required BuildContext context,
+    required List<dynamic> doors,
+    required Map<int, String> statuses,
+    String actionName = 'Paket-Export',
+  }) async {
+    if (doors.isEmpty) return true;
+
+    final List<Map<String, String>> unprocessed = [];
+    for (final d in doors) {
+      int? doorId;
+      String doorNum = '';
+      String floor = '';
+      String roomDesig = '';
+      String alias = '';
+
+      if (d is Map) {
+        doorId = d['id'] as int? ?? d['doorId'] as int?;
+        doorNum = (d['doorNumber'] ?? d['pos'] ?? '').toString();
+        floor = (d['floor'] ?? '').toString();
+        roomDesig = (d['roomDesignation'] ?? '').toString();
+        alias = (d['doorAlias'] ?? d['provisionalAlias'] ?? '').toString();
+      } else {
+        doorId = d.id as int?;
+        doorNum = d.doorNumber?.toString() ?? d.pos?.toString() ?? '';
+        floor = d.floor?.toString() ?? '';
+        roomDesig = d.roomDesignation?.toString() ?? '';
+        alias = d.doorAlias?.toString() ?? d.provisionalAlias?.toString() ?? '';
+      }
+
+      final statusStr = (doorId != null ? statuses[doorId] : null) ?? (d is Map ? d['status']?.toString() : null) ?? '';
+      final s = statusStr.trim().toLowerCase();
+      final isProcessed = s == 'inspected' ||
+          s == 'geprüft' ||
+          s == 'completed' ||
+          s == 'passed' ||
+          s == 'failed' ||
+          s == 'done' ||
+          s == 'bearbeitet';
+
+      if (!isProcessed) {
+        unprocessed.add({
+          'doorNumber': doorNum.isNotEmpty ? doorNum : (alias.isNotEmpty ? alias : 'Ohne Nummer'),
+          'floor': floor,
+          'room': roomDesig,
+          'alias': alias,
+        });
+      }
+    }
+
+    if (unprocessed.isEmpty) {
+      return true; // All doors are processed
+    }
+
+    // Prompt user
+    final bool? proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Unbearbeitete Türen vorhanden',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade300),
+                ),
+                child: Text(
+                  'In diesem Auftrag wurden noch nicht alle Türen als "Geprüft" markiert (${unprocessed.length} von ${doors.length} Türen offen).',
+                  style: TextStyle(
+                    color: Colors.orange.shade900,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Folgende Türen sind noch nicht geprüft / offen:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.grey.shade50,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: unprocessed.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final item = unprocessed[index];
+                    final loc = [if (item['floor']!.isNotEmpty) item['floor']!, if (item['room']!.isNotEmpty) item['room']!].join(' | ');
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.pending_actions, color: Colors.orange, size: 20),
+                      title: Text(
+                        'Tür ${item['doorNumber']}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        [if (loc.isNotEmpty) loc, if (item['alias']!.isNotEmpty) 'Alias: ${item['alias']}'].join(' • '),
+                        style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Möchten Sie das Paket trotzdem exportieren oder die Prüfung fortsetzen?',
+                style: TextStyle(fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen / Weiter prüfen'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.upload_file, size: 18),
+            label: const Text('Trotzdem exportieren'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    return proceed ?? false;
   }
 }

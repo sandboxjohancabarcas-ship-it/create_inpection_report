@@ -1147,6 +1147,19 @@ class LocalDatabaseService {
     }
   }
 
+  /// Sets or updates the inspection status of a door.
+  static Future<void> setDoorInspectionStatus({
+    required int inspectionId,
+    required int doorId,
+    required String status,
+    String? notes,
+  }) => updateInspectionDoorStatus(
+    inspectionId: inspectionId,
+    doorId: doorId,
+    status: status,
+    notes: notes,
+  );
+
   /// Returns a map of doorId -> status for all doors in an inspection.
   static Future<Map<int, String>> getDoorInspectionStatuses(int inspectionId) async {
     final db = await getDb();

@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:wartungstool/models/door_conflict.dart';
+import 'package:wartungstool/models/error_catalog.dart';
+import 'package:wartungstool/models/import_report.dart';
 import 'package:wartungstool/pages/door_conflict_review_page.dart';
 import 'package:wartungstool/pages/error_conflict_review_page.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
@@ -121,19 +124,101 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       _currentFileName = 'Vorbereitung...';
     });
 
+    int newDoorsCount = 0;
+    int updatedDoorsCount = 0;
+    int newInspectionsCount = 0;
+    int updatedInspectionsCount = 0;
+    int totalErrorsImported = 0;
+    int totalAttachmentsImported = 0;
+    final List<DoorChangeItem> allDoorChanges = [];
+    final List<String> allNewCatalogProposals = [];
+    final List<InspectionFileReportItem> allFileReports = [];
+    final List<String> processedNames = [];
+    final List<String> skippedNames = [];
+    int compliantProcessed = 0;
+    int skippedCount = 0;
+
     try {
-      final result = await BatchMigrationService.migrateFiles(
-        files,
-        onProgress: (current, total, filename) {
-          if (mounted) {
-            setState(() {
-              _currentFileIndex = current;
-              _totalFilesCount = total;
-              _currentFileName = filename;
-            });
+      for (int i = 0; i < files.length; i++) {
+        final file = files[i];
+        final fileName = file.path.split(Platform.pathSeparator).last;
+
+        if (mounted) {
+          setState(() {
+            _currentFileIndex = i + 1;
+            _currentFileName = fileName;
+          });
+        }
+
+        // 1. Process this individual file
+        SingleFileMigrationResult fileResult = await BatchMigrationService.migrateSingleFile(file);
+
+        if (fileResult.isSkipped) {
+          skippedCount++;
+          skippedNames.add(fileResult.errorMessage != null ? '$fileName (${fileResult.errorMessage})' : fileName);
+          allFileReports.addAll(fileResult.fileReports);
+          continue;
+        }
+
+        List<DoorConflict> currentDoorConflicts = List.from(fileResult.doorConflicts);
+
+        // 2. Check and show Catalog/Error conflicts for THIS specific file
+        if (fileResult.catalogConflicts.isNotEmpty && mounted) {
+          final catalogResolutions = await Navigator.of(context).push<List<ConflictResolution>>(
+            MaterialPageRoute(
+              builder: (context) => ErrorConflictReviewPage(
+                conflicts: fileResult.catalogConflicts,
+                sourceFiles: [file],
+              ),
+            ),
+          );
+
+          if (catalogResolutions != null) {
+            // Re-run single file migration with resolutions applied to get updated doors and fresh door conflicts
+            final ext = file.path.split('.').last.toLowerCase();
+            if (['xlsx', 'xls', 'xlsm', 'xlms', 'csv'].contains(ext)) {
+              fileResult = await BatchMigrationService.migrateSingleFile(file, resolutions: catalogResolutions);
+              currentDoorConflicts = List.from(fileResult.doorConflicts);
+            }
           }
-        },
-      );
+        }
+
+        // 3. Check and show Door/Property conflicts for THIS specific file
+        if (currentDoorConflicts.isNotEmpty && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => DoorConflictReviewPage(
+                conflicts: currentDoorConflicts,
+                fileName: fileName,
+              ),
+            ),
+          );
+        }
+
+        // 4. Accumulate reports and counts for this file
+        compliantProcessed++;
+        processedNames.add(fileName);
+        if (fileResult.importReport != null) {
+          newDoorsCount += fileResult.importReport!.newDoorsCount;
+          updatedDoorsCount += fileResult.importReport!.updatedDoorsCount;
+          newInspectionsCount += fileResult.importReport!.newInspectionsCount;
+          updatedInspectionsCount += fileResult.importReport!.updatedInspectionsCount;
+          totalErrorsImported += fileResult.importReport!.totalErrorsImported;
+          totalAttachmentsImported += fileResult.importReport!.totalAttachmentsImported;
+          allDoorChanges.addAll(fileResult.importReport!.doorChanges);
+          allNewCatalogProposals.addAll(fileResult.importReport!.newCatalogProposals);
+        } else {
+          newDoorsCount += fileResult.newDoorsCount;
+          updatedDoorsCount += fileResult.updatedDoorsCount;
+          newInspectionsCount += fileResult.newInspectionsCount;
+          updatedInspectionsCount += fileResult.updatedInspectionsCount;
+          totalErrorsImported += fileResult.totalErrorsImported;
+          totalAttachmentsImported += fileResult.totalAttachmentsImported;
+          allDoorChanges.addAll(fileResult.doorChanges);
+          allNewCatalogProposals.addAll(fileResult.newCatalogProposals);
+        }
+        allFileReports.addAll(fileResult.fileReports);
+      }
 
       if (!mounted) return;
 
@@ -141,36 +226,24 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
 
       widget.onMigrationCompleted?.call();
 
-    // Route error/catalog conflicts (unlisted defect headers or code collisions) to review page first if present
-    if (result.catalogConflicts.isNotEmpty && mounted) {
-      final catalogResolutions = await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ErrorConflictReviewPage(
-            conflicts: result.catalogConflicts,
-            sourceFiles: files,
-          ),
-        ),
+      final aggregatedReport = ImportReport(
+        packageName: 'Batch-Migration (${processedNames.length} Dateien)',
+        importedAt: DateTime.now(),
+        newDoorsCount: newDoorsCount,
+        updatedDoorsCount: updatedDoorsCount,
+        newInspectionsCount: newInspectionsCount,
+        updatedInspectionsCount: updatedInspectionsCount,
+        totalErrorsImported: totalErrorsImported,
+        totalAttachmentsImported: totalAttachmentsImported,
+        doorChanges: allDoorChanges,
+        newCatalogProposals: allNewCatalogProposals,
+        fileReports: allFileReports,
       );
-      if (catalogResolutions != null && mounted) {
-        widget.onMigrationCompleted?.call();
+
+      // Show Import Report Dialog with itemized per-file results
+      if (mounted) {
+        await ImportReportDialog.show(context, aggregatedReport);
       }
-    }
-
-    // Route door conflicts (property/datatype mismatch) to review page if present
-    if (result.doorConflicts.isNotEmpty && mounted) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => DoorConflictReviewPage(
-            conflicts: result.doorConflicts,
-          ),
-        ),
-      );
-    }
-
-    // Show Import Report Dialog with itemized per-file results
-    if (mounted) {
-      await ImportReportDialog.show(context, result.aggregatedReport);
-    }
 
     } catch (e, stackTrace) {
       if (mounted) {

@@ -163,6 +163,22 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
         if (_selectedInspectionId == null) {
           throw Exception('Bitte wählen Sie eine Inspektion aus.');
         }
+
+        if (!widget.isManagerMode) {
+          final doors = await LocalDatabaseService.getDoorsByInspectionId(_selectedInspectionId!);
+          final statuses = await LocalDatabaseService.getDoorInspectionStatuses(_selectedInspectionId!);
+          final canProceed = await FileExportHelper.confirmUnprocessedDoors(
+            context: context,
+            doors: doors,
+            statuses: statuses,
+            actionName: 'Export',
+          );
+          if (!canProceed) {
+            setState(() => _isExporting = false);
+            return;
+          }
+        }
+
         final insp = _inspections.firstWhere((i) => i['inspectionId'] == _selectedInspectionId);
         final jobStr = insp['jobNumber'] ?? 'Auftrag';
         final safeJob = jobStr.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
