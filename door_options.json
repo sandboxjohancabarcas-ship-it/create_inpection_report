@@ -63,13 +63,7 @@
       "Herholz-Holz",
       "Specht-Holz",
       "Schwarze-Stahl",
-      "Hoba-Holz",
-      "Schüco System Royal 70",
-      "Gütergemeinschaft",
-      "Schüco Royal 65",
-      "Heroal-Johann",
-      "Westag&Getalit",
-      "Hörmann"
+      "Hoba-Holz"
     ],
     "default": "?"
   },
@@ -199,12 +193,9 @@
       "G-EMF",
       "G-EMR",
       "GSR-RF 1",
-      "SR 390 Hebel+2HM+2DM+1HAT",
-      "SR 390 Hebel.",
-      "SR Hebel",
-      "GSR-EMR+THM",
-      "Do GSR-EMF+ Do RMZ",
-      "GSR-EMF+RMZ"
+      "Haftmagneten+RMZ+Handtaster+2xORS142",
+      "Haftmagnet+Unbekannte Anlage",
+      "G-EMF+RMZ+RM-N"
     ],
     "default": "?"
   },
@@ -242,14 +233,12 @@
       "35/92/9/24-270F",
       "65/72/9/20-235FR",
       "30/92/9/28-270F",
-      "65/72/9-24 FR",
-      "35/92/9-24",
-      "35/92/9-24 F",
-      "40/92/9-24 F",
-      "35/92/8-24 F",
-      "Nemef/65/72/9/24x235/FR",
-      "65/72/9/24x235/FR",
-      "65/72/8/20-235"
+      "60/72/8/24x235/F",
+      "55/72/9/20x235/F",
+      "60/72/9/24x235/FR",
+      "Kein Schloss",
+      "65/72/9/20xMFV",
+      "35/X/8/24x255/F Rollenschloss"
     ],
     "default": "?"
   },
@@ -271,8 +260,7 @@
       "Ja ?",
       "KABA Evolo",
       "CES",
-      "U&Z",
-      "AZS"
+      "U&Z"
     ],
     "default": "Nein"
   },
@@ -285,7 +273,7 @@
       "Blind",
       "AP-Pushbar",
       "AP-Touchbar",
-      "K-K"
+      "2x Stoßgriff"
     ],
     "default": "Nein"
   },

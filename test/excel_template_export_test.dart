@@ -85,13 +85,14 @@ void main() {
       expect(table.rows[1][18]?.toString(), 'Installation');
       expect(table.rows[1][23]?.toString(), 'Sicherheit & Zugang');
       expect(table.rows[1][33]?.toString(), 'Okay');
+      expect(table.rows[1][35]?.toString(), 'Anmerkung');
 
       // Row 2: Column Headers
       expect(table.rows[2][0]?.toString(), 'Pos.');
       expect(table.rows[2][1]?.toString(), 'Barcode');
       expect(table.rows[2][2]?.toString(), 'Tür Nr.');
       expect(table.rows[2][34]?.toString(), 'E01 Schließkraft ungenügend');
-      expect(table.rows[2][35]?.toString(), 'Anmerkung');
+      expect(table.rows[2][35]?.toString() ?? '', '');
 
       // Row 3: Data Row
       expect(table.rows[3][0]?.toString(), '1');

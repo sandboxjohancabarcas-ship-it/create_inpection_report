@@ -299,8 +299,9 @@ class ExcelExportService {
     final sortedDefectKeys = defectMap.keys.toList()..sort();
 
     // ── STYLING DEFINITIONS FOR PROFESSIONAL CUSTOMER PRESENTATION ──────────────
-    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#D9D9D9'));
+    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#000000'));
     final borderMedium = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
+    final borderThick = Border(borderStyle: BorderStyle.Thick, borderColorHex: ExcelColor.fromHexString('#000000'));
     final borderDouble = Border(borderStyle: BorderStyle.Double, borderColorHex: ExcelColor.fromHexString('#000000'));
 
     final metaStyle = CellStyle(
@@ -309,232 +310,42 @@ class ExcelExportService {
       fontColorHex: ExcelColor.fromHexString('#1F497D'),
       verticalAlign: VerticalAlign.Center,
       horizontalAlign: HorizontalAlign.Left,
+      bottomBorder: borderThick,
     );
 
-    final categoryHeaderStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      backgroundColorHex: ExcelColor.fromHexString('#1F497D'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.Clip,
-      topBorder: borderMedium,
-      bottomBorder: borderMedium,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // 90-degree rotated category header style for single-column category headers (e.g. Bewertung, Anmerkung)
-    final categoryHeaderRotatedStyle = CellStyle(
-      bold: true,
-      fontSize: 9,
-      rotation: 90,
-      fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      backgroundColorHex: ExcelColor.fromHexString('#1F497D'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderMedium,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // 90-degree rotated column header style for compact width
-    final colHeaderFixedStyle = CellStyle(
-      bold: true,
-      fontSize: 9,
-      rotation: 90,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#D9E1F2'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Bottom,
-      topBorder: borderThin,
-      bottomBorder: borderMedium,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // 90-degree rotated defect column header style for compact width
-    final colHeaderDefectStyle = CellStyle(
-      bold: true,
-      fontSize: 9,
-      rotation: 90,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#FCE4D6'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Bottom,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderMedium,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // 90-degree rotated header style for Anmerkung column
-    final colHeaderNotesStyle = CellStyle(
-      bold: true,
-      fontSize: 9,
-      rotation: 90,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Bottom,
-      topBorder: borderThin,
-      bottomBorder: borderMedium,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataLeftEvenStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataLeftOddStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataCenterEvenStyle = CellStyle(
+    final sequenceNumStyle = CellStyle(
       fontSize: 9,
       fontColorHex: ExcelColor.fromHexString('#000000'),
       backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
       horizontalAlign: HorizontalAlign.Center,
       verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+      bottomBorder: borderThick,
     );
 
-    final dataCenterOddStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // No-wrap centered style for short numeric/code columns (Pos, Tür Nr., Etage)
-    final dataCenterNoWrapEvenStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.Clip,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataCenterNoWrapOddStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.Clip,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // Special cell style for Anmerkung notes
-    final notesEvenStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#FFFFFF'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final notesOddStyle = CellStyle(
-      fontSize: 9,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#F8FAFC'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final summaryLabelStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderDouble,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final summaryStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
-      horizontalAlign: HorizontalAlign.Left,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderDouble,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final summaryCenterStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: ExcelColor.fromHexString('#000000'),
-      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderDouble,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+    final row0BlankStyle = CellStyle(
+      bottomBorder: borderThick,
     );
 
     final Map<int, double> colWidths = {};
     final Map<int, int> rowLineCounts = {};
 
     // ── ROW 0: Metadata Row ───────────────────────────────────
+    final totalCols = 34 + sortedDefectKeys.length + 1;
+    final notesColIdx = 34 + sortedDefectKeys.length;
+
+    for (int c = 0; c < totalCols; c++) {
+      _setCell(
+        sheet,
+        colWidths,
+        rowLineCounts,
+        col: c,
+        row: 0,
+        text: '',
+        style: row0BlankStyle,
+        trackWidth: false,
+      );
+    }
+
     final metaText = 'Kunde: $clientName | Objekt: $objectAddress | Datum: $dateStr | Ansprechpartner: $contactPerson | Monteur: $inspectorName | Auftragsnummer: $jobNumber';
     _setCell(
       sheet,
@@ -547,6 +358,13 @@ class ExcelExportService {
       trackWidth: false, // Don't let wide meta banner distort Col 0
     );
 
+    // Merge metadata banner across columns so the entire customer/order information is visible
+    final metaMergeEndCol = sortedDefectKeys.isEmpty ? notesColIdx : 33;
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
+      CellIndex.indexByColumnRow(columnIndex: metaMergeEndCol, rowIndex: 0),
+    );
+
     // Dynamic error sequence numbers (1, 2, 3...) above defect columns
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = 34 + i;
@@ -557,24 +375,33 @@ class ExcelExportService {
         col: colIdx,
         row: 0,
         text: '${i + 1}',
-        style: dataLeftEvenStyle,
+        style: sequenceNumStyle,
         trackWidth: false,
       );
     }
 
     // ── ROW 1: Grouped Category Headers (Application UI Categories) ───────
-    final totalCols = 34 + sortedDefectKeys.length + 1;
-    for (int c = 0; c < totalCols; c++) {
-      _setCell(
-        sheet,
-        colWidths,
-        rowLineCounts,
-        col: c,
-        row: 1,
-        text: '',
-        style: categoryHeaderStyle,
-        trackWidth: false,
-      );
+    final categoryStartCols = <int>{0, 6, 18, 23, 33};
+    final categoryEndCols = <int>{5, 17, 22, 32, 33};
+
+    if (sortedDefectKeys.isNotEmpty) {
+      categoryStartCols.add(34);
+      categoryEndCols.add(34 + sortedDefectKeys.length - 1);
+    }
+
+    categoryStartCols.add(notesColIdx);
+    categoryEndCols.add(notesColIdx);
+
+    Border getLeftBorder(int col) {
+      if (col == 0) return borderThick;
+      if (categoryStartCols.contains(col)) return borderMedium;
+      return borderThin;
+    }
+
+    Border getRightBorder(int col) {
+      if (col == notesColIdx) return borderThick;
+      if (categoryEndCols.contains(col)) return borderMedium;
+      return borderThin;
     }
 
     final categoryDefinitions = <({int start, int end, String label, bool isRotated})>[
@@ -595,24 +422,39 @@ class ExcelExportService {
     }
 
     categoryDefinitions.add((
-      start: 34 + sortedDefectKeys.length,
-      end: 34 + sortedDefectKeys.length,
+      start: notesColIdx,
+      end: notesColIdx,
       label: 'Anmerkung',
-      isRotated: true,
+      isRotated: false,
     ));
 
     for (final cat in categoryDefinitions) {
-      final style = cat.isRotated ? categoryHeaderRotatedStyle : categoryHeaderStyle;
-      _setCell(
-        sheet,
-        colWidths,
-        rowLineCounts,
-        col: cat.start,
-        row: 1,
-        text: cat.label,
-        style: style,
-        trackWidth: false,
-      );
+      for (int c = cat.start; c <= cat.end; c++) {
+        final style = CellStyle(
+          bold: true,
+          fontSize: cat.isRotated ? 9 : 10,
+          rotation: cat.isRotated ? 90 : 0,
+          fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+          backgroundColorHex: ExcelColor.fromHexString('#1F497D'),
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          textWrapping: TextWrapping.Clip,
+          topBorder: borderThick,
+          bottomBorder: borderMedium,
+          leftBorder: (c == cat.start) ? getLeftBorder(c) : borderThin,
+          rightBorder: (c == cat.end) ? getRightBorder(c) : borderThin,
+        );
+        _setCell(
+          sheet,
+          colWidths,
+          rowLineCounts,
+          col: c,
+          row: 1,
+          text: (c == cat.start) ? cat.label : '',
+          style: style,
+          trackWidth: false,
+        );
+      }
 
       // Merge contiguous cells so complete category names display clearly across the section
       if (cat.end > cat.start) {
@@ -668,7 +510,19 @@ class ExcelExportService {
       if (headerText.length > maxHeaderChars) {
         maxHeaderChars = headerText.length;
       }
-      // Set 90-degree rotated header without letting horizontal text stretch column width
+      final colStyle = CellStyle(
+        bold: true,
+        fontSize: 9,
+        rotation: 90,
+        fontColorHex: ExcelColor.fromHexString('#000000'),
+        backgroundColorHex: ExcelColor.fromHexString('#D9E1F2'),
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Bottom,
+        topBorder: borderThin,
+        bottomBorder: borderMedium,
+        leftBorder: getLeftBorder(col),
+        rightBorder: getRightBorder(col),
+      );
       _setCell(
         sheet,
         colWidths,
@@ -676,7 +530,7 @@ class ExcelExportService {
         col: col,
         row: 2,
         text: headerText,
-        style: colHeaderFixedStyle,
+        style: colStyle,
         trackWidth: false, // 90° rotated headers do not define column width
       );
     }
@@ -710,6 +564,21 @@ class ExcelExportService {
         colWidths[colIdx] = neededWidth;
       }
 
+      final colDefectStyle = CellStyle(
+        bold: true,
+        fontSize: 9,
+        rotation: 90,
+        fontColorHex: ExcelColor.fromHexString('#000000'),
+        backgroundColorHex: ExcelColor.fromHexString('#FCE4D6'),
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Bottom,
+        textWrapping: TextWrapping.WrapText,
+        topBorder: borderThin,
+        bottomBorder: borderMedium,
+        leftBorder: getLeftBorder(colIdx),
+        rightBorder: getRightBorder(colIdx),
+      );
+
       _setCell(
         sheet,
         colWidths,
@@ -717,22 +586,33 @@ class ExcelExportService {
         col: colIdx,
         row: 2,
         text: wrappedDefectLabel,
-        style: colHeaderDefectStyle,
+        style: colDefectStyle,
         trackWidth: false, // 90° rotated headers width tracked via labelLines count
       );
     }
 
-    // 90-degree rotated Anmerkung Column Header (Col 34 + N)
-    final notesColIdx = 34 + sortedDefectKeys.length;
+    // Column Header (Row 2) for Anmerkung column: empty text since category header in Row 1 already displays rotated 'Anmerkung'
+    final colHeaderNotesStyle = CellStyle(
+      bold: true,
+      fontSize: 9,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Bottom,
+      topBorder: borderThin,
+      bottomBorder: borderMedium,
+      leftBorder: getLeftBorder(notesColIdx),
+      rightBorder: getRightBorder(notesColIdx),
+    );
     _setCell(
       sheet,
       colWidths,
       rowLineCounts,
       col: notesColIdx,
       row: 2,
-      text: 'Anmerkung',
+      text: '',
       style: colHeaderNotesStyle,
-      trackWidth: false, // 90° rotated headers do not define horizontal column width
+      trackWidth: false, // 90° rotated category in row 1 defines header
     );
 
     // ── Pre-pass: Gather door data & compute column mode allowances ────────
@@ -818,11 +698,7 @@ class ExcelExportService {
 
     for (int r = 0; r < doors.length; r++) {
       final isEven = (rowIndex % 2 == 0);
-      final leftStyle = isEven ? dataLeftEvenStyle : dataLeftOddStyle;
-      final centerStyle = isEven ? dataCenterEvenStyle : dataCenterOddStyle;
-      final centerNoWrapStyle = isEven ? dataCenterNoWrapEvenStyle : dataCenterNoWrapOddStyle;
-      final noteStyle = isEven ? notesEvenStyle : notesOddStyle;
-
+      final isLastDoor = (r == doors.length - 1);
       final rawFixed = doorFixedRows[r];
       final doorDefectQtyMap = doorDefectMaps[r];
 
@@ -846,14 +722,18 @@ class ExcelExportService {
         final isNoWrap = (c == 0 || c == 2 || c == 3);
         final isCenter = (c == 0 || c == 2 || c == 3 || c == 12 || c == 14 || c == 19 || c == 20 || c == 21 || c == 22 || c == 25 || c == 26 || c == 27 || c == 28 || c == 31 || c == 32 || c == 33);
         
-        CellStyle cellStyle;
-        if (isNoWrap) {
-          cellStyle = centerNoWrapStyle;
-        } else if (isCenter) {
-          cellStyle = centerStyle;
-        } else {
-          cellStyle = leftStyle;
-        }
+        final cellStyle = CellStyle(
+          fontSize: 9,
+          fontColorHex: ExcelColor.fromHexString('#000000'),
+          backgroundColorHex: isEven ? ExcelColor.fromHexString('#FFFFFF') : ExcelColor.fromHexString('#F8FAFC'),
+          horizontalAlign: isCenter ? HorizontalAlign.Center : HorizontalAlign.Left,
+          verticalAlign: VerticalAlign.Center,
+          textWrapping: isNoWrap ? TextWrapping.Clip : TextWrapping.WrapText,
+          topBorder: borderThin,
+          bottomBorder: isLastDoor ? borderThick : borderThin,
+          leftBorder: getLeftBorder(c),
+          rightBorder: getRightBorder(c),
+        );
 
         _setCell(
           sheet,
@@ -877,6 +757,18 @@ class ExcelExportService {
           valText = '$qty';
           defectColumnTotals[key] = (defectColumnTotals[key] ?? 0) + qty;
         }
+        final defectCellStyle = CellStyle(
+          fontSize: 9,
+          fontColorHex: ExcelColor.fromHexString('#000000'),
+          backgroundColorHex: isEven ? ExcelColor.fromHexString('#FFFFFF') : ExcelColor.fromHexString('#F8FAFC'),
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          textWrapping: TextWrapping.WrapText,
+          topBorder: borderThin,
+          bottomBorder: isLastDoor ? borderThick : borderThin,
+          leftBorder: getLeftBorder(colIdx),
+          rightBorder: getRightBorder(colIdx),
+        );
         _setCell(
           sheet,
           colWidths,
@@ -884,12 +776,24 @@ class ExcelExportService {
           col: colIdx,
           row: rowIndex,
           text: valText,
-          style: centerStyle,
+          style: defectCellStyle,
           trackWidth: true,
         );
       }
 
       // Special Anmerkung Cell (Wrapped at max 80 chars, left-aligned)
+      final noteCellStyle = CellStyle(
+        fontSize: 9,
+        fontColorHex: ExcelColor.fromHexString('#000000'),
+        backgroundColorHex: isEven ? ExcelColor.fromHexString('#FFFFFF') : ExcelColor.fromHexString('#F8FAFC'),
+        horizontalAlign: HorizontalAlign.Left,
+        verticalAlign: VerticalAlign.Center,
+        textWrapping: TextWrapping.WrapText,
+        topBorder: borderThin,
+        bottomBorder: isLastDoor ? borderThick : borderThin,
+        leftBorder: getLeftBorder(notesColIdx),
+        rightBorder: getRightBorder(notesColIdx),
+      );
       _setCell(
         sheet,
         colWidths,
@@ -897,7 +801,7 @@ class ExcelExportService {
         col: notesColIdx,
         row: rowIndex,
         text: doorNoteRows[r],
-        style: noteStyle,
+        style: noteCellStyle,
         trackWidth: true,
       );
 
@@ -907,6 +811,18 @@ class ExcelExportService {
 
     // ── BOTTOM SUMMARY ROW: Total Sums ────────────────────────
     for (int c = 0; c < totalCols; c++) {
+      final summaryCellStyle = CellStyle(
+        bold: true,
+        fontSize: 10,
+        fontColorHex: ExcelColor.fromHexString('#000000'),
+        backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+        horizontalAlign: HorizontalAlign.Left,
+        verticalAlign: VerticalAlign.Center,
+        topBorder: borderMedium,
+        bottomBorder: borderThick,
+        leftBorder: getLeftBorder(c),
+        rightBorder: getRightBorder(c),
+      );
       _setCell(
         sheet,
         colWidths,
@@ -914,10 +830,22 @@ class ExcelExportService {
         col: c,
         row: rowIndex,
         text: '',
-        style: summaryStyle,
+        style: summaryCellStyle,
         trackWidth: false,
       );
     }
+    final summaryLabelStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: ExcelColor.fromHexString('#000000'),
+      backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+      horizontalAlign: HorizontalAlign.Right,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderMedium,
+      bottomBorder: borderThick,
+      leftBorder: getLeftBorder(0),
+      rightBorder: getRightBorder(33),
+    );
     _setCell(
       sheet,
       colWidths,
@@ -939,6 +867,18 @@ class ExcelExportService {
       final key = sortedDefectKeys[i];
       final colIdx = 34 + i;
       final total = defectColumnTotals[key] ?? 0;
+      final summaryCenterStyle = CellStyle(
+        bold: true,
+        fontSize: 10,
+        fontColorHex: ExcelColor.fromHexString('#000000'),
+        backgroundColorHex: ExcelColor.fromHexString('#E2EFDA'),
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        topBorder: borderMedium,
+        bottomBorder: borderThick,
+        leftBorder: getLeftBorder(colIdx),
+        rightBorder: getRightBorder(colIdx),
+      );
       _setCell(
         sheet,
         colWidths,
@@ -979,7 +919,7 @@ class ExcelExportService {
 
     final excel = Excel.createExcel();
 
-    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#D9D9D9'));
+    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#000000'));
     final borderMedium = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
 
     final headerStyle = CellStyle(
@@ -1246,7 +1186,7 @@ class ExcelExportService {
       excel.delete('Sheet1');
     }
 
-    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#D9D9D9'));
+    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#000000'));
     final borderMedium = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
 
     final headerStyle = CellStyle(
