@@ -184,9 +184,9 @@ class _EditInspectionDialogState extends State<EditInspectionDialog> {
         'projectNumber': _projectNumberController.text.trim(),
         'orderType': _orderType,
         'repairDate': (_orderType == 'Reparatur' || _orderType == 'Erledigt') && _selectedRepairDate != null
-            ? _selectedRepairDate!.toIso8601String()
+            ? _selectedRepairDate!.toIso8601String().substring(0, 10)
             : null,
-        'date': _selectedDate.toIso8601String(),
+        'date': _selectedDate.toIso8601String().substring(0, 10),
         'contactPerson': _contactPersonController.text.trim(),
         'inspectorName': _inspectorNameController.text.trim(),
         'isLocked': _isLocked ? 1 : 0,

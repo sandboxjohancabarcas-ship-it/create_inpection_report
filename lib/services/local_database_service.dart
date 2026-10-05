@@ -676,6 +676,17 @@ class LocalDatabaseService {
     return maps.map((m) => Door.fromMap(m)).toList();
   }
 
+  static Future<Door?> getDoorById(int id) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'doors',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
+  }
+
   static Future<Door?> getDoorByAlias(String alias) async {
     final db = await getDb();
     final clean = alias.trim();
@@ -763,9 +774,30 @@ class LocalDatabaseService {
   // INSPECTIONS
   // ─────────────────────────────────────────────────────────────
 
+  static String _normalizeDate(dynamic val) {
+    if (val == null) return '';
+    final str = val.toString().trim();
+    if (str.isEmpty) return '';
+    if (str.contains('T')) {
+      return str.split('T')[0];
+    }
+    if (str.length >= 10 && RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(str)) {
+      return str.substring(0, 10);
+    }
+    return str;
+  }
+
   static Future<int> insertInspection(Map<String, dynamic> inspection) async {
     final db = await getDb();
-    return await db.insert('inspections', inspection, conflictAlgorithm: ConflictAlgorithm.replace);
+    final data = Map<String, dynamic>.from(inspection);
+    data.remove('doorCount');
+    if (data.containsKey('date') && data['date'] != null) {
+      data['date'] = _normalizeDate(data['date']);
+    }
+    if (data.containsKey('repairDate') && data['repairDate'] != null) {
+      data['repairDate'] = _normalizeDate(data['repairDate']);
+    }
+    return await db.insert('inspections', data, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<Map<String, dynamic>?> getInspectionById(int inspectionId) async {
@@ -796,9 +828,17 @@ class LocalDatabaseService {
     final String oldClient = existingRows.isNotEmpty ? (existingRows.first['clientName'] as String? ?? '') : '';
     final String oldAddress = existingRows.isNotEmpty ? (existingRows.first['objectAddress'] as String? ?? '') : '';
 
+    final data = Map<String, dynamic>.from(inspectionData);
+    if (data.containsKey('date') && data['date'] != null) {
+      data['date'] = _normalizeDate(data['date']);
+    }
+    if (data.containsKey('repairDate') && data['repairDate'] != null) {
+      data['repairDate'] = _normalizeDate(data['repairDate']);
+    }
+
     await db.update(
       'inspections',
-      inspectionData,
+      data,
       where: 'inspectionId = ?',
       whereArgs: [id],
     );
@@ -1068,9 +1108,58 @@ class LocalDatabaseService {
         id.doorId,
         COUNT(ide.id) AS total_errors,
         SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_errors,
-        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS notice_count,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_notices,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_notices,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS defect_count,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_defects,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_defects
       FROM inspection_doors id
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
+      LEFT JOIN error_catalog ec ON (ide.errorId IS NOT NULL AND ide.errorId = ec.errorId) OR (ide.errorId IS NULL AND ide.errorCode != '' AND ide.errorCode = ec.code)
       WHERE id.inspectionId = ?
       GROUP BY id.doorId
     ''', [inspectionId]);
@@ -1082,10 +1171,22 @@ class LocalDatabaseService {
         final total = (row['total_errors'] as num?)?.toInt() ?? 0;
         final open = (row['open_errors'] as num?)?.toInt() ?? 0;
         final resolved = (row['resolved_errors'] as num?)?.toInt() ?? 0;
+        final defects = (row['defect_count'] as num?)?.toInt() ?? 0;
+        final openDefects = (row['open_defects'] as num?)?.toInt() ?? 0;
+        final resolvedDefects = (row['resolved_defects'] as num?)?.toInt() ?? 0;
+        final notices = (row['notice_count'] as num?)?.toInt() ?? 0;
+        final openNotices = (row['open_notices'] as num?)?.toInt() ?? 0;
+        final resolvedNotices = (row['resolved_notices'] as num?)?.toInt() ?? 0;
         map[doorId] = DoorErrorSummary(
           totalErrors: total,
           openErrors: open,
           resolvedErrors: resolved,
+          defectCount: defects,
+          openDefects: openDefects,
+          resolvedDefects: resolvedDefects,
+          noticeCount: notices,
+          openNotices: openNotices,
+          resolvedNotices: resolvedNotices,
         );
       }
     }
@@ -1534,7 +1635,7 @@ class LocalDatabaseService {
       'objectAddress': resolvedAddr,
       'clientName': resolvedClient,
       'jobNumber': cleanJob,
-      'date': date.toIso8601String(),
+      'date': _normalizeDate(date),
       'contactPerson': contactPerson.trim().isNotEmpty
           ? contactPerson.trim()
           : (baseInspection != null ? (baseInspection['contactPerson']?.toString() ?? '') : ''),
@@ -1542,7 +1643,7 @@ class LocalDatabaseService {
           ? inspectorName.trim()
           : (baseInspection != null ? (baseInspection['inspectorName']?.toString() ?? '') : ''),
       'orderType': orderType,
-      'repairDate': orderType == 'Reparatur' && repairDate != null ? repairDate.toIso8601String() : null,
+      'repairDate': orderType == 'Reparatur' && repairDate != null ? _normalizeDate(repairDate) : null,
       'isLocked': 0,
     };
 

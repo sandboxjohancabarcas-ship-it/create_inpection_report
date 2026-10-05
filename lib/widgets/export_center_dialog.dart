@@ -7,10 +7,11 @@ import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/services/pdf_export_service.dart';
+import 'package:wartungstool/services/photo_export_service.dart';
 import '../utils/file_export_helper.dart';
 
 enum ExportScope { singleInspection, clientAudit, doorHistory }
-enum ExportFormat { excel, pdf, dbPackage }
+enum ExportFormat { excel, pdf, dbPackage, photos }
 
 class ExportCenterDialog extends StatefulWidget {
   final int? initialInspectionId;
@@ -156,7 +157,10 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
 
     try {
       final exportDir = await _getExportDirectory();
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final now = DateTime.now();
+      final dateStr = '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final timeStr = '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}';
+      final timestamp = '${dateStr}_$timeStr';
       String targetPath = '';
 
       if (_selectedScope == ExportScope.singleInspection) {
@@ -167,14 +171,15 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
         if (!widget.isManagerMode) {
           final doors = await LocalDatabaseService.getDoorsByInspectionId(_selectedInspectionId!);
           final statuses = await LocalDatabaseService.getDoorInspectionStatuses(_selectedInspectionId!);
+          if (!mounted) return;
           final canProceed = await FileExportHelper.confirmUnprocessedDoors(
             context: context,
             doors: doors,
             statuses: statuses,
             actionName: 'Export',
           );
-          if (!canProceed) {
-            setState(() => _isExporting = false);
+          if (!canProceed || !mounted) {
+            if (mounted) setState(() => _isExporting = false);
             return;
           }
         }
@@ -198,6 +203,17 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           );
           targetPath = p.join(exportDir, fileName);
           await DatabaseService.exportJobPackage([_selectedInspectionId!], destinationPath: targetPath);
+        } else if (_selectedFormat == ExportFormat.photos) {
+          final photoResult = await PhotoExportService.exportInspectionPhotos(
+            inspectionId: _selectedInspectionId!,
+            isManagerMode: widget.isManagerMode,
+          );
+          targetPath = photoResult.outputDirectory;
+          if (photoResult.totalPhotos == 0) {
+            _exportSuccessPath = 'Ordner erstellt (Keine Fotos in diesem Auftrag vorhanden):\n$targetPath';
+          } else {
+            _exportSuccessPath = '${photoResult.totalPhotos} Foto(s) erfolgreich exportiert in:\n$targetPath';
+          }
         }
       } else if (_selectedScope == ExportScope.clientAudit) {
         if (_selectedClient == null || _selectedClient!.isEmpty) {
@@ -453,51 +469,57 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
               // Format Selector
               Text('2. Dateiformat wählen', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.table_chart, color: Colors.green, size: 18),
-                          SizedBox(width: 8),
-                          Text('Excel (.xlsx)'),
-                        ],
-                      ),
-                      selected: _selectedFormat == ExportFormat.excel,
-                      onSelected: (val) => setState(() => _selectedFormat = ExportFormat.excel),
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.table_chart, color: Colors.green, size: 18),
+                        SizedBox(width: 8),
+                        Text('Excel (.xlsx)'),
+                      ],
                     ),
+                    selected: _selectedFormat == ExportFormat.excel,
+                    onSelected: (val) => setState(() => _selectedFormat = ExportFormat.excel),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
-                          SizedBox(width: 8),
-                          Text('PDF (.pdf)'),
-                        ],
-                      ),
-                      selected: _selectedFormat == ExportFormat.pdf,
-                      onSelected: (val) => setState(() => _selectedFormat = ExportFormat.pdf),
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
+                        SizedBox(width: 8),
+                        Text('PDF (.pdf)'),
+                      ],
                     ),
+                    selected: _selectedFormat == ExportFormat.pdf,
+                    onSelected: (val) => setState(() => _selectedFormat = ExportFormat.pdf),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.storage, color: Colors.blue, size: 18),
-                          SizedBox(width: 8),
-                          Text('DB Paket (.db)'),
-                        ],
-                      ),
-                      selected: _selectedFormat == ExportFormat.dbPackage,
-                      onSelected: (val) => setState(() => _selectedFormat = ExportFormat.dbPackage),
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.storage, color: Colors.blue, size: 18),
+                        SizedBox(width: 8),
+                        Text('DB Paket (.db)'),
+                      ],
                     ),
+                    selected: _selectedFormat == ExportFormat.dbPackage,
+                    onSelected: (val) => setState(() => _selectedFormat = ExportFormat.dbPackage),
+                  ),
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.photo_library, color: Colors.purple, size: 18),
+                        SizedBox(width: 8),
+                        Text('Fotos (JPG-Ordner)'),
+                      ],
+                    ),
+                    selected: _selectedFormat == ExportFormat.photos,
+                    onSelected: (val) => setState(() => _selectedFormat = ExportFormat.photos),
                   ),
                 ],
               ),

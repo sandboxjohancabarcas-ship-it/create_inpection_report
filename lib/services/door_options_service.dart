@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' show join, dirname;
 import 'package:sqflite/sqflite.dart' show getDatabasesPath;
@@ -142,22 +143,40 @@ class DoorOptionsService {
     await load();
   }
 
-  /// Loads options from the external JSON file or falls back to the asset bundle.
+  /// Loads options from dynamic temp file (in debug mode), external JSON file, or falls back to project/asset defaults.
   static Future<void> load() async {
     if (_isTestMode) return;
     try {
       final dbPath = await getDatabasesPath();
-      final externalFile = File(join(dirname(dbPath), 'WartungsTool', 'door_options.json'));
-      
-      if (await externalFile.exists()) {
-        print('[DoorOptions] Found external JSON at ${externalFile.path}. Loading...');
-        final content = await externalFile.readAsString();
-        _options = json.decode(content) as Map<String, dynamic>;
-        _mergeFallbackDefaults();
-        _loaded = true;
-        return;
+      final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
+
+      // In debug mode, check for dynamically modified temp options first
+      if (kDebugMode) {
+        final tempFile = File(join(externalDir.path, 'temp_door_properties.json'));
+        if (await tempFile.exists()) {
+          print('[DoorOptions] (Debug) Found dynamic temp JSON at ${tempFile.path}. Loading...');
+          final content = await tempFile.readAsString();
+          _options = json.decode(content) as Map<String, dynamic>;
+          _mergeFallbackDefaults();
+          _loaded = true;
+          return;
+        }
       }
 
+      // In production mode, check for persistent external door_options.json
+      if (!kDebugMode) {
+        final externalFile = File(join(externalDir.path, 'door_options.json'));
+        if (await externalFile.exists()) {
+          print('[DoorOptions] Found external JSON at ${externalFile.path}. Loading...');
+          final content = await externalFile.readAsString();
+          _options = json.decode(content) as Map<String, dynamic>;
+          _mergeFallbackDefaults();
+          _loaded = true;
+          return;
+        }
+      }
+
+      // Read default project JSON (read-only base template)
       final projectFile = File(join(Directory.current.path, 'door_options.json'));
       if (await projectFile.exists()) {
         print('[DoorOptions] Found project JSON at ${projectFile.path}. Loading...');
@@ -366,7 +385,8 @@ class DoorOptionsService {
     return false;
   }
 
-  /// Saves current options to external JSON file on disk.
+  /// Saves current options to dynamic temp file (in debug mode) or external JSON file on disk.
+  /// Never modifies git-tracked default files in the project root.
   static Future<bool> saveOptions() async {
     if (_options.isEmpty) {
       print('[DoorOptions] Skipping save: _options is empty.');
@@ -378,18 +398,20 @@ class DoorOptionsService {
       if (!await externalDir.exists()) {
         await externalDir.create(recursive: true);
       }
-      final externalFile = File(join(externalDir.path, 'door_options.json'));
       final encoder = const JsonEncoder.withIndent('  ');
       final content = encoder.convert(_options);
-      await externalFile.writeAsString(content);
-      print('[DoorOptions] Saved options to ${externalFile.path}');
 
-      if (!_isTestMode) {
-        final projectFile = File(join(Directory.current.path, 'door_options.json'));
-        if (await projectFile.exists()) {
-          await projectFile.writeAsString(content);
-          print('[DoorOptions] Saved options to project root ${projectFile.path}');
-        }
+      if (kDebugMode || _isTestMode) {
+        // In debug / test mode, write ONLY to dynamically created temp files
+        final tempFile = File(join(externalDir.path, 'temp_door_properties.json'));
+        await tempFile.writeAsString(content);
+        print('[DoorOptions] (Debug) Saved dynamic options to ${tempFile.path}');
+        // Default door_options.json in project root is preserved untouched
+      } else {
+        // In production release mode, write to external app storage
+        final externalFile = File(join(externalDir.path, 'door_options.json'));
+        await externalFile.writeAsString(content);
+        print('[DoorOptions] Saved options to ${externalFile.path}');
       }
       return true;
     } catch (e) {

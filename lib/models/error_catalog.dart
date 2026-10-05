@@ -114,6 +114,19 @@ class ErrorCatalog {
     return '$code - $category: $description';
   }
 
+  /// Returns true if this catalog entry represents an advisory customer note/suggestion (Hinweis).
+  bool get isNotice {
+    final catLower = category.trim().toLowerCase();
+    final descLower = description.trim().toLowerCase();
+    final codeLower = code.trim().toLowerCase();
+    return catLower.contains('hinweis') ||
+        catLower.contains('anmerkung') ||
+        descLower.startsWith('hinweis') ||
+        codeLower.startsWith('hinweis') ||
+        codeLower.startsWith('0.') ||
+        codeLower.startsWith('h-');
+  }
+
   /// Compare the content of this catalog entry with another entry.
   /// Returns true only if all import-relevant fields are identical.
   bool isSameContent(ErrorCatalog other) {

@@ -368,46 +368,48 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
               children: [
                 // Identity collision option header (if applicable)
                 if (hasIdentity) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
+                  Material(
+                    color: Colors.red.shade50,
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.red.shade200),
+                      side: BorderSide(color: Colors.red.shade200),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Identitätskonflikt (Gleicher Alias für verschiedene Türen):',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13),
-                        ),
-                        const SizedBox(height: 6),
-                        RadioListTile<DoorResolutionAction>(
-                          dense: true,
-                          title: const Text('Beide behalten (Importierte Tür unter neuem Alias speichern)'),
-                          value: DoorResolutionAction.keepBoth,
-                          groupValue: doorLevelAction ?? DoorResolutionAction.keepBoth,
-                          onChanged: (val) {
-                            setState(() {
-                              _doorLevelActions[key] = val;
-                            });
-                          },
-                        ),
-                        if (doorLevelAction == null || doorLevelAction == DoorResolutionAction.keepBoth)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 32, right: 16, bottom: 8),
-                            child: TextField(
-                              controller: _newAliasControllers[key],
-                              decoration: const InputDecoration(
-                                labelText: 'Neuer Tür-Alias (max 24 Zeichen)',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              maxLength: 24,
-                            ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Identitätskonflikt (Gleicher Alias für verschiedene Türen):',
+                            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13),
                           ),
-                      ],
+                          const SizedBox(height: 6),
+                          RadioListTile<DoorResolutionAction>(
+                            dense: true,
+                            title: const Text('Beide behalten (Importierte Tür unter neuem Alias speichern)'),
+                            value: DoorResolutionAction.keepBoth,
+                            groupValue: doorLevelAction ?? DoorResolutionAction.keepBoth,
+                            onChanged: (val) {
+                              setState(() {
+                                _doorLevelActions[key] = val;
+                              });
+                            },
+                          ),
+                          if (doorLevelAction == null || doorLevelAction == DoorResolutionAction.keepBoth)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 32, right: 16, bottom: 8),
+                              child: TextField(
+                                controller: _newAliasControllers[key],
+                                decoration: const InputDecoration(
+                                  labelText: 'Neuer Tür-Alias (max 24 Zeichen)',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                maxLength: 24,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -425,15 +427,17 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
+                    child: Material(
                       color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                         // Property Header & Severity Indicator
                         Row(
                           children: [
@@ -566,8 +570,10 @@ class _DoorConflictReviewPageState extends State<DoorConflictReviewPage> {
                         ],
                       ],
                     ),
-                  );
-                }),
+                  ),
+                ),
+              );
+            }),
 
                 const Divider(height: 24),
 

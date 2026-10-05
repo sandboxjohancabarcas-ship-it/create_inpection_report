@@ -164,17 +164,21 @@ void main() {
       return doors.where((door) {
         if (filter == InspectionDoorFilter.inspected && !isDoorInspected(door)) return false;
         if (filter == InspectionDoorFilter.pending && isDoorInspected(door)) return false;
-        if (filter == InspectionDoorFilter.withErrors) {
-          final summary = summaries[door.id];
-          if (summary == null || summary.openErrors == 0) return false;
+        final summary = summaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
+        if (filter == InspectionDoorFilter.openDefects) {
+          if (!(summary.openDefects > 0 && summary.resolvedDefects == 0)) return false;
         }
-        if (filter == InspectionDoorFilter.resolved) {
-          final summary = summaries[door.id];
-          if (summary == null || summary.resolvedErrors == 0) return false;
+        if (filter == InspectionDoorFilter.partiallyResolved) {
+          if (!(summary.openDefects > 0 && summary.resolvedDefects > 0)) return false;
+        }
+        if (filter == InspectionDoorFilter.fullyResolved) {
+          if (!(summary.openDefects == 0 && summary.resolvedDefects > 0)) return false;
+        }
+        if (filter == InspectionDoorFilter.noticesOnly) {
+          if (!(summary.defectCount == 0 && summary.noticeCount > 0)) return false;
         }
         if (filter == InspectionDoorFilter.errorFree) {
-          final summary = summaries[door.id];
-          if (summary != null && summary.totalErrors > 0) return false;
+          if (summary.totalErrors > 0) return false;
           if (!isDoorInspected(door)) return false;
         }
         return true;
@@ -184,8 +188,8 @@ void main() {
     expect(filterDoors(InspectionDoorFilter.all).map((d) => d.doorNumber).toList(), ['T-01', 'T-02', 'T-03']);
     expect(filterDoors(InspectionDoorFilter.inspected).map((d) => d.doorNumber).toList(), ['T-01', 'T-02', 'T-03']);
     expect(filterDoors(InspectionDoorFilter.pending), isEmpty);
-    expect(filterDoors(InspectionDoorFilter.withErrors), isEmpty);
-    expect(filterDoors(InspectionDoorFilter.resolved).map((d) => d.doorNumber).toList(), ['T-03']);
+    expect(filterDoors(InspectionDoorFilter.openDefects), isEmpty);
+    expect(filterDoors(InspectionDoorFilter.fullyResolved).map((d) => d.doorNumber).toList(), ['T-03']);
     expect(filterDoors(InspectionDoorFilter.errorFree).map((d) => d.doorNumber).toList(), ['T-01', 'T-02']);
   });
 

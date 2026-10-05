@@ -9,6 +9,7 @@ import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/catalog_integrity_service.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../widgets/full_screen_photo_viewer.dart';
+import '../utils/photo_name_helper.dart';
 
 class ErrorManagementPage extends StatefulWidget {
   final int doorId;
@@ -37,6 +38,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   List<ErrorCatalog> searchResults = [];
   ErrorCatalog? selectedError;
   int? _inspectionDoorId;
+  String _doorAlias = '';
   bool isLoading = true;
 
   @override
@@ -91,9 +93,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         print('Loaded ${catalogSuggestions.length} catalog errors');
         print('Loaded ${inspectionErrors.length} inspection errors');
 
+        final door = widget.isManagerMode
+            ? await DatabaseService.getDoorById(widget.doorId)
+            : await LocalDatabaseService.getDoorById(widget.doorId);
+        final resolvedAlias = door?.doorAlias?.trim().isNotEmpty == true
+            ? door!.doorAlias!.trim()
+            : (door?.provisionalAlias?.trim().isNotEmpty == true
+                ? door!.provisionalAlias!.trim()
+                : widget.doorNumber);
+
         setState(() {
           availableErrors = catalogSuggestions;
           doorErrors = inspectionErrors;
+          _doorAlias = resolvedAlias;
           isLoading = false;
         });
       }
@@ -650,12 +662,31 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                                           ),
                                                         ),
                                                         const SizedBox(width: 8),
+                                                        if (err.isNotice) ...[
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.amber.shade100,
+                                                              borderRadius: BorderRadius.circular(4),
+                                                              border: Border.all(color: Colors.amber.shade400),
+                                                            ),
+                                                            child: Text(
+                                                              'Hinweis',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                color: Colors.amber.shade900,
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                        ],
                                                         Container(
                                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                                           decoration: BoxDecoration(
-                                                            color: Colors.blue.shade50,
+                                                            color: err.isNotice ? Colors.amber.shade50 : Colors.blue.shade50,
                                                             borderRadius: BorderRadius.circular(4),
-                                                            border: Border.all(color: Colors.blue.shade200),
+                                                            border: Border.all(color: err.isNotice ? Colors.amber.shade200 : Colors.blue.shade200),
                                                           ),
                                                           child: Text(
                                                             err.category,
@@ -906,7 +937,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         _buildDialogPhotoThumbnails(
                           dialogPhotos,
                           (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
-                          (idx) => _viewPhotoFullScreen(dialogPhotos, idx),
+                          (idx) => _viewPhotoFullScreen(
+                            dialogPhotos,
+                            idx,
+                            errorCode: selectedError?.code ?? 'Fehler',
+                          ),
                         ),
                       ],
                     ] else ...[
@@ -1310,7 +1345,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       _buildDialogPhotoThumbnails(
                         dialogPhotos,
                         (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
-                        (idx) => _viewPhotoFullScreen(dialogPhotos, idx),
+                        (idx) => _viewPhotoFullScreen(
+                          dialogPhotos,
+                          idx,
+                          errorCode: codeController.text.trim().isNotEmpty ? codeController.text.trim() : 'Fehler',
+                        ),
                       ),
                     ],
                   ],
@@ -1674,9 +1713,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: _getStatusColor(error.resolutionStatus),
+                                  backgroundColor: errorCatalog.isNotice
+                                      ? (error.resolutionStatus.toLowerCase() == 'resolved' ? Colors.green : Colors.amber.shade700)
+                                      : _getStatusColor(error.resolutionStatus),
                                   child: Icon(
-                                    _getStatusIcon(error.resolutionStatus),
+                                    errorCatalog.isNotice
+                                        ? (error.resolutionStatus.toLowerCase() == 'resolved' ? Icons.check_circle : Icons.info_outline)
+                                        : _getStatusIcon(error.resolutionStatus),
                                     color: Colors.white,
                                   ),
                                 ),
@@ -1691,15 +1734,34 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                     SizedBox(height: 4),
                                     Row(
                                       children: [
+                                        if (errorCatalog.isNotice) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amber.shade50,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: Colors.amber.shade400),
+                                            ),
+                                            child: Text(
+                                              'Hinweis',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.amber.shade900,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
                                         Container(
                                           padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: Colors.grey.shade200,
+                                            color: errorCatalog.isNotice ? Colors.amber.shade50 : Colors.grey.shade200,
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                         errorCatalog.category,
-                                            style: TextStyle(fontSize: 12),
+                                            style: TextStyle(fontSize: 12, color: errorCatalog.isNotice ? Colors.amber.shade900 : null),
                                           ),
                                         ),
                                         SizedBox(width: 8),
@@ -2028,13 +2090,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  void _viewPhotoFullScreen(List<String> photos, int initialIndex) {
+  void _viewPhotoFullScreen(List<String> photos, int initialIndex, {String errorCode = ''}) {
     if (photos.isEmpty) return;
+    final photoNames = PhotoNameHelper.formatPhotoNames(
+      doorAlias: _doorAlias.isNotEmpty ? _doorAlias : widget.doorNumber,
+      errorCode: errorCode.isNotEmpty ? errorCode : 'Fehler',
+      photoCount: photos.length,
+    );
     showDialog(
       context: context,
       builder: (context) => FullScreenPhotoGalleryViewer(
         photos: photos,
         initialIndex: initialIndex,
+        photoNames: photoNames,
       ),
     );
   }
@@ -2105,30 +2173,39 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 }
 
                 final photoBase64 = photos[index];
+                final photoName = PhotoNameHelper.formatPhotoName(
+                  doorAlias: _doorAlias.isNotEmpty ? _doorAlias : widget.doorNumber,
+                  errorCode: error.errorCode,
+                  photoIndex: index + 1,
+                );
+
                 return Stack(
                   children: [
-                    GestureDetector(
-                      onTap: () => _viewPhotoFullScreen(photos, index),
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            )
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.memory(
-                            base64Decode(photoBase64),
-                            fit: BoxFit.cover,
-                            cacheWidth: 120, // performance optimization
+                    Tooltip(
+                      message: photoName,
+                      child: GestureDetector(
+                        onTap: () => _viewPhotoFullScreen(photos, index, errorCode: error.errorCode),
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
+                              )
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(
+                              base64Decode(photoBase64),
+                              fit: BoxFit.cover,
+                              cacheWidth: 120, // performance optimization
+                            ),
                           ),
                         ),
                       ),

@@ -1,15 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 
 class FullScreenPhotoGalleryViewer extends StatefulWidget {
   final List<String> photos;
   final int initialIndex;
+  final List<String>? photoNames;
 
   const FullScreenPhotoGalleryViewer({
     super.key,
     required this.photos,
     required this.initialIndex,
+    this.photoNames,
   });
 
   @override
@@ -20,6 +24,7 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
   late PageController _pageController;
   late int _currentIndex;
   final FocusNode _focusNode = FocusNode();
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -33,6 +38,15 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
     _pageController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  String get _currentPhotoName {
+    if (widget.photoNames != null &&
+        _currentIndex >= 0 &&
+        _currentIndex < widget.photoNames!.length) {
+      return widget.photoNames![_currentIndex];
+    }
+    return 'Foto_${_currentIndex + 1}.jpg';
   }
 
   void _previousPhoto() {
@@ -51,6 +65,59 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
         curve: Curves.easeInOut,
       );
     }
+  }
+
+  Future<void> _saveCurrentPhoto() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    try {
+      final fileName = _currentPhotoName;
+      final bytes = base64Decode(widget.photos[_currentIndex]);
+
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Foto speichern unter...',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png'],
+      );
+
+      if (savePath != null) {
+        final file = File(savePath);
+        await file.writeAsBytes(bytes);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Foto erfolgreich gespeichert:\n$savePath'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Speichern: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  void _copyPhotoName() {
+    final name = _currentPhotoName;
+    Clipboard.setData(ClipboardData(text: name));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Dateiname kopiert: $name'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -101,37 +168,94 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
               },
             ),
 
-            // Top Header: Index Counter & Close Button
+            // Top Header: Photo Name, Index Counter & Actions
             Positioned(
-              top: 40,
-              left: 20,
-              right: 20,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (hasMultiple)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        '${_currentIndex + 1} / ${widget.photos.length}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+              top: 30,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
+                  children: [
+                    // Index Badge
+                    if (hasMultiple)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        margin: const EdgeInsets.only(right: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${_currentIndex + 1}/${widget.photos.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    )
-                  else
-                    const SizedBox.shrink(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
+
+                    // Standardized Photo Filename
+                    Expanded(
+                      child: Tooltip(
+                        message: 'Klicken zum Kopieren: $_currentPhotoName',
+                        child: InkWell(
+                          onTap: _copyPhotoName,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.image, size: 16, color: Colors.lightBlueAccent),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    _currentPhotoName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.copy, size: 13, color: Colors.white70),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Download / Save Button
+                    IconButton(
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.download, color: Colors.white, size: 22),
+                      tooltip: 'Foto als Datei speichern',
+                      onPressed: _saveCurrentPhoto,
+                    ),
+
+                    // Close Button
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                      tooltip: 'Schließen',
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
               ),
             ),
 

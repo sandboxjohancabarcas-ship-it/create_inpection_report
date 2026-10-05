@@ -9,10 +9,20 @@ import '../utils/file_export_helper.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
+import '../services/photo_export_service.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
-enum InspectionDoorFilter { all, inspected, pending, withErrors, resolved, errorFree }
+enum InspectionDoorFilter {
+  all,
+  inspected,
+  pending,
+  openDefects,
+  partiallyResolved,
+  fullyResolved,
+  noticesOnly,
+  errorFree,
+}
 
 class InspectionDoorsPage extends StatefulWidget {
   final int inspectionId;
@@ -50,7 +60,6 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
 
   @override
   void dispose() {
-    ScaffoldMessenger.maybeOf(context)?.clearSnackBars();
     _searchController.dispose();
     super.dispose();
   }
@@ -535,56 +544,127 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   }
 
   Widget _buildErrorStatusBadge(DoorErrorSummary summary) {
-    Color bg;
-    Color fg;
-    IconData icon;
-    String text;
-
-    switch (summary.state) {
-      case DoorErrorState.hasOpenErrors:
-        bg = Colors.red.shade100;
-        fg = Colors.red.shade900;
-        icon = Icons.error;
-        text = summary.openErrors > 1
-            ? '${summary.openErrors} Fehler'
-            : 'Fehlerhaft';
-        break;
-      case DoorErrorState.allErrorsResolved:
-        bg = Colors.amber.shade100;
-        fg = Colors.amber.shade900;
-        icon = Icons.check_circle;
-        text = 'Fehler gelöst';
-        break;
-      case DoorErrorState.noErrors:
-        bg = Colors.green.shade100;
-        fg = Colors.green.shade900;
-        icon = Icons.check_circle_outline;
-        text = 'Keine Fehler';
-        break;
+    if (summary.totalErrors == 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline, size: 14, color: Colors.green.shade800),
+            const SizedBox(width: 4),
+            Text(
+              'Mängelfrei',
+              style: TextStyle(
+                color: Colors.green.shade800,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: fg.withOpacity(0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: fg),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+    final List<Widget> badges = [];
+
+    // 1. Defect Badge (Red if open, Green if all resolved)
+    if (summary.openDefects > 0) {
+      badges.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.red.shade300),
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error, size: 14, color: Colors.red.shade900),
+              const SizedBox(width: 4),
+              Text(
+                summary.openDefects > 1
+                    ? '${summary.openDefects} Fehler'
+                    : 'Fehlerhaft',
+                style: TextStyle(
+                  color: Colors.red.shade900,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (summary.resolvedDefects > 0) {
+      badges.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.green.shade300),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, size: 14, color: Colors.green.shade800),
+              const SizedBox(width: 4),
+              Text(
+                'Fehler gelöst',
+                style: TextStyle(
+                  color: Colors.green.shade800,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. Notice Badge (Amber / Yellow)
+    if (summary.noticeCount > 0) {
+      badges.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade600),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.info_outline, size: 14, color: Colors.amber.shade900),
+              const SizedBox(width: 4),
+              Text(
+                summary.noticeCount > 1
+                    ? '${summary.noticeCount} Hinweise'
+                    : 'Hinweis',
+                style: TextStyle(
+                  color: Colors.amber.shade900,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      alignment: WrapAlignment.end,
+      children: badges,
     );
   }
 
@@ -662,22 +742,22 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     Color avatarBg;
     IconData icon;
 
-    switch (summary.state) {
-      case DoorErrorState.hasOpenErrors:
-        iconColor = Colors.red.shade700;
-        avatarBg = Colors.red.shade50;
-        icon = Icons.error;
-        break;
-      case DoorErrorState.allErrorsResolved:
-        iconColor = Colors.amber.shade800;
-        avatarBg = Colors.amber.shade50;
-        icon = Icons.check_circle;
-        break;
-      case DoorErrorState.noErrors:
-        iconColor = Colors.green.shade700;
-        avatarBg = Colors.green.shade50;
-        icon = widget.isManagerMode ? Icons.door_front_door : Icons.task_alt;
-        break;
+    if (summary.openDefects > 0) {
+      iconColor = Colors.red.shade700;
+      avatarBg = Colors.red.shade50;
+      icon = Icons.error;
+    } else if (summary.resolvedDefects > 0) {
+      iconColor = Colors.green.shade700;
+      avatarBg = Colors.green.shade50;
+      icon = Icons.check_circle;
+    } else if (summary.noticeCount > 0) {
+      iconColor = Colors.amber.shade900;
+      avatarBg = Colors.amber.shade50;
+      icon = Icons.info_outline;
+    } else {
+      iconColor = Colors.green.shade700;
+      avatarBg = Colors.green.shade50;
+      icon = widget.isManagerMode ? Icons.door_front_door : Icons.task_alt;
     }
 
     return CircleAvatar(
@@ -795,6 +875,40 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               }
             },
           ),
+          IconButton(
+            icon: const Icon(Icons.photo_library_outlined, color: Colors.purple),
+            tooltip: 'Alle Fotos dieses Auftrags exportieren',
+            onPressed: () async {
+              try {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Fotos werden vorbereitet und exportiert...')),
+                );
+                final result = await PhotoExportService.exportInspectionPhotos(
+                  inspectionId: widget.inspectionId,
+                  isManagerMode: widget.isManagerMode,
+                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        result.totalPhotos > 0
+                            ? '${result.totalPhotos} Foto(s) exportiert nach:\n${result.outputDirectory}'
+                            : 'Keine Fotos in diesem Auftrag vorhanden.',
+                      ),
+                      backgroundColor: result.totalPhotos > 0 ? Colors.green : Colors.orange,
+                      duration: const Duration(seconds: 5),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Fehler beim Foto-Export: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+          ),
           const MasterPortalHomeButton(),
         ],
         leading: isSelectionMode ? IconButton(
@@ -855,16 +969,44 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               ),
             ),
 
-          // Progress & Filter Header Card (Inspector only)
-          if (!widget.isManagerMode && !_isLoading && _doors.isNotEmpty && !isSelectionMode) ...[
+          // Progress & Filter Header Card (Inspector & Manager)
+          if (!_isLoading && _doors.isNotEmpty && !isSelectionMode) ...[
             Builder(
               builder: (context) {
                 final totalCount = _doors.length;
                 final inspectedCount = _doors.where((d) => _isDoorInspected(d)).length;
                 final pendingCount = totalCount - inspectedCount;
-                final doorsWithErrorsCount = _doors.where((d) => (_errorSummaries[d.id]?.openErrors ?? 0) > 0).length;
-                final doorsResolvedCount = _doors.where((d) => (_errorSummaries[d.id]?.resolvedErrors ?? 0) > 0).length;
-                final doorsErrorFreeCount = _doors.where((d) => _isDoorInspected(d) && (_errorSummaries[d.id]?.totalErrors ?? 0) == 0).length;
+
+                int totalJobDefects = 0;
+                int resolvedJobDefects = 0;
+                int totalJobNotices = 0;
+
+                int doorsWithOpenDefects = 0;
+                int doorsPartiallyResolved = 0;
+                int doorsFullyResolved = 0;
+                int doorsNoticesOnly = 0;
+                int doorsErrorFreeCount = 0;
+
+                for (final d in _doors) {
+                  final s = _errorSummaries[d.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
+                  totalJobDefects += s.defectCount;
+                  resolvedJobDefects += s.resolvedDefects;
+                  totalJobNotices += s.noticeCount;
+
+                  if (s.openDefects > 0 && s.resolvedDefects == 0) {
+                    doorsWithOpenDefects++;
+                  } else if (s.openDefects > 0 && s.resolvedDefects > 0) {
+                    doorsPartiallyResolved++;
+                  } else if (s.openDefects == 0 && s.resolvedDefects > 0) {
+                    doorsFullyResolved++;
+                  } else if (s.defectCount == 0 && s.noticeCount > 0) {
+                    doorsNoticesOnly++;
+                  } else if (_isDoorInspected(d) && s.totalErrors == 0) {
+                    doorsErrorFreeCount++;
+                  }
+                }
+
+                final openJobDefects = totalJobDefects - resolvedJobDefects;
                 final progress = totalCount > 0 ? (inspectedCount / totalCount) : 0.0;
 
                 return Container(
@@ -878,6 +1020,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 1. Door Progress Header
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -890,7 +1033,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Prüffortschritt: $inspectedCount von $totalCount geprüft (${(progress * 100).toInt()}%)',
+                                'Prüffortschritt: $inspectedCount von $totalCount Türen geprüft (${(progress * 100).toInt()}%)',
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                               ),
                             ],
@@ -905,7 +1048,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                               ),
                             ),
                             child: Text(
-                              pendingCount == 0 ? 'Komplett' : '$pendingCount offen',
+                              pendingCount == 0 ? 'Alle geprüft' : '$pendingCount ungeprüft',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -915,7 +1058,8 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
+                      // Progress Bar
                       ClipRRect(
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
@@ -928,7 +1072,94 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      // Filter Chips
+
+                      // 2. Global Error & Notice Counters (Auftrags-Gesamtbilanz)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blueGrey.shade200),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.build_circle_outlined, size: 13, color: Colors.blueGrey.shade800),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Mängel gesamt: $totalJobDefects',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle, size: 13, color: Colors.green.shade800),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Behoben: $resolvedJobDefects',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.green.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: openJobDefects > 0 ? Colors.red.shade50 : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: openJobDefects > 0 ? Colors.red.shade300 : Colors.grey.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline, size: 13, color: openJobDefects > 0 ? Colors.red.shade800 : Colors.grey.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Offen: $openJobDefects',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: openJobDefects > 0 ? Colors.red.shade900 : Colors.grey.shade800),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber.shade400),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.info_outline, size: 13, color: Colors.amber.shade900),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Hinweise: $totalJobNotices',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 3. Mutually Exclusive Filter Chips
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -956,26 +1187,42 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                             ),
                             const SizedBox(width: 6),
                             ChoiceChip(
-                              avatar: Icon(Icons.error, size: 14, color: _filter == InspectionDoorFilter.withErrors ? Colors.white : Colors.red.shade700),
-                              label: Text('Mit Mängeln ($doorsWithErrorsCount)'),
-                              selected: _filter == InspectionDoorFilter.withErrors,
+                              avatar: Icon(Icons.error, size: 14, color: _filter == InspectionDoorFilter.openDefects ? Colors.white : Colors.red.shade700),
+                              label: Text('Offene Mängel ($doorsWithOpenDefects)'),
+                              selected: _filter == InspectionDoorFilter.openDefects,
                               selectedColor: Colors.red.shade700,
-                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.withErrors),
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.openDefects),
                             ),
                             const SizedBox(width: 6),
                             ChoiceChip(
-                              avatar: Icon(Icons.task_alt, size: 14, color: _filter == InspectionDoorFilter.resolved ? Colors.white : Colors.amber.shade900),
-                              label: Text('Gelöst ($doorsResolvedCount)'),
-                              selected: _filter == InspectionDoorFilter.resolved,
+                              avatar: Icon(Icons.published_with_changes, size: 14, color: _filter == InspectionDoorFilter.partiallyResolved ? Colors.white : Colors.orange.shade800),
+                              label: Text('Teil-behoben ($doorsPartiallyResolved)'),
+                              selected: _filter == InspectionDoorFilter.partiallyResolved,
+                              selectedColor: Colors.orange.shade800,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.partiallyResolved),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.task_alt, size: 14, color: _filter == InspectionDoorFilter.fullyResolved ? Colors.white : Colors.teal.shade700),
+                              label: Text('Behoben ($doorsFullyResolved)'),
+                              selected: _filter == InspectionDoorFilter.fullyResolved,
+                              selectedColor: Colors.teal.shade700,
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.fullyResolved),
+                            ),
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              avatar: Icon(Icons.info_outline, size: 14, color: _filter == InspectionDoorFilter.noticesOnly ? Colors.white : Colors.amber.shade900),
+                              label: Text('Nur Hinweise ($doorsNoticesOnly)'),
+                              selected: _filter == InspectionDoorFilter.noticesOnly,
                               selectedColor: Colors.amber.shade900,
-                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.resolved),
+                              onSelected: (_) => setState(() => _filter = InspectionDoorFilter.noticesOnly),
                             ),
                             const SizedBox(width: 6),
                             ChoiceChip(
-                              avatar: Icon(Icons.check_circle_outline, size: 14, color: _filter == InspectionDoorFilter.errorFree ? Colors.white : Colors.teal.shade700),
+                              avatar: Icon(Icons.check_circle_outline, size: 14, color: _filter == InspectionDoorFilter.errorFree ? Colors.white : Colors.green.shade800),
                               label: Text('Mängelfrei ($doorsErrorFreeCount)'),
                               selected: _filter == InspectionDoorFilter.errorFree,
-                              selectedColor: Colors.teal.shade700,
+                              selectedColor: Colors.green.shade800,
                               onSelected: (_) => setState(() => _filter = InspectionDoorFilter.errorFree),
                             ),
                           ],
@@ -993,34 +1240,31 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                 ? const Center(child: CircularProgressIndicator())
                 : Builder(
                     builder: (context) {
-                      final displayDoors = widget.isManagerMode
-                          ? _doors
-                          : _doors.where((door) {
-                              if (_filter == InspectionDoorFilter.inspected && !_isDoorInspected(door)) {
-                                return false;
-                              }
-                              if (_filter == InspectionDoorFilter.pending && _isDoorInspected(door)) {
-                                return false;
-                              }
-                              if (_filter == InspectionDoorFilter.withErrors) {
-                                final summary = _errorSummaries[door.id];
-                                if (summary == null || summary.openErrors == 0) {
-                                  return false;
-                                }
-                              }
-                              if (_filter == InspectionDoorFilter.resolved) {
-                                final summary = _errorSummaries[door.id];
-                                if (summary == null || summary.resolvedErrors == 0) {
-                                  return false;
-                                }
-                              }
-                              if (_filter == InspectionDoorFilter.errorFree) {
-                                final summary = _errorSummaries[door.id];
-                                if (summary != null && summary.totalErrors > 0) return false;
-                                if (!_isDoorInspected(door)) return false;
-                              }
-                              return true;
-                            }).toList();
+                      final displayDoors = _doors.where((door) {
+                        if (_filter == InspectionDoorFilter.inspected && !_isDoorInspected(door)) {
+                          return false;
+                        }
+                        if (_filter == InspectionDoorFilter.pending && _isDoorInspected(door)) {
+                          return false;
+                        }
+                        final summary = _errorSummaries[door.id] ?? const DoorErrorSummary(totalErrors: 0, openErrors: 0, resolvedErrors: 0);
+                        if (_filter == InspectionDoorFilter.openDefects) {
+                          if (!(summary.openDefects > 0 && summary.resolvedDefects == 0)) return false;
+                        }
+                        if (_filter == InspectionDoorFilter.partiallyResolved) {
+                          if (!(summary.openDefects > 0 && summary.resolvedDefects > 0)) return false;
+                        }
+                        if (_filter == InspectionDoorFilter.fullyResolved) {
+                          if (!(summary.openDefects == 0 && summary.resolvedDefects > 0)) return false;
+                        }
+                        if (_filter == InspectionDoorFilter.noticesOnly) {
+                          if (!(summary.defectCount == 0 && summary.noticeCount > 0)) return false;
+                        }
+                        if (_filter == InspectionDoorFilter.errorFree) {
+                          if (!_isDoorInspected(door) || summary.totalErrors > 0) return false;
+                        }
+                        return true;
+                      }).toList();
 
                       if (displayDoors.isEmpty) {
                         return Center(

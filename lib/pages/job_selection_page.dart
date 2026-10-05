@@ -13,6 +13,7 @@ import '../widgets/batch_migration_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import '../utils/inspection_year_utils.dart';
 import '../utils/file_export_helper.dart';
+import '../services/photo_export_service.dart';
 import 'inspection_doors_page.dart';
 import 'manager_dashboard.dart';
 import 'package:http/http.dart' as http;
@@ -418,6 +419,44 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     }
   }
 
+  Future<void> _handleExportSelectedPhotos() async {
+    if (_selectedInspectionIds.isEmpty) return;
+    int totalExported = 0;
+    String lastOutputDir = '';
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Fotos werden exportiert...')),
+      );
+      for (final id in _selectedInspectionIds) {
+        final res = await PhotoExportService.exportInspectionPhotos(
+          inspectionId: id,
+          isManagerMode: true,
+        );
+        totalExported += res.totalPhotos;
+        lastOutputDir = res.outputDirectory;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              totalExported > 0
+                  ? '$totalExported Foto(s) exportiert nach:\n$lastOutputDir'
+                  : 'Keine Fotos in den ausgewählten Aufträgen vorhanden.',
+            ),
+            backgroundColor: totalExported > 0 ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Foto-Export: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   /// Handles the import of an inspector's result package into the Main DB
   Future<void> _handleImportResultPackage() async {
     await BatchMigrationDialog.show(context, onMigrationCompleted: _refreshInspections);
@@ -675,6 +714,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
               onPressed: () => _handleDeleteInspections(_selectedInspectionIds.toList()),
               icon: const Icon(Icons.delete_outline, color: Colors.red),
               tooltip: 'Auswahl löschen',
+            ),
+            const VerticalDivider(),
+            TextButton.icon(
+              onPressed: () => _handleExportSelectedPhotos(),
+              icon: const Icon(Icons.photo_library_outlined, color: Colors.purple),
+              label: const Text('Fotos exportieren', style: TextStyle(color: Colors.purple)),
             ),
             const VerticalDivider(),
             TextButton.icon(

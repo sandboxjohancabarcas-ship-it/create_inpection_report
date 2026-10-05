@@ -148,5 +148,46 @@ void main() {
 
       await db.close();
     });
+
+    test('Empty door notes remain blank and populated notes are preserved', () {
+      final baseDoor = Door(
+        id: 1,
+        pos: 1,
+        doorNumber: '101',
+        floor: 'EG',
+        roomNumber: '0.01',
+        roomDesignation: 'Büro',
+        doorType: 'T30',
+        wingCount: 1,
+        material: 'Stahl',
+        manufacturer: 'Hörmann',
+        dinConfiguration: 'DIN L',
+        closerType: 'TS93',
+        closingSequenceSystem: 'None',
+        lockDimensions: 'PZ 92',
+        closerOnHingeSide: true,
+        closerOnOppositeSide: false,
+        escapeDoorControl: 'Nein',
+        accessControl: 'Nein',
+        escapeRouteSituation: false,
+        escapeRouteSignage: false,
+        blindCylinder: false,
+        pzCylinder: true,
+        fittingType: 'Drücker',
+        panicFunction: 'Nein',
+        escapeDirectionRespected: true,
+        fullPanicStandWing: false,
+        doorFunctionOK: true,
+      );
+
+      final doorWithoutNotes = baseDoor.copyWith(notes: '');
+      final noteForBlank = doorWithoutNotes.notes.trim();
+      expect(noteForBlank, isEmpty);
+      expect(noteForBlank, isNot(contains('Import')));
+
+      final doorWithNotes = baseDoor.copyWith(notes: 'Schloss klemmt');
+      final noteForPopulated = doorWithNotes.notes.trim();
+      expect(noteForPopulated, equals('Schloss klemmt'));
+    });
   });
 }

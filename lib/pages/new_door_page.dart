@@ -759,9 +759,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     final Map<String, dynamic> inspectionData = {
       'clientName': customerNameController.text,
       'objectAddress': customerAddressController.text,
-      'date': inspectionDate.toIso8601String(),
+      'date': inspectionDate.toIso8601String().substring(0, 10),
       'orderType': orderType,
-      'repairDate': repairDate?.toIso8601String(),
+      'repairDate': repairDate?.toIso8601String().substring(0, 10),
       'contactPerson': contactPersonController.text,
       'inspectorName': inspectorNameController.text,
       'jobNumber': jobNumberController.text,
@@ -1009,7 +1009,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                         final Map<String, dynamic> inspectionData = {
                           'clientName': customerNameController.text,
                           'objectAddress': customerAddressController.text,
-                          'date': inspectionDate.toIso8601String(),
+                          'date': inspectionDate.toIso8601String().substring(0, 10),
                           'contactPerson': contactPersonController.text,
                           'inspectorName': inspectorNameController.text,
                           'jobNumber': jobNumberController.text,

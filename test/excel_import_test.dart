@@ -430,7 +430,10 @@ void main() {
     });
 
     test('Importing Hammerbrookstraße file provides clear discrepancy explanation for Schlossabmessungen', () async {
-      final file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße 63-65, Türliste Mängelbeseitigung.xlsm');
+      var file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße 63-65, Türliste Mängelbeseitigung.xlsm');
+      if (!file.existsSync()) {
+        file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße_63-65_20097_Hamburg.xlsm');
+      }
       if (!file.existsSync()) {
         fail('Test file not found: ${file.path}');
       }

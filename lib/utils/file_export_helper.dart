@@ -226,32 +226,35 @@ class FileExportHelper {
               const SizedBox(height: 6),
               Container(
                 constraints: const BoxConstraints(maxHeight: 200),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
+                child: Material(
                   color: Colors.grey.shade50,
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: unprocessed.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = unprocessed[index];
-                    final loc = [if (item['floor']!.isNotEmpty) item['floor']!, if (item['room']!.isNotEmpty) item['room']!].join(' | ');
-                    return ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.pending_actions, color: Colors.orange, size: 20),
-                      title: Text(
-                        'Tür ${item['doorNumber']}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                      subtitle: Text(
-                        [if (loc.isNotEmpty) loc, if (item['alias']!.isNotEmpty) 'Alias: ${item['alias']}'].join(' • '),
-                        style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
-                      ),
-                    );
-                  },
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: unprocessed.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = unprocessed[index];
+                      final loc = [if (item['floor']!.isNotEmpty) item['floor']!, if (item['room']!.isNotEmpty) item['room']!].join(' | ');
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.pending_actions, color: Colors.orange, size: 20),
+                        title: Text(
+                          'Tür ${item['doorNumber']}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        subtitle: Text(
+                          [if (loc.isNotEmpty) loc, if (item['alias']!.isNotEmpty) 'Alias: ${item['alias']}'].join(' • '),
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
               const SizedBox(height: 14),

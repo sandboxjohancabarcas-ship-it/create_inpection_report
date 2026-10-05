@@ -766,7 +766,7 @@ class ExcelDataImporter {
 
         final doorFunctionOK = door.doorFunctionOK;
         final row = sheetDoorRows[di] ?? [];
-        final doorNote = door.notes.isNotEmpty ? door.notes : 'Importiert aus Excel';
+        final doorNote = door.notes.trim();
 
         final junctionId = await DatabaseService.insertInspectionDoor({
           'inspectionId': inspectionId,

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:wartungstool/models/models.dart';
@@ -446,6 +447,17 @@ class DatabaseService {
     return id;
   }
 
+  static Future<Door?> getDoorById(int id) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'doors',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Door.fromMap(maps.first) : null;
+  }
+
   static Future<Door?> getDoorByAlias(String alias) async {
     final db = await getDb();
     final clean = alias.trim();
@@ -654,10 +666,29 @@ class DatabaseService {
     );
   }
 
+  static String _normalizeDate(dynamic val) {
+    if (val == null) return '';
+    final str = val.toString().trim();
+    if (str.isEmpty) return '';
+    if (str.contains('T')) {
+      return str.split('T')[0];
+    }
+    if (str.length >= 10 && RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(str)) {
+      return str.substring(0, 10);
+    }
+    return str;
+  }
+
   static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final data = Map<String, dynamic>.from(inspectionData);
     data.remove('doorCount');
+    if (data.containsKey('date') && data['date'] != null) {
+      data['date'] = _normalizeDate(data['date']);
+    }
+    if (data.containsKey('repairDate') && data['repairDate'] != null) {
+      data['repairDate'] = _normalizeDate(data['repairDate']);
+    }
     return await db.insert(
       'inspections',
       data,
@@ -879,7 +910,7 @@ class DatabaseService {
       'objectAddress': resolvedAddr,
       'clientName': resolvedClient,
       'jobNumber': cleanJob,
-      'date': (orderType == 'Wartung' || repairDate == null) ? date.toIso8601String() : date.toIso8601String(),
+      'date': _normalizeDate(date),
       'contactPerson': contactPerson.trim().isNotEmpty
           ? contactPerson.trim()
           : (baseInspection != null ? (baseInspection['contactPerson']?.toString() ?? '') : ''),
@@ -887,7 +918,7 @@ class DatabaseService {
           ? inspectorName.trim()
           : (baseInspection != null ? (baseInspection['inspectorName']?.toString() ?? '') : ''),
       'orderType': orderType,
-      'repairDate': orderType == 'Reparatur' && repairDate != null ? repairDate.toIso8601String() : null,
+      'repairDate': orderType == 'Reparatur' && repairDate != null ? _normalizeDate(repairDate) : null,
       'isLocked': 0,
     };
 
@@ -1131,9 +1162,17 @@ class DatabaseService {
     final String oldClient = existingRows.isNotEmpty ? (existingRows.first['clientName'] as String? ?? '') : '';
     final String oldAddress = existingRows.isNotEmpty ? (existingRows.first['objectAddress'] as String? ?? '') : '';
 
+    final data = Map<String, dynamic>.from(inspectionData);
+    if (data.containsKey('date') && data['date'] != null) {
+      data['date'] = _normalizeDate(data['date']);
+    }
+    if (data.containsKey('repairDate') && data['repairDate'] != null) {
+      data['repairDate'] = _normalizeDate(data['repairDate']);
+    }
+
     await db.update(
       'inspections',
-      inspectionData,
+      data,
       where: 'inspectionId = ?',
       whereArgs: [id],
     );
@@ -1479,9 +1518,58 @@ class DatabaseService {
         id.doorId,
         COUNT(ide.id) AS total_errors,
         SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_errors,
-        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors
+        SUM(CASE WHEN ide.id IS NOT NULL AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS notice_count,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_notices,
+        SUM(CASE WHEN ide.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_notices,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS defect_count,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_defects,
+        SUM(CASE WHEN ide.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, ide.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, ide.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(ide.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_defects
       FROM inspection_doors id
       LEFT JOIN inspection_door_errors ide ON id.id = ide.inspectionDoorId
+      LEFT JOIN error_catalog ec ON (ide.errorId IS NOT NULL AND ide.errorId = ec.errorId) OR (ide.errorId IS NULL AND ide.errorCode != '' AND ide.errorCode = ec.code)
       WHERE id.inspectionId = ?
       GROUP BY id.doorId
     ''', [inspectionId]);
@@ -1493,10 +1581,22 @@ class DatabaseService {
         final total = (row['total_errors'] as num?)?.toInt() ?? 0;
         final open = (row['open_errors'] as num?)?.toInt() ?? 0;
         final resolved = (row['resolved_errors'] as num?)?.toInt() ?? 0;
+        final defects = (row['defect_count'] as num?)?.toInt() ?? 0;
+        final openDefects = (row['open_defects'] as num?)?.toInt() ?? 0;
+        final resolvedDefects = (row['resolved_defects'] as num?)?.toInt() ?? 0;
+        final notices = (row['notice_count'] as num?)?.toInt() ?? 0;
+        final openNotices = (row['open_notices'] as num?)?.toInt() ?? 0;
+        final resolvedNotices = (row['resolved_notices'] as num?)?.toInt() ?? 0;
         map[doorId] = DoorErrorSummary(
           totalErrors: total,
           openErrors: open,
           resolvedErrors: resolved,
+          defectCount: defects,
+          openDefects: openDefects,
+          resolvedDefects: resolvedDefects,
+          noticeCount: notices,
+          openNotices: openNotices,
+          resolvedNotices: resolvedNotices,
         );
       }
     }
@@ -2878,7 +2978,7 @@ class DatabaseService {
 
   static Future<void> applyConflictResolutions(List<ConflictResolution> resolutions) async {
     final db = await getDb();
-    return await db.transaction((txn) async {
+    await db.transaction((txn) async {
       for (final resolution in resolutions) {
         switch (resolution.action) {
           case ResolutionAction.keepExisting:
@@ -2906,6 +3006,47 @@ class DatabaseService {
         }
       }
     });
+
+    // In debug mode, persist changes to dynamic temp error catalog without modifying default repository files
+    await saveDynamicErrorCatalog();
+  }
+
+  /// Exports current error catalog to dynamic temp file (in debug mode) or external JSON file on disk.
+  /// Never modifies git-tracked default files in the project root.
+  static Future<void> saveDynamicErrorCatalog() async {
+    try {
+      final allErrors = await getAllErrorCatalog();
+      final map = <String, dynamic>{};
+      for (final e in allErrors) {
+        map[e.code] = {
+          'description': e.description,
+          'category': e.category,
+          'severity': e.severity,
+          'recommendation': e.recommendation,
+          'normReference': e.normReference,
+          'status': e.status,
+        };
+      }
+      final dbPath = await getDatabasesPath();
+      final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
+      if (!await externalDir.exists()) {
+        await externalDir.create(recursive: true);
+      }
+      final encoder = const JsonEncoder.withIndent('  ');
+      final content = encoder.convert(map);
+
+      if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+        final tempFile = File(join(externalDir.path, 'temp_error_catalog.json'));
+        await tempFile.writeAsString(content);
+        print('[Catalog] (Debug) Saved dynamic error catalog to ${tempFile.path}');
+      } else if (!kDebugMode) {
+        final externalFile = File(join(externalDir.path, 'error_catalog.json'));
+        await externalFile.writeAsString(content);
+        print('[Catalog] Saved external error catalog to ${externalFile.path}');
+      }
+    } catch (e) {
+      print('[Catalog] Error saving dynamic error catalog: $e');
+    }
   }
 
   /// Retrieves or creates a legacy defect entry under category 'Altdaten'
@@ -3166,16 +3307,33 @@ class DatabaseService {
     }
 
     final dbPath = await getDatabasesPath();
-    final jsonFile = File(join(dirname(dbPath), 'WartungsTool', 'error_catalog.json'));
+    final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
     List<ErrorCatalog> errors = [];
 
-    if (await jsonFile.exists()) {
-      print('[Catalog] Found JSON at ${jsonFile.path}. Importing...');
-      try {
-        final content = await jsonFile.readAsString();
-        errors = _parseJsonCatalog(content);
-      } catch (e) {
-        print('[Catalog] JSON Read/Parse Error: $e');
+    // In debug mode, check for dynamic temp error catalog first (outside of test environments)
+    if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      final tempFile = File(join(externalDir.path, 'temp_error_catalog.json'));
+      if (await tempFile.exists()) {
+        print('[Catalog] (Debug) Found dynamic temp JSON at ${tempFile.path}. Importing...');
+        try {
+          final content = await tempFile.readAsString();
+          errors = _parseJsonCatalog(content);
+        } catch (e) {
+          print('[Catalog] Dynamic Temp Catalog JSON Read/Parse Error: $e');
+        }
+      }
+    }
+
+    if (errors.isEmpty) {
+      final jsonFile = File(join(externalDir.path, 'error_catalog.json'));
+      if (await jsonFile.exists()) {
+        print('[Catalog] Found JSON at ${jsonFile.path}. Importing...');
+        try {
+          final content = await jsonFile.readAsString();
+          errors = _parseJsonCatalog(content);
+        } catch (e) {
+          print('[Catalog] JSON Read/Parse Error: $e');
+        }
       }
     }
 
