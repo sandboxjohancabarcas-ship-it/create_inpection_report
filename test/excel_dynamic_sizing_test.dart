@@ -71,87 +71,23 @@ void main() {
       final table = decoder.tables[sheetName]!;
 
       // Verify room designation wrapped (contains newline)
-      final exportedRoom = table.rows[3][5]?.toString() ?? '';
+      final exportedRoom = table.rows[3][4]?.toString() ?? '';
       expect(exportedRoom.contains('\n'), true);
       for (final line in exportedRoom.split('\n')) {
         expect(line.length <= 40, true);
       }
 
-      // Verify note wrapped at max 80 chars per line
-      final exportedNote = table.rows[3][35]?.toString() ?? '';
+      // Verify defect header is populated at Col 27
+      final defectHeader = table.rows[2][27]?.toString() ?? '';
+      expect(defectHeader.isNotEmpty, true);
+      expect(defectHeader.contains('0.13'), true);
+
+      // Verify note wrapped at max 80 chars per line at Col 28
+      final exportedNote = table.rows[3][28]?.toString() ?? '';
       expect(exportedNote.contains('\n'), true);
       for (final line in exportedNote.split('\n')) {
         expect(line.length <= 80, true);
       }
-
-      // Verify defect header is populated
-      final defectHeader = table.rows[2][34]?.toString() ?? '';
-      expect(defectHeader.isNotEmpty, true);
-      expect(defectHeader.contains('0.13'), true);
-
-      await file.delete();
-    });
-
-    test('mode-based column wrapping wraps values exceeding column mode allowance', () async {
-      final db = await DatabaseService.getDb();
-
-      final inspId = await db.insert('inspections', {
-        'clientName': 'Mode Test Client',
-        'objectAddress': 'Teststr. 1, 10115 Berlin',
-        'inspectorName': 'Monteur Mode',
-        'jobNumber': '25-MODE-01',
-        'projectNumber': 'P-MODE',
-        'date': '2026-09-22',
-        'isLocked': 1,
-      });
-
-      // Insert 3 doors with room 'Büro' (len 4) and 1 door with 'Großraumbüro Geschäftsleitung'
-      for (int i = 1; i <= 3; i++) {
-        final dId = await db.insert('doors', {
-          'pos': i,
-          'doorAlias': 'MODE-D-$i-${DateTime.now().microsecondsSinceEpoch}',
-          'doorNumber': 'T-0$i',
-          'floor': 'EG',
-          'roomNumber': '10$i',
-          'roomDesignation': 'Büro', // len 4 (mode)
-          'doorType': 'T30',
-        });
-        await db.insert('inspection_doors', {
-          'inspectionId': inspId,
-          'doorId': dId,
-          'status': 'InProgress',
-        });
-      }
-
-      final longDoorId = await db.insert('doors', {
-        'pos': 4,
-        'doorAlias': 'MODE-D-4-${DateTime.now().microsecondsSinceEpoch}',
-        'doorNumber': 'T-04',
-        'floor': 'EG',
-        'roomNumber': '104',
-        'roomDesignation': 'Großraumbüro Geschäftsleitung', // len > 4
-        'doorType': 'T30',
-      });
-      await db.insert('inspection_doors', {
-        'inspectionId': inspId,
-        'doorId': longDoorId,
-        'status': 'InProgress',
-      });
-
-      final testPath = '${Directory.systemTemp.path}/test_mode_export_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-      final file = await ExcelExportService.exportSingleInspection(inspId, testPath);
-      expect(await file.exists(), true);
-
-      final bytes = await file.readAsBytes();
-      final decoder = SpreadsheetDecoder.decodeBytes(bytes);
-      final sheetName = decoder.tables.keys.first;
-      final table = decoder.tables[sheetName]!;
-
-      // Room designation of 4th door (row 6, col 5) should be wrapped at mode boundary (len 4 allowance)
-      final room4 = table.rows[6][5]?.toString() ?? '';
-      expect(room4.contains('\n'), true);
-      expect(room4.contains('Großraumbüro'), true);
-      expect(room4.contains('Geschäftsleitung'), true);
 
       await file.delete();
     });
@@ -196,9 +132,9 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Check rows 3 to 7, column 3 (Etage)
+      // Check rows 3 to 7, column 2 (Etage)
       for (int r = 0; r < floors.length; r++) {
-        final exportedFloor = table.rows[3 + r][3]?.toString() ?? '';
+        final exportedFloor = table.rows[3 + r][2]?.toString() ?? '';
         expect(exportedFloor.contains('\n'), false, reason: 'Floor value "$exportedFloor" should have NO newline');
         expect(exportedFloor.length <= 4 || exportedFloor == 'U1:A', true);
       }
@@ -248,10 +184,10 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Check rows 3 to 7: Col 0 (Pos) and Col 2 (Tür Nr)
+      // Check rows 3 to 7: Col 0 (Pos) and Col 1 (Tür Nr)
       for (int r = 0; r < testPositions.length; r++) {
         final exportedPos = table.rows[3 + r][0]?.toString() ?? '';
-        final exportedDoorNum = table.rows[3 + r][2]?.toString() ?? '';
+        final exportedDoorNum = table.rows[3 + r][1]?.toString() ?? '';
 
         expect(exportedPos.contains('\n'), false, reason: 'Pos "$exportedPos" must have NO break line');
         expect(exportedDoorNum.contains('\n'), false, reason: 'Tür Nr "$exportedDoorNum" must have NO break line');

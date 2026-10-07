@@ -9,28 +9,28 @@ void main() {
       expect(AppVersionService.fullVersion, equals('1.0.0+1'));
     });
 
-    test('buildDate is set to 2026-10-05', () {
-      expect(AppVersionService.buildDate, equals('2026-10-05'));
+    test('buildDate is set to 2026-10-06', () {
+      expect(AppVersionService.buildDate, equals('2026-10-06'));
     });
 
     test('Manager mode returns Windows build information', () {
       final info = AppVersionService.getFullVersionInfo(isManager: true);
       expect(info, contains('Windows'));
       expect(info, contains('v1.0.0+1'));
-      expect(info, contains('2026-10-05'));
+      expect(info, contains('2026-10-06'));
     });
 
     test('Techniker/Inspector mode returns Android build information', () {
       final info = AppVersionService.getFullVersionInfo(isManager: false);
       expect(info, contains('v1.0.0+1'));
-      expect(info, contains('2026-10-05'));
+      expect(info, contains('2026-10-06'));
     });
 
     test('getCompactVersionInfo returns compact version string', () {
       final compactManager = AppVersionService.getCompactVersionInfo(isManager: true);
       expect(compactManager, contains('Windows'));
       expect(compactManager, contains('v1.0.0+1'));
-      expect(compactManager, contains('2026-10-05'));
+      expect(compactManager, contains('2026-10-06'));
     });
   });
 }
