@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
@@ -294,8 +296,8 @@ class ExcelExportService {
 
     final fontBlack = ExcelColor.fromHexString('#000000');
     final fillWhite = ExcelColor.fromHexString('#FFFFFF');
-    final fillSoftGreen = ExcelColor.fromHexString('#EBF1DE');
-    final fillMediumGreen = ExcelColor.fromHexString('#C4D79B');
+    final fillSoftBlue = ExcelColor.fromHexString('#DCE6F1');
+    final fillMediumBlue = ExcelColor.fromHexString('#8EA9DB');
     final fillYellow = ExcelColor.fromHexString('#FFFF00');
 
     const int fixedColsCount = 28;
@@ -554,11 +556,13 @@ class ExcelExportService {
     ];
 
     for (int col = 0; col < fixedHeaders.length; col++) {
-      ExcelColor? bg;
-      if (col >= 5 && col <= 10) {
-        bg = fillWhite; // Türbeschreibung
-      } else if (col >= 19 && col <= 27) {
-        bg = fillSoftGreen; // Kontrolle Panikfunktion & Okay
+      ExcelColor bg = fillWhite;
+      // Light-light blue highlight for alternating columns T (19), V (21), X (23), Z (25), and AB (27).
+      // Columns U (20), W (22), Y (24), AA (26) and A..S are white.
+      if (col == 19 || col == 21 || col == 23 || col == 25 || col == 27) {
+        bg = fillSoftBlue;
+      } else {
+        bg = fillWhite;
       }
 
       _setCell(
@@ -606,7 +610,7 @@ class ExcelExportService {
       trackWidth: false,
     );
 
-    // Accent column indices matching template soft-green highlight columns
+    // Accent column indices matching template soft-blue highlight columns
     final accentCols = <int>{14, 16, 19, 21, 23, 25};
 
     // ── ROW 3+: Data Rows ────────────────────────────────────────────────
@@ -660,8 +664,8 @@ class ExcelExportService {
         _wrapText(_cleanText(d['manufacturer']), 30),
         _cleanText(d['dinConfiguration']),
         _wrapText(_cleanText(d['closerType']), 25),
-        _wrapText(_cleanText(d['closingSequenceSystem']), 25),
-        _cleanText(d['lockDimensions']),
+        _wrapText(_cleanText(d['closingSequenceSystem']), 14), // Col M: snug wrap
+        _wrapText(_cleanText(d['lockDimensions']), 12),         // Col N: snug wrap
         _xStr(d['closerOnHingeSide']),
         _xStr(d['closerOnOppositeSide']),
         _formatLintelHeight(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m'], d['lintelHeightInsideValue'] ?? d['lintelHeightOutsideValue']),
@@ -683,11 +687,11 @@ class ExcelExportService {
       for (int c = 0; c < doorValues.length; c++) {
         ExcelColor cellBg = fillWhite;
         if (accentCols.contains(c)) {
-          cellBg = fillSoftGreen;
+          cellBg = fillSoftBlue;
         } else if (c == 27) {
-          // Okay column: medium green background for 'J', soft green for 'N'
+          // Okay column: light blue background for 'J', light-light blue for 'N'
           final isOk = (doorValues[c] == 'J');
-          cellBg = isOk ? fillMediumGreen : fillSoftGreen;
+          cellBg = isOk ? fillMediumBlue : fillSoftBlue;
         }
 
         final cellStyle = CellStyle(
@@ -779,12 +783,24 @@ class ExcelExportService {
 
     // ── BOTTOM SUMMARY ROW: Total Sums ───────────────────────────────────
     for (int c = 0; c < totalCols; c++) {
+      ExcelColor bg = fillWhite;
+      if (c >= 24 && c <= 27) {
+        // Columns Y (24), Z (25), AA (26), AB (27) are light-light blue
+        bg = fillSoftBlue;
+      } else if (c >= fixedColsCount && c < notesColIdx) {
+        // Dynamic inserted columns of errors are light-light blue
+        bg = fillSoftBlue;
+      } else {
+        // Columns A..X (0..23) and Anmerkung (notesColIdx) are white
+        bg = fillWhite;
+      }
+
       final summaryCellStyle = CellStyle(
         bold: true,
         fontSize: 10,
         fontColorHex: fontBlack,
-        backgroundColorHex: fillSoftGreen,
-        horizontalAlign: (c == 0) ? HorizontalAlign.Right : HorizontalAlign.Center,
+        backgroundColorHex: bg,
+        horizontalAlign: (c >= 24 && c <= 27) ? HorizontalAlign.Center : ((c == 0) ? HorizontalAlign.Right : HorizontalAlign.Center),
         verticalAlign: VerticalAlign.Center,
         topBorder: borderThick,
         bottomBorder: borderThick,
@@ -803,34 +819,49 @@ class ExcelExportService {
       );
     }
 
-    final summaryLabelStyle = CellStyle(
+    // Merge A to X (columns 0 to 23) in white
+    final emptySpanStyle = CellStyle(
       bold: true,
       fontSize: 10,
       fontColorHex: fontBlack,
-      backgroundColorHex: fillSoftGreen,
-      horizontalAlign: HorizontalAlign.Right,
+      backgroundColorHex: fillWhite,
+      horizontalAlign: HorizontalAlign.Center,
       verticalAlign: VerticalAlign.Center,
       topBorder: borderThick,
       bottomBorder: borderThick,
       leftBorder: borderThick,
       rightBorder: borderThick,
     );
-
-    _setCell(
-      sheet,
-      colWidths,
-      rowLineCounts,
-      col: 0,
-      row: rowIndex,
-      text: 'Summe für Mängelbeseitigung',
-      style: summaryLabelStyle,
-      trackWidth: false,
-    );
-
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex),
-      CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 23, rowIndex: rowIndex),
+      customValue: TextCellValue(''),
     );
+    for (int c = 0; c <= 23; c++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).cellStyle = emptySpanStyle;
+    }
+
+    // Merge Y to AB (columns 24 to 27) with light-light blue background and label "Summe für Mängelbeseitigung"
+    final blueSpanStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: fontBlack,
+      backgroundColorHex: fillSoftBlue,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 24, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: rowIndex),
+      customValue: TextCellValue('Summe für Mängelbeseitigung'),
+    );
+    for (int c = 24; c <= 27; c++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).cellStyle = blueSpanStyle;
+    }
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final key = sortedDefectKeys[i];
@@ -840,7 +871,7 @@ class ExcelExportService {
         bold: true,
         fontSize: 10,
         fontColorHex: fontBlack,
-        backgroundColorHex: fillSoftGreen,
+        backgroundColorHex: fillSoftBlue,
         horizontalAlign: HorizontalAlign.Center,
         verticalAlign: VerticalAlign.Center,
         topBorder: borderThick,
@@ -860,6 +891,30 @@ class ExcelExportService {
       );
     }
 
+    // Anmerkung column in summary row (white colored)
+    final noteSummaryStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: fontBlack,
+      backgroundColorHex: fillWhite,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
+    _setCell(
+      sheet,
+      colWidths,
+      rowLineCounts,
+      col: notesColIdx,
+      row: rowIndex,
+      text: '',
+      style: noteSummaryStyle,
+      trackWidth: false,
+    );
+
     // Apply exact template dimensions
     for (final entry in colWidths.entries) {
       sheet.setColumnWidth(entry.key, entry.value);
@@ -869,18 +924,19 @@ class ExcelExportService {
     // Row 0: 18.75pt
     // Row 1: 52.5pt
     // Row 2: 201.75pt (Header matrix)
-    // Data rows: 30.0pt (or taller for multi-line notes)
+    // Data rows: 33.0pt (or taller for multi-line values, ensuring M, N and notes are fully visible)
     sheet.setRowHeight(0, 18.75);
     sheet.setRowHeight(1, 52.50);
     sheet.setRowHeight(2, 201.75);
 
     for (int r = 3; r < rowIndex; r++) {
       final lines = rowLineCounts[r] ?? 1;
-      sheet.setRowHeight(r, max(28.0, lines * 15.0));
+      sheet.setRowHeight(r, max(33.0, lines * 17.0));
     }
     sheet.setRowHeight(rowIndex, 25.0);
 
     final file = File(outputPath);
+    await file.parent.create(recursive: true);
     final bytes = excel.save();
     if (bytes != null) {
       await file.writeAsBytes(bytes);

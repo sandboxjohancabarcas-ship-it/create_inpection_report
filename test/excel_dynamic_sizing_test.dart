@@ -193,9 +193,9 @@ void main() {
         expect(exportedDoorNum.contains('\n'), false, reason: 'Tür Nr "$exportedDoorNum" must have NO break line');
       }
 
-      // Check Summary Row (last row): Col 0 contains full summary text
+      // Check Summary Row (last row): Col 24 (Col Y) contains full summary text
       final lastRowIdx = table.rows.length - 1;
-      final summaryText = table.rows[lastRowIdx][0]?.toString() ?? '';
+      final summaryText = table.rows[lastRowIdx][24]?.toString() ?? '';
       expect(summaryText, 'Summe für Mängelbeseitigung');
       expect(summaryText.contains('\n'), false);
 

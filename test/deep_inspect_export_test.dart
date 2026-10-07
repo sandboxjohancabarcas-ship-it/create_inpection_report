@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -72,7 +73,7 @@ void main() {
       'quantity': 2,
     });
 
-    final testPath = 'scratch/test_borders_verification.xlsx';
+    final testPath = '${Directory.systemTemp.path}/test_borders_verification_${DateTime.now().microsecondsSinceEpoch}.xlsx';
     final file = await ExcelExportService.exportSingleInspection(inspId, testPath);
 
     final bytes = await file.readAsBytes();

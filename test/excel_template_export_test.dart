@@ -104,7 +104,7 @@ void main() {
       expect(table.rows[3][29]?.toString(), 'Door close speed needs adjustment'); // Notes
 
       // Row 4: Summary Row
-      expect(table.rows[4][0]?.toString(), 'Summe für Mängelbeseitigung');
+      expect(table.rows[4][24]?.toString(), 'Summe für Mängelbeseitigung');
       expect(table.rows[4][28]?.toString(), '1');
 
       // Cleanup
