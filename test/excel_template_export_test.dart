@@ -80,29 +80,32 @@ void main() {
       expect(metaText.contains('Test Client Template'), true);
 
       // Row 1: Template Categories
-      expect(table.rows[1][5]?.toString(), 'Türbeschreibung');
-      expect(table.rows[1][10]?.toString(), 'Zubehörbeschreibung');
-      expect(table.rows[1][18]?.toString(), 'Kontrolle Panikfunktion');
-      expect(table.rows[1][26]?.toString(), 'okay');
-      expect(table.rows[1][28]?.toString(), 'Anmerkung');
+      expect(table.rows[1][0]?.toString(), 'Grundinformationen');
+      expect(table.rows[1][6]?.toString(), 'Türbeschreibung');
+      expect(table.rows[1][11]?.toString(), 'Zubehörbeschreibung');
+      expect(table.rows[1][19]?.toString(), 'Kontrolle Panikfunktion');
+      expect(table.rows[1][27]?.toString(), 'okay');
+      expect(table.rows[1][29]?.toString(), 'Anmerkung');
 
       // Row 2: Column Headers
       expect(table.rows[2][0]?.toString(), 'Pos.');
-      expect(table.rows[2][1]?.toString(), 'Tür Nr.');
-      expect(table.rows[2][2]?.toString(), 'Etage');
-      expect(table.rows[2][27]?.toString(), 'E01 Schließkraft ungenügend');
-      expect(table.rows[2][28]?.toString() ?? '', '');
+      expect(table.rows[2][1]?.toString(), 'Barcode');
+      expect(table.rows[2][2]?.toString(), 'Tür Nr.');
+      expect(table.rows[2][3]?.toString(), 'Etage');
+      expect(table.rows[2][28]?.toString(), 'E01 Schließkraft ungenügend');
+      expect(table.rows[2][29]?.toString() ?? '', '');
 
       // Row 3: Data Row
       expect(table.rows[3][0]?.toString(), '1');
-      expect(table.rows[3][1]?.toString(), 'T-101');
-      expect(table.rows[3][2]?.toString(), '1.OG');
-      expect(table.rows[3][27]?.toString(), '1'); // Defect qty
-      expect(table.rows[3][28]?.toString(), 'Door close speed needs adjustment'); // Notes
+      expect(table.rows[3][1]?.toString(), uniqueAlias);
+      expect(table.rows[3][2]?.toString(), 'T-101');
+      expect(table.rows[3][3]?.toString(), '1.OG');
+      expect(table.rows[3][28]?.toString(), '1'); // Defect qty
+      expect(table.rows[3][29]?.toString(), 'Door close speed needs adjustment'); // Notes
 
       // Row 4: Summary Row
       expect(table.rows[4][0]?.toString(), 'Summe für Mängelbeseitigung');
-      expect(table.rows[4][27]?.toString(), '1');
+      expect(table.rows[4][28]?.toString(), '1');
 
       // Cleanup
       await file.delete();

@@ -206,32 +206,33 @@ class ExcelExportService {
   /// Calibrated standard column widths matching reference templates
   static const Map<int, double> _templateColWidths = {
     0: 11.44,  // Pos.
-    1: 11.44,  // Tür Nr.
-    2: 11.44,  // Etage
-    3: 11.44,  // Raum Nr.
-    4: 20.44,  // Raumbezeichnung
-    5: 11.44,  // Türtyp (T30/RS/T90/Panik P/Einbruchschutz WK/usw.)
-    6: 11.44,  // Flügelanzahl
-    7: 21.44,  // Türmaterial / Türart
-    8: 12.44,  // Türhersteller / Türsystem / Profilsystem
-    9: 11.44,  // DIN L/R / Standflügel/Gangflügel...
-    10: 14.22, // Türschließer / Automatikantrieb
-    11: 13.22, // GSR / EMF / EMR
-    12: 11.44, // Schloßmaße
-    13: 6.55,  // Türschließer auf Bandseite
-    14: 6.55,  // Türschließer auf Bandgegenseite
-    15: 6.55,  // Sturzhöhe unter 1 Meter
-    16: 11.44, // Fluchtürsteuerung / Türwächter
-    17: 11.44, // Zutrittskontrolle
-    18: 6.55,  // Fluchtwegsituation
-    19: 6.55,  // Fluchwegbeschilderung vorhanden?
-    20: 6.55,  // Blindzylinder
-    21: 6.55,  // PZ-Zylinder
-    22: 6.55,  // Garnitur D / D - K / D
-    23: 6.55,  // Panikfunktion B / E / usw.
-    24: 6.55,  // Fluchtrichtung eingehalten
-    25: 6.55,  // Vollpanik (Standflügel)
-    26: 9.11,  // Tür einschl. Komponenten in ordentlicher Funktion
+    1: 18.00,  // Barcode
+    2: 11.44,  // Tür Nr.
+    3: 11.44,  // Etage
+    4: 11.44,  // Raum Nr.
+    5: 20.44,  // Raumbezeichnung
+    6: 21.44,  // Türtyp (T30/RS/T90/Panik P/Einbruchschutz WK/usw.)
+    7: 14.22,  // Flügelanzahl
+    8: 21.44,  // Türmaterial / Türart
+    9: 13.22,  // Türhersteller / Türsystem / Profilsystem
+    10: 11.44, // DIN L/R / Standflügel/Gangflügel...
+    11: 14.22, // Türschließer / Automatikantrieb
+    12: 13.22, // GSR / EMF / EMR
+    13: 11.44, // Schloßmaße
+    14: 6.55,  // Türschließer auf Bandseite
+    15: 6.55,  // Türschließer auf Bandgegenseite
+    16: 6.55,  // Sturzhöhe unter 1 Meter
+    17: 11.44, // Fluchtürsteuerung / Türwächter
+    18: 11.44, // Zutrittskontrolle
+    19: 6.55,  // Fluchtwegsituation
+    20: 6.55,  // Fluchwegbeschilderung vorhanden?
+    21: 6.55,  // Blindzylinder
+    22: 6.55,  // PZ-Zylinder
+    23: 6.55,  // Garnitur D / D - K / D
+    24: 6.55,  // Panikfunktion B / E / usw.
+    25: 6.55,  // Fluchtrichtung eingehalten
+    26: 6.55,  // Vollpanik (Standflügel)
+    27: 9.11,  // Tür einschl. Komponenten in ordentlicher Funktion
   };
   static const double _defectColWidth = 5.78;
   static const double _notesColWidth = 52.22;
@@ -289,14 +290,33 @@ class ExcelExportService {
 
     // ── STYLING DEFINITIONS MATCHING TEMPLATES ───────────────────────────
     final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#000000'));
-    final borderMedium = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
-    final borderThick = Border(borderStyle: BorderStyle.Thick, borderColorHex: ExcelColor.fromHexString('#000000'));
+    final borderThick = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
 
     final fontBlack = ExcelColor.fromHexString('#000000');
     final fillWhite = ExcelColor.fromHexString('#FFFFFF');
     final fillSoftGreen = ExcelColor.fromHexString('#EBF1DE');
     final fillMediumGreen = ExcelColor.fromHexString('#C4D79B');
     final fillYellow = ExcelColor.fromHexString('#FFFF00');
+
+    const int fixedColsCount = 28;
+    final int totalCols = fixedColsCount + sortedDefectKeys.length + 1;
+    final int notesColIdx = fixedColsCount + sortedDefectKeys.length;
+
+    final groupDefinitions = <({int start, int end, String label})>[
+      (start: 0, end: 5, label: 'Grundinformationen'),
+      (start: 6, end: 10, label: 'Türbeschreibung'),
+      (start: 11, end: 18, label: 'Zubehörbeschreibung'),
+      (start: 19, end: 26, label: 'Kontrolle Panikfunktion'),
+      (start: 27, end: 27, label: 'okay'),
+      if (sortedDefectKeys.isNotEmpty)
+        (start: 28, end: 28 + sortedDefectKeys.length - 1, label: ''),
+      (start: notesColIdx, end: notesColIdx, label: 'Anmerkung'),
+    ];
+
+    // Helper functions to identify perimeter edges of column groups
+    // Groups: A-F (0..5), G-K (6..10), L-S (11..18), T-AA (19..26), AB (27), AC-(last error) (28..28+N-1), Anmerkung (notesColIdx)
+    bool isLeftEdge(int col) => groupDefinitions.any((g) => g.start == col);
+    bool isRightEdge(int col) => groupDefinitions.any((g) => g.end == col);
 
     // Row 0 Metadata Style
     final metaLeftStyle = CellStyle(
@@ -341,55 +361,37 @@ class ExcelExportService {
       rightBorder: borderThin,
     );
 
-    // Row 1 Group Header Style
-    final groupHeaderStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    // Row 2 Rotated Column Header Base Style
-    CellStyle makeRotatedHeaderStyle({ExcelColor? bg}) {
+    // Row 2 Rotated Column Header Base Style (Centered horizontally with 90° rotation and thick outer borders)
+    CellStyle getRotatedHeaderStyle(int col, {ExcelColor? bg}) {
       if (bg != null) {
         return CellStyle(
           fontSize: 12,
           rotation: 90,
           fontColorHex: fontBlack,
           backgroundColorHex: bg,
-          horizontalAlign: HorizontalAlign.Left,
-          verticalAlign: VerticalAlign.Bottom,
+          horizontalAlign: HorizontalAlign.Center,
           textWrapping: TextWrapping.WrapText,
-          topBorder: borderThin,
-          bottomBorder: borderThin,
-          leftBorder: borderThin,
-          rightBorder: borderThin,
+          topBorder: borderThick,
+          bottomBorder: borderThick,
+          leftBorder: isLeftEdge(col) ? borderThick : borderThin,
+          rightBorder: isRightEdge(col) ? borderThick : borderThin,
         );
       }
       return CellStyle(
         fontSize: 12,
         rotation: 90,
         fontColorHex: fontBlack,
-        horizontalAlign: HorizontalAlign.Left,
-        verticalAlign: VerticalAlign.Bottom,
+        horizontalAlign: HorizontalAlign.Center,
         textWrapping: TextWrapping.WrapText,
-        topBorder: borderThin,
-        bottomBorder: borderThin,
-        leftBorder: borderThin,
-        rightBorder: borderThin,
+        topBorder: borderThick,
+        bottomBorder: borderThick,
+        leftBorder: isLeftEdge(col) ? borderThick : borderThin,
+        rightBorder: isRightEdge(col) ? borderThick : borderThin,
       );
     }
 
     final Map<int, double> colWidths = {};
     final Map<int, int> rowLineCounts = {};
-
-    const int fixedColsCount = 27;
-    final int totalCols = fixedColsCount + sortedDefectKeys.length + 1;
-    final int notesColIdx = fixedColsCount + sortedDefectKeys.length;
 
     // Apply template column widths
     for (int c = 0; c < fixedColsCount; c++) {
@@ -426,7 +428,7 @@ class ExcelExportService {
       trackWidth: false,
     );
 
-    final int metaMergeEnd = (sortedDefectKeys.isNotEmpty) ? 17 : 25;
+    final int metaMergeEnd = (sortedDefectKeys.isNotEmpty) ? 18 : 26;
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
       CellIndex.indexByColumnRow(columnIndex: metaMergeEnd, rowIndex: 0),
@@ -438,13 +440,13 @@ class ExcelExportService {
         sheet,
         colWidths,
         rowLineCounts,
-        col: 18,
+        col: 19,
         row: 0,
         text: bannerLabel,
         style: positionBannerLabelStyle,
         trackWidth: false,
       );
-      for (int c = 19; c <= 26; c++) {
+      for (int c = 20; c <= 27; c++) {
         _setCell(
           sheet,
           colWidths,
@@ -457,8 +459,8 @@ class ExcelExportService {
         );
       }
       sheet.merge(
-        CellIndex.indexByColumnRow(columnIndex: 18, rowIndex: 0),
-        CellIndex.indexByColumnRow(columnIndex: 26, rowIndex: 0),
+        CellIndex.indexByColumnRow(columnIndex: 19, rowIndex: 0),
+        CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: 0),
       );
 
       for (int i = 0; i < sortedDefectKeys.length; i++) {
@@ -477,49 +479,52 @@ class ExcelExportService {
     }
 
     // ── ROW 1: Header Row 2 (Group Categories Matching Master Template) ──
-    for (int c = 0; c < totalCols; c++) {
-      _setCell(
-        sheet,
-        colWidths,
-        rowLineCounts,
-        col: c,
-        row: 1,
-        text: '',
-        style: groupHeaderStyle,
-        trackWidth: false,
-      );
-    }
-
-    final groupDefinitions = <({int start, int end, String label})>[
-      (start: 5, end: 9, label: 'Türbeschreibung'),
-      (start: 10, end: 17, label: 'Zubehörbeschreibung'),
-      (start: 18, end: 25, label: 'Kontrolle Panikfunktion'),
-      (start: 26, end: 26, label: 'okay'),
-      (start: notesColIdx, end: notesColIdx, label: 'Anmerkung'),
-    ];
-
     for (final group in groupDefinitions) {
-      _setCell(
-        sheet,
-        colWidths,
-        rowLineCounts,
-        col: group.start,
-        row: 1,
-        text: group.label,
-        style: groupHeaderStyle,
-        trackWidth: false,
+      final style = CellStyle(
+        bold: true,
+        fontSize: 10,
+        fontColorHex: fontBlack,
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        topBorder: borderThick,
+        bottomBorder: borderThick,
+        leftBorder: borderThick,
+        rightBorder: borderThick,
       );
+
+      for (int c = group.start; c <= group.end; c++) {
+        final isLeft = (c == group.start);
+        final text = isLeft ? group.label : ' ';
+
+        _setCell(
+          sheet,
+          colWidths,
+          rowLineCounts,
+          col: c,
+          row: 1,
+          text: text,
+          style: style,
+          trackWidth: false,
+        );
+      }
+
       if (group.end > group.start) {
         sheet.merge(
           CellIndex.indexByColumnRow(columnIndex: group.start, rowIndex: 1),
           CellIndex.indexByColumnRow(columnIndex: group.end, rowIndex: 1),
+          customValue: TextCellValue(group.label),
         );
+      }
+
+      for (int c = group.start; c <= group.end; c++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 1)).cellStyle = style;
       }
     }
 
     // ── ROW 2: Header Row 3 (90° Rotated Vertical Column Headers) ────────
     final fixedHeaders = [
       'Pos.',
+      'Barcode',
       'Tür Nr.',
       'Etage',
       'Raum Nr.',
@@ -550,9 +555,9 @@ class ExcelExportService {
 
     for (int col = 0; col < fixedHeaders.length; col++) {
       ExcelColor? bg;
-      if (col >= 4 && col <= 9) {
+      if (col >= 5 && col <= 10) {
         bg = fillWhite; // Türbeschreibung
-      } else if (col >= 18 && col <= 26) {
+      } else if (col >= 19 && col <= 27) {
         bg = fillSoftGreen; // Kontrolle Panikfunktion & Okay
       }
 
@@ -563,7 +568,7 @@ class ExcelExportService {
         col: col,
         row: 2,
         text: fixedHeaders[col],
-        style: makeRotatedHeaderStyle(bg: bg),
+        style: getRotatedHeaderStyle(col, bg: bg),
         trackWidth: false,
       );
     }
@@ -579,7 +584,7 @@ class ExcelExportService {
         col: colIdx,
         row: 2,
         text: defectLabel,
-        style: makeRotatedHeaderStyle(),
+        style: getRotatedHeaderStyle(colIdx),
         trackWidth: false,
       );
     }
@@ -592,65 +597,17 @@ class ExcelExportService {
       col: notesColIdx,
       row: 2,
       text: '',
-      style: blankHeaderStyle,
+      style: CellStyle(
+        topBorder: borderThick,
+        bottomBorder: borderThick,
+        leftBorder: borderThick,
+        rightBorder: borderThick,
+      ),
       trackWidth: false,
     );
 
-    // ── DATA STYLES (Strictly H:Center and V:Center) ──────────────────────
-    final dataCenterStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillWhite,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataCenterAccentStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillSoftGreen,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataCenterOkGreenStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillMediumGreen,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final dataNoteStyle = CellStyle(
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillWhite,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      textWrapping: TextWrapping.WrapText,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
     // Accent column indices matching template soft-green highlight columns
-    final accentCols = <int>{13, 15, 18, 20, 22, 24};
+    final accentCols = <int>{14, 16, 19, 21, 23, 25};
 
     // ── ROW 3+: Data Rows ────────────────────────────────────────────────
     int rowIndex = 3;
@@ -687,9 +644,13 @@ class ExcelExportService {
       }
       final combinedNotes = noteParts.join('; ');
 
+      final barcodeVal = _cleanText(d['doorAlias']).isNotEmpty ? _cleanText(d['doorAlias']) : _cleanText(d['barcode']);
+      final doorNumVal = _cleanText(d['doorNumber']).isNotEmpty ? _cleanText(d['doorNumber']) : barcodeVal;
+
       final doorValues = [
         '${d['pos'] ?? posCounter}',
-        _cleanText(d['doorNumber'].toString().isNotEmpty ? d['doorNumber'] : d['doorAlias']),
+        barcodeVal,
+        doorNumVal,
         _formatFloor(d['floor']),
         _cleanText(d['roomNumber'].toString().isNotEmpty ? d['roomNumber'] : '-'),
         _wrapText(_cleanText(d['roomDesignation']), 40),
@@ -717,15 +678,30 @@ class ExcelExportService {
         _jnStr(d['doorFunctionOK']),
       ];
 
+      final bool isLastDoorRow = (r == doors.length - 1);
+
       for (int c = 0; c < doorValues.length; c++) {
-        CellStyle cellStyle = dataCenterStyle;
+        ExcelColor cellBg = fillWhite;
         if (accentCols.contains(c)) {
-          cellStyle = dataCenterAccentStyle;
-        } else if (c == 26) {
-          // Okay column: green background for 'J'
+          cellBg = fillSoftGreen;
+        } else if (c == 27) {
+          // Okay column: medium green background for 'J', soft green for 'N'
           final isOk = (doorValues[c] == 'J');
-          cellStyle = isOk ? dataCenterOkGreenStyle : dataCenterAccentStyle;
+          cellBg = isOk ? fillMediumGreen : fillSoftGreen;
         }
+
+        final cellStyle = CellStyle(
+          fontSize: 10,
+          fontColorHex: fontBlack,
+          backgroundColorHex: cellBg,
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          textWrapping: TextWrapping.WrapText,
+          topBorder: (r == 0) ? borderThick : borderThin,
+          bottomBorder: isLastDoorRow ? borderThick : borderThin,
+          leftBorder: isLeftEdge(c) ? borderThick : borderThin,
+          rightBorder: isRightEdge(c) ? borderThick : borderThin,
+        );
 
         _setCell(
           sheet,
@@ -749,6 +725,18 @@ class ExcelExportService {
           valText = '$qty';
           defectColumnTotals[key] = (defectColumnTotals[key] ?? 0) + qty;
         }
+        final defectCellStyle = CellStyle(
+          fontSize: 10,
+          fontColorHex: fontBlack,
+          backgroundColorHex: fillWhite,
+          horizontalAlign: HorizontalAlign.Center,
+          verticalAlign: VerticalAlign.Center,
+          textWrapping: TextWrapping.WrapText,
+          topBorder: (r == 0) ? borderThick : borderThin,
+          bottomBorder: isLastDoorRow ? borderThick : borderThin,
+          leftBorder: isLeftEdge(colIdx) ? borderThick : borderThin,
+          rightBorder: isRightEdge(colIdx) ? borderThick : borderThin,
+        );
         _setCell(
           sheet,
           colWidths,
@@ -756,12 +744,24 @@ class ExcelExportService {
           col: colIdx,
           row: rowIndex,
           text: valText,
-          style: dataCenterStyle,
+          style: defectCellStyle,
           trackWidth: false,
         );
       }
 
       // Anmerkung Cell
+      final noteCellStyle = CellStyle(
+        fontSize: 10,
+        fontColorHex: fontBlack,
+        backgroundColorHex: fillWhite,
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        textWrapping: TextWrapping.WrapText,
+        topBorder: (r == 0) ? borderThick : borderThin,
+        bottomBorder: isLastDoorRow ? borderThick : borderThin,
+        leftBorder: borderThick,
+        rightBorder: borderThick,
+      );
       _setCell(
         sheet,
         colWidths,
@@ -769,7 +769,7 @@ class ExcelExportService {
         col: notesColIdx,
         row: rowIndex,
         text: combinedNotes,
-        style: dataNoteStyle,
+        style: noteCellStyle,
         trackWidth: false,
       );
 
@@ -778,33 +778,19 @@ class ExcelExportService {
     }
 
     // ── BOTTOM SUMMARY ROW: Total Sums ───────────────────────────────────
-    final summaryLabelStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillSoftGreen,
-      horizontalAlign: HorizontalAlign.Right,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderThick,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
-    final summaryCenterStyle = CellStyle(
-      bold: true,
-      fontSize: 10,
-      fontColorHex: fontBlack,
-      backgroundColorHex: fillSoftGreen,
-      horizontalAlign: HorizontalAlign.Center,
-      verticalAlign: VerticalAlign.Center,
-      topBorder: borderMedium,
-      bottomBorder: borderThick,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
-    );
-
     for (int c = 0; c < totalCols; c++) {
+      final summaryCellStyle = CellStyle(
+        bold: true,
+        fontSize: 10,
+        fontColorHex: fontBlack,
+        backgroundColorHex: fillSoftGreen,
+        horizontalAlign: (c == 0) ? HorizontalAlign.Right : HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        topBorder: borderThick,
+        bottomBorder: borderThick,
+        leftBorder: isLeftEdge(c) ? borderThick : borderThin,
+        rightBorder: isRightEdge(c) ? borderThick : borderThin,
+      );
       _setCell(
         sheet,
         colWidths,
@@ -812,10 +798,23 @@ class ExcelExportService {
         col: c,
         row: rowIndex,
         text: '',
-        style: summaryCenterStyle,
+        style: summaryCellStyle,
         trackWidth: false,
       );
     }
+
+    final summaryLabelStyle = CellStyle(
+      bold: true,
+      fontSize: 10,
+      fontColorHex: fontBlack,
+      backgroundColorHex: fillSoftGreen,
+      horizontalAlign: HorizontalAlign.Right,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
 
     _setCell(
       sheet,
@@ -830,13 +829,25 @@ class ExcelExportService {
 
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex),
-      CellIndex.indexByColumnRow(columnIndex: 26, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: rowIndex),
     );
 
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final key = sortedDefectKeys[i];
       final colIdx = fixedColsCount + i;
       final total = defectColumnTotals[key] ?? 0;
+      final summaryDefectStyle = CellStyle(
+        bold: true,
+        fontSize: 10,
+        fontColorHex: fontBlack,
+        backgroundColorHex: fillSoftGreen,
+        horizontalAlign: HorizontalAlign.Center,
+        verticalAlign: VerticalAlign.Center,
+        topBorder: borderThick,
+        bottomBorder: borderThick,
+        leftBorder: isLeftEdge(colIdx) ? borderThick : borderThin,
+        rightBorder: isRightEdge(colIdx) ? borderThick : borderThin,
+      );
       _setCell(
         sheet,
         colWidths,
@@ -844,7 +855,7 @@ class ExcelExportService {
         col: colIdx,
         row: rowIndex,
         text: '$total',
-        style: summaryCenterStyle,
+        style: summaryDefectStyle,
         trackWidth: false,
       );
     }

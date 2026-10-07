@@ -70,20 +70,20 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Verify room designation wrapped (contains newline)
-      final exportedRoom = table.rows[3][4]?.toString() ?? '';
+      // Verify room designation wrapped (contains newline) at Col 5
+      final exportedRoom = table.rows[3][5]?.toString() ?? '';
       expect(exportedRoom.contains('\n'), true);
       for (final line in exportedRoom.split('\n')) {
         expect(line.length <= 40, true);
       }
 
-      // Verify defect header is populated at Col 27
-      final defectHeader = table.rows[2][27]?.toString() ?? '';
+      // Verify defect header is populated at Col 28
+      final defectHeader = table.rows[2][28]?.toString() ?? '';
       expect(defectHeader.isNotEmpty, true);
       expect(defectHeader.contains('0.13'), true);
 
-      // Verify note wrapped at max 80 chars per line at Col 28
-      final exportedNote = table.rows[3][28]?.toString() ?? '';
+      // Verify note wrapped at max 80 chars per line at Col 29
+      final exportedNote = table.rows[3][29]?.toString() ?? '';
       expect(exportedNote.contains('\n'), true);
       for (final line in exportedNote.split('\n')) {
         expect(line.length <= 80, true);
@@ -132,9 +132,9 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Check rows 3 to 7, column 2 (Etage)
+      // Check rows 3 to 7, column 3 (Etage)
       for (int r = 0; r < floors.length; r++) {
-        final exportedFloor = table.rows[3 + r][2]?.toString() ?? '';
+        final exportedFloor = table.rows[3 + r][3]?.toString() ?? '';
         expect(exportedFloor.contains('\n'), false, reason: 'Floor value "$exportedFloor" should have NO newline');
         expect(exportedFloor.length <= 4 || exportedFloor == 'U1:A', true);
       }
@@ -184,10 +184,10 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Check rows 3 to 7: Col 0 (Pos) and Col 1 (Tür Nr)
+      // Check rows 3 to 7: Col 0 (Pos) and Col 2 (Tür Nr)
       for (int r = 0; r < testPositions.length; r++) {
         final exportedPos = table.rows[3 + r][0]?.toString() ?? '';
-        final exportedDoorNum = table.rows[3 + r][1]?.toString() ?? '';
+        final exportedDoorNum = table.rows[3 + r][2]?.toString() ?? '';
 
         expect(exportedPos.contains('\n'), false, reason: 'Pos "$exportedPos" must have NO break line');
         expect(exportedDoorNum.contains('\n'), false, reason: 'Tür Nr "$exportedDoorNum" must have NO break line');
