@@ -937,11 +937,159 @@ class ExcelExportService {
 
     final file = File(outputPath);
     await file.parent.create(recursive: true);
-    final bytes = excel.save();
-    if (bytes != null) {
-      await file.writeAsBytes(bytes);
+    final rawBytes = excel.save();
+    if (rawBytes != null) {
+      final finalBytes = _injectPrintHeaderAndLogo(rawBytes);
+      await file.writeAsBytes(finalBytes);
     }
     return file;
+  }
+
+  static List<int>? _getLogoBytes() {
+    final candidatePaths = [
+      r'C:\Users\cabarcas\Projects\WartungsTool\test\test_data\GottsbergLogo.png',
+      'test/test_data/GottsbergLogo.png',
+    ];
+    for (final p in candidatePaths) {
+      try {
+        final f = File(p);
+        if (f.existsSync()) {
+          return f.readAsBytesSync();
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static List<int> _injectPrintHeaderAndLogo(List<int> xlsxBytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(xlsxBytes);
+      final newArchive = Archive();
+
+      final logoBytes = _getLogoBytes();
+      final hasLogo = logoBytes != null && logoBytes.isNotEmpty;
+
+      // 1. Process existing files in archive
+      for (final file in archive.files) {
+        if (!file.isFile) continue;
+        final name = file.name;
+
+        // Clean out any unused empty drawings from package:excel
+        if (name.startsWith('xl/drawings/drawing')) {
+          continue;
+        }
+
+        if (name == '[Content_Types].xml') {
+          var xmlStr = utf8.decode(file.content as List<int>);
+          xmlStr = xmlStr.replaceAll(
+            RegExp(r'<Override[^>]*PartName="/xl/drawings/drawing[^"]*"[^>]*/>'),
+            '',
+          );
+          if (hasLogo && !xmlStr.contains('Extension="vml"')) {
+            xmlStr = xmlStr.replaceFirst(
+              '</Types>',
+              '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>'
+              '<Default Extension="png" ContentType="image/png"/></Types>',
+            );
+          }
+          final bytes = utf8.encode(xmlStr);
+          newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
+        } else if (name == 'xl/worksheets/sheet1.xml') {
+          var xmlStr = utf8.decode(file.content as List<int>);
+
+          // Strip any conflicting elements
+          xmlStr = xmlStr.replaceAll(RegExp(r'<drawing[^>]*/>'), '');
+          xmlStr = xmlStr.replaceAll(RegExp(r'<pageMargins[^>]*/>'), '');
+          xmlStr = xmlStr.replaceAll(RegExp(r'<headerFooter[\s\S]*?</headerFooter>'), '');
+          xmlStr = xmlStr.replaceAll(RegExp(r'<legacyDrawingHF[^>]*/>'), '');
+          xmlStr = xmlStr.replaceAll(RegExp(r'<pageSetup[^>]*/>'), '');
+
+          final headerText = hasLogo
+              ? '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen&amp;R&amp;G'
+              : '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen';
+
+          final headerFooterXml =
+              '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+              '<headerFooter><oddHeader>$headerText</oddHeader><evenHeader>$headerText</evenHeader></headerFooter>'
+              '${hasLogo ? '<legacyDrawingHF r:id="rId1"/>' : ''}';
+
+          xmlStr = xmlStr.replaceFirst('</worksheet>', '$headerFooterXml</worksheet>');
+          final bytes = utf8.encode(xmlStr);
+          newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
+        } else if (name == 'xl/worksheets/_rels/sheet1.xml.rels') {
+          if (hasLogo) {
+            final relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>'
+                '</Relationships>';
+            final bytes = utf8.encode(relsXml);
+            newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
+          }
+        } else {
+          newArchive.addFile(file);
+        }
+      }
+
+      // 2. Add missing relationships / drawings / media if needed
+      if (hasLogo) {
+        if (newArchive.findFile('xl/worksheets/_rels/sheet1.xml.rels') == null) {
+          final relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+              '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+              '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>'
+              '</Relationships>';
+          final bytes = utf8.encode(relsXml);
+          newArchive.addFile(ArchiveFile('xl/worksheets/_rels/sheet1.xml.rels', bytes.length, bytes));
+        }
+
+        newArchive.addFile(ArchiveFile('xl/media/image1.png', logoBytes.length, logoBytes));
+
+        final vmlXml = '<xml xmlns:v="urn:schemas-microsoft-com:vml"\n'
+            ' xmlns:o="urn:schemas-microsoft-com:office:office"\n'
+            ' xmlns:x="urn:schemas-microsoft-com:office:excel">\n'
+            ' <o:shapelayout v:ext="edit">\n'
+            '  <o:idmap v:ext="edit" data="1"/>\n'
+            ' </o:shapelayout><v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75"\n'
+            '  o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f">\n'
+            '  <v:stroke joinstyle="miter"/>\n'
+            '  <v:formulas>\n'
+            '   <v:f eqn="if lineDrawn pixelLineWidth 0"/>\n'
+            '   <v:f eqn="sum @0 1 0"/>\n'
+            '   <v:f eqn="sum 0 0 @1"/>\n'
+            '   <v:f eqn="prod @2 1 2"/>\n'
+            '   <v:f eqn="prod @3 21600 pixelWidth"/>\n'
+            '   <v:f eqn="prod @3 21600 pixelHeight"/>\n'
+            '   <v:f eqn="sum @0 0 1"/>\n'
+            '   <v:f eqn="prod @6 1 2"/>\n'
+            '   <v:f eqn="prod @7 21600 pixelWidth"/>\n'
+            '   <v:f eqn="sum @8 21600 0"/>\n'
+            '   <v:f eqn="prod @7 21600 pixelHeight"/>\n'
+            '   <v:f eqn="sum @10 21600 0"/>\n'
+            '  </v:formulas>\n'
+            '  <v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/>\n'
+            '  <o:lock v:ext="edit" aspectratio="t"/>\n'
+            ' </v:shapetype><v:shape id="RH" o:spid="_x0000_s1025" type="#_x0000_t75"\n'
+            '  style=\'position:absolute;margin-left:0;margin-top:0;width:148.5pt;height:35.25pt;\n'
+            '  z-index:1\'>\n'
+            '  <v:imagedata o:relid="rId1" o:title="GottsbergLogo"/>\n'
+            '  <o:lock v:ext="edit" rotation="t"/>\n'
+            ' </v:shape></xml>';
+        final vmlBytes = utf8.encode(vmlXml);
+        newArchive.addFile(ArchiveFile('xl/drawings/vmlDrawing1.vml', vmlBytes.length, vmlBytes));
+
+        final vmlRelsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>'
+            '</Relationships>';
+        final vmlRelsBytes = utf8.encode(vmlRelsXml);
+        newArchive.addFile(ArchiveFile('xl/drawings/_rels/vmlDrawing1.vml.rels', vmlRelsBytes.length, vmlRelsBytes));
+      }
+
+      final encoded = ZipEncoder().encode(newArchive);
+      return encoded ?? xlsxBytes;
+    } catch (e) {
+      print('Warning: Failed to inject print header/logo: $e');
+      return xlsxBytes;
+    }
   }
 
   /// Exports complete historical audit data for a client into a multi-tab Excel workbook
