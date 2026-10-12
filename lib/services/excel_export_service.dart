@@ -956,7 +956,7 @@ class ExcelExportService {
     await file.parent.create(recursive: true);
     final rawBytes = excel.save();
     if (rawBytes != null) {
-      final finalBytes = _injectPrintHeaderAndLogo(rawBytes);
+      final finalBytes = _injectPrintHeaderAndLogo(rawBytes, sheetName: sheetName);
       await file.writeAsBytes(finalBytes);
     }
     return file;
@@ -978,7 +978,7 @@ class ExcelExportService {
     return null;
   }
 
-  static List<int> _injectPrintHeaderAndLogo(List<int> xlsxBytes) {
+  static List<int> _injectPrintHeaderAndLogo(List<int> xlsxBytes, {String sheetName = ''}) {
     try {
       final archive = ZipDecoder().decodeBytes(xlsxBytes);
       final newArchive = Archive();
@@ -1021,6 +1021,15 @@ class ExcelExportService {
           xmlStr = xmlStr.replaceAll(RegExp(r'<legacyDrawingHF[^>]*/>'), '');
           xmlStr = xmlStr.replaceAll(RegExp(r'<pageSetup[^>]*/>'), '');
 
+          // Freeze panes for Rows 1 to 3 (A4 active cell)
+          final freezeXml =
+              '<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A4" sqref="A4"/></sheetView></sheetViews>';
+          if (xmlStr.contains('<sheetViews>')) {
+            xmlStr = xmlStr.replaceAll(RegExp(r'<sheetViews>[\s\S]*?</sheetViews>'), freezeXml);
+          } else if (xmlStr.contains('<sheetFormatPr')) {
+            xmlStr = xmlStr.replaceFirst('<sheetFormatPr', '$freezeXml<sheetFormatPr');
+          }
+
           final headerText = hasLogo
               ? '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen&amp;R&amp;G'
               : '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen';
@@ -1031,6 +1040,29 @@ class ExcelExportService {
               '${hasLogo ? '<legacyDrawingHF r:id="rId1"/>' : ''}';
 
           xmlStr = xmlStr.replaceFirst('</worksheet>', '$headerFooterXml</worksheet>');
+          final bytes = utf8.encode(xmlStr);
+          newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
+        } else if (name == 'xl/workbook.xml') {
+          var xmlStr = utf8.decode(file.content as List<int>);
+          final targetSheet = sheetName.isNotEmpty
+              ? sheetName
+              : (RegExp(r'<sheet [^>]*name="([^"]+)"').firstMatch(xmlStr)?.group(1) ?? '');
+          if (targetSheet.isNotEmpty) {
+            final printTitleXml =
+                '<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">\'$targetSheet\'!\$1:\$3</definedName></definedNames>';
+            if (xmlStr.contains('<definedNames/>')) {
+              xmlStr = xmlStr.replaceFirst('<definedNames/>', printTitleXml);
+            } else if (xmlStr.contains('<definedNames>')) {
+              xmlStr = xmlStr.replaceFirst(
+                '<definedNames>',
+                '<definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">\'$targetSheet\'!\$1:\$3</definedName>',
+              );
+            } else if (xmlStr.contains('<calcPr')) {
+              xmlStr = xmlStr.replaceFirst('<calcPr', '$printTitleXml<calcPr');
+            } else {
+              xmlStr = xmlStr.replaceFirst('</workbook>', '$printTitleXml</workbook>');
+            }
+          }
           final bytes = utf8.encode(xmlStr);
           newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
         } else if (name == 'xl/worksheets/_rels/sheet1.xml.rels') {

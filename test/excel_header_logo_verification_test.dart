@@ -125,6 +125,14 @@ void main() {
     expect(sheetContent.contains('Prüfprotokol Türen'), true);
     expect(sheetContent.contains('&amp;R&amp;G') || sheetContent.contains('&R&G'), true);
     expect(sheetContent.contains('<legacyDrawingHF r:id="rId1"/>'), true);
+    expect(sheetContent.contains('<pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/>'), true);
+
+    // Validate xl/workbook.xml for Print_Titles repeating rows ($1:$3)
+    final workbookFile = archive.findFile('xl/workbook.xml');
+    expect(workbookFile != null, true);
+    final workbookContent = utf8.decode(workbookFile!.content as List<int>);
+    expect(workbookContent.contains('_xlnm.Print_Titles'), true);
+    expect(workbookContent.contains(r'!$1:$3'), true);
 
     // Validate sheet1 rels
     final sheetRelsFile = archive.findFile('xl/worksheets/_rels/sheet1.xml.rels');
