@@ -133,7 +133,8 @@ class _DoorListPageState extends State<DoorListPage> {
             content: const Text(
               'Wie möchten Sie das Paket importieren?\n\n'
               '• Hinzufügen (Merge): Ergänzt Ihre bestehenden Aufträge auf diesem Gerät.\n\n'
-              '• Ersetzen: Löscht vorherige Daten und übernimmt nur dieses Paket.'
+              '• Ersetzen: Ersetzt die vorherigen Daten durch dieses Paket.\n\n'
+              'Hinweis: Vor jedem Import wird automatisch eine Sicherheitskopie Ihrer aktuellen Daten erstellt.'
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Abbrechen')),
@@ -170,7 +171,10 @@ class _DoorListPageState extends State<DoorListPage> {
             await ImportReportDialog.show(context, report);
           } else if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Paket erfolgreich importiert.'), backgroundColor: Colors.green),
+              const SnackBar(
+                content: Text('Paket erfolgreich importiert (Sicherheits-Backup angelegt).'),
+                backgroundColor: Colors.green,
+              ),
             );
           }
         }

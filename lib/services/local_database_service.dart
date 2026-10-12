@@ -1873,6 +1873,75 @@ class LocalDatabaseService {
     }
   }
 
+  /// Creates an automatic safety backup of the working database prior to any import or replace action.
+  /// Keeps the most recent [maxBackups] copies in the app's backup directory.
+  static Future<File?> createSafetyBackup({String tag = 'pre_import', int maxBackups = 10}) async {
+    try {
+      final sourcePath = await _getWorkingDbPath();
+      final sourceFile = File(sourcePath);
+      if (!await sourceFile.exists() || (await sourceFile.length()) == 0) {
+        return null;
+      }
+
+      // Check if DB actually contains any active records before backing up
+      try {
+        final db = await getDb();
+        final countResult = await db.rawQuery('SELECT count(*) as c FROM doors');
+        final count = (countResult.first['c'] as int?) ?? 0;
+        if (count == 0) {
+          return null; // No active doors, skip backup
+        }
+      } catch (_) {}
+
+      // Get backup directory
+      Directory backupDir;
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        backupDir = Directory(join(appDir.path, 'WartungsTool', 'Backups'));
+      } catch (_) {
+        final fallbackDir = await getApplicationSupportDirectory();
+        backupDir = Directory(join(fallbackDir.path, 'Backups'));
+      }
+
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+
+      final timeStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final backupFileName = 'auto_backup_${tag}_$timeStr.db';
+      final backupFilePath = join(backupDir.path, backupFileName);
+
+      // Copy database file
+      final backupFile = await sourceFile.copy(backupFilePath);
+      print('[LocalDatabaseService] Automatic safety backup created: $backupFilePath');
+
+      // Prune old backups
+      try {
+        final existingFiles = backupDir
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.db') && f.path.contains('auto_backup_'))
+            .toList();
+
+        existingFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+
+        if (existingFiles.length > maxBackups) {
+          for (int i = maxBackups; i < existingFiles.length; i++) {
+            await existingFiles[i].delete();
+            print('[LocalDatabaseService] Pruned old backup: ${existingFiles[i].path}');
+          }
+        }
+      } catch (e) {
+        print('[LocalDatabaseService] Backup pruning notice: $e');
+      }
+
+      return backupFile;
+    } catch (e) {
+      print('[LocalDatabaseService] Failed to create safety backup: $e');
+      return null;
+    }
+  }
+
   /// Exports the internal working.db to a specified external path.
   static Future<void> exportWorkingDb(String destinationPath) async {
     // Ensure all transactions are committed and file handle is released
@@ -1924,7 +1993,10 @@ class LocalDatabaseService {
       await tempDb?.close();
     }
 
-    // 3. Execute Import (Replace local working DB)
+    // 3. Create Safety Backup of current working database before replacing
+    await createSafetyBackup(tag: 'pre_replace');
+
+    // 4. Execute Import (Replace local working DB)
     await closeDb();
     
     final destinationPath = await _getWorkingDbPath();
@@ -1941,6 +2013,8 @@ class LocalDatabaseService {
   /// Imports an external inspection package and merges it into the local working DB.
   /// Allows technicians to load multiple inspection packages without losing existing local data.
   static Future<ImportReport> importAndMergePackage(String packagePath) async {
+    // Create safety backup before merge
+    await createSafetyBackup(tag: 'pre_merge');
     final localDb = await getDb();
     
     if (Platform.isWindows || Platform.isLinux) {

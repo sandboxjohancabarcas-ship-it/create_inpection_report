@@ -107,13 +107,16 @@ class ExcelExportService {
     return 'N';
   }
 
-  /// Formats Sturzhöhe values (> 1m), displaying either the custom dimension string or 'X'.
+  /// Formats Sturzhöhe values (> 1m):
+  /// If property is true in app: returns the meter value from dropdown menu (or 'J' if value is empty).
+  /// If property is false/null/0 in app: returns 'N'.
   static String _formatLintelHeight(dynamic isOver1m, dynamic heightValue) {
-    final valStr = _cleanText(heightValue);
     final bool isTrue = (isOver1m == true || isOver1m == 1 || isOver1m == '1' || isOver1m == 'true' || isOver1m == 'Ja' || isOver1m == 'ja');
-    if (valStr.isNotEmpty) return valStr;
-    if (isTrue) return 'X';
-    return '';
+    if (isTrue) {
+      final valStr = _cleanText(heightValue);
+      return valStr.isNotEmpty ? valStr : 'J';
+    }
+    return 'N';
   }
 
   /// Formats access control representation ('Ja', 'Nein', or specific system description).
@@ -214,27 +217,32 @@ class ExcelExportService {
     4: 11.44,  // Raum Nr.
     5: 20.44,  // Raumbezeichnung
     6: 21.44,  // Türtyp (T30/RS/T90/Panik P/Einbruchschutz WK/usw.)
-    7: 14.22,  // Flügelanzahl
-    8: 21.44,  // Türmaterial / Türart
-    9: 13.22,  // Türhersteller / Türsystem / Profilsystem
-    10: 11.44, // DIN L/R / Standflügel/Gangflügel...
-    11: 14.22, // Türschließer / Automatikantrieb
-    12: 13.22, // GSR / EMF / EMR
-    13: 11.44, // Schloßmaße
-    14: 6.55,  // Türschließer auf Bandseite
-    15: 6.55,  // Türschließer auf Bandgegenseite
-    16: 6.55,  // Sturzhöhe unter 1 Meter
-    17: 11.44, // Fluchtürsteuerung / Türwächter
-    18: 11.44, // Zutrittskontrolle
-    19: 6.55,  // Fluchtwegsituation
-    20: 6.55,  // Fluchwegbeschilderung vorhanden?
-    21: 6.55,  // Blindzylinder
-    22: 6.55,  // PZ-Zylinder
-    23: 6.55,  // Garnitur D / D - K / D
-    24: 6.55,  // Panikfunktion B / E / usw.
-    25: 6.55,  // Fluchtrichtung eingehalten
-    26: 6.55,  // Vollpanik (Standflügel)
-    27: 9.11,  // Tür einschl. Komponenten in ordentlicher Funktion
+    7: 16.00,  // Zulassungsnummer
+    8: 16.00,  // Hersteller
+    9: 16.00,  // Herstellernummer
+    10: 16.00, // DoP-Number
+    11: 11.44, // Baujahr
+    12: 14.22, // Flügelanzahl
+    13: 21.44, // Türmaterial / Türart
+    14: 11.44, // DIN-Konfiguration
+    15: 14.22, // Schließart
+    16: 14.22, // Gleitschienen, Schließfolgeregelung, Feststellung
+    17: 11.44, // Schloßmaße
+    18: 6.55,  // Türschließer auf Bandseite
+    19: 6.55,  // Türschließer auf Bandgegenseite
+    20: 11.44, // Sturzhöhe auf Bandseite innen über 1m
+    21: 11.44, // Sturzhöhe auf Bandgegenseite außen über 1m
+    22: 11.44, // Fluchtürsteuerung / Türwächter
+    23: 11.44, // Zutrittskontrolle
+    24: 6.55,  // Fluchtwegsituation
+    25: 6.55,  // Fluchwegbeschilderung vorhanden?
+    26: 6.55,  // Blindzylinder
+    27: 6.55,  // PZ-Zylinder
+    28: 14.22, // Beschlagart
+    29: 6.55,  // Panikfunktion B / E / usw.
+    30: 6.55,  // Fluchtrichtung eingehalten
+    31: 6.55,  // Vollpanik (Standflügel)
+    32: 9.11,  // Tür einschl. Komponenten in ordentlicher Funktion
   };
   static const double _defectColWidth = 5.78;
   static const double _notesColWidth = 52.22;
@@ -266,6 +274,8 @@ class ExcelExportService {
     final String jobNumber = _cleanText(insp['jobNumber']);
     final String objectAddress = _cleanText(insp['objectAddress']);
     final String projectNumber = _cleanText(insp['projectNumber']);
+    final String contactPerson = _cleanText(insp['contactPerson']);
+    final String inspectorName = _cleanText(insp['inspectorName']);
 
     final String sheetName = 'Türlisten ${dateStr.replaceAll('-', '.')}';
 
@@ -300,18 +310,18 @@ class ExcelExportService {
     final fillMediumBlue = ExcelColor.fromHexString('#8EA9DB');
     final fillYellow = ExcelColor.fromHexString('#FFFF00');
 
-    const int fixedColsCount = 28;
+    const int fixedColsCount = 33;
     final int totalCols = fixedColsCount + sortedDefectKeys.length + 1;
     final int notesColIdx = fixedColsCount + sortedDefectKeys.length;
 
     final groupDefinitions = <({int start, int end, String label})>[
       (start: 0, end: 5, label: 'Grundinformationen'),
-      (start: 6, end: 10, label: 'Türbeschreibung'),
-      (start: 11, end: 18, label: 'Zubehörbeschreibung'),
-      (start: 19, end: 26, label: 'Kontrolle Panikfunktion'),
-      (start: 27, end: 27, label: 'okay'),
+      (start: 6, end: 14, label: 'Türbeschreibung'),
+      (start: 15, end: 23, label: 'Zubehörbeschreibung'),
+      (start: 24, end: 31, label: 'Kontrolle Panikfunktion'),
+      (start: 32, end: 32, label: 'okay'),
       if (sortedDefectKeys.isNotEmpty)
-        (start: 28, end: 28 + sortedDefectKeys.length - 1, label: ''),
+        (start: 33, end: 33 + sortedDefectKeys.length - 1, label: ''),
       (start: notesColIdx, end: notesColIdx, label: 'Anmerkung'),
     ];
 
@@ -418,7 +428,7 @@ class ExcelExportService {
       );
     }
 
-    final metaText = 'Kunde: $clientName | Objekt: $objectAddress | Datum: $dateStr | Auftragsnr.: $jobNumber | Projekt: $projectNumber';
+    final metaText = 'Kunde: $clientName | Objekt: $objectAddress | Datum: $dateStr | Auftragsnr.: $jobNumber | Projekt: $projectNumber | Kontakt Person vor Ort: $contactPerson | Service Techniker: $inspectorName';
     _setCell(
       sheet,
       colWidths,
@@ -430,7 +440,7 @@ class ExcelExportService {
       trackWidth: false,
     );
 
-    final int metaMergeEnd = (sortedDefectKeys.isNotEmpty) ? 18 : 26;
+    final int metaMergeEnd = (sortedDefectKeys.isNotEmpty) ? 23 : 31;
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
       CellIndex.indexByColumnRow(columnIndex: metaMergeEnd, rowIndex: 0),
@@ -442,13 +452,13 @@ class ExcelExportService {
         sheet,
         colWidths,
         rowLineCounts,
-        col: 19,
+        col: 24,
         row: 0,
         text: bannerLabel,
         style: positionBannerLabelStyle,
         trackWidth: false,
       );
-      for (int c = 20; c <= 27; c++) {
+      for (int c = 25; c <= 32; c++) {
         _setCell(
           sheet,
           colWidths,
@@ -461,8 +471,8 @@ class ExcelExportService {
         );
       }
       sheet.merge(
-        CellIndex.indexByColumnRow(columnIndex: 19, rowIndex: 0),
-        CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: 0),
+        CellIndex.indexByColumnRow(columnIndex: 24, rowIndex: 0),
+        CellIndex.indexByColumnRow(columnIndex: 32, rowIndex: 0),
       );
 
       for (int i = 0; i < sortedDefectKeys.length; i++) {
@@ -532,23 +542,28 @@ class ExcelExportService {
       'Raum Nr.',
       'Raumbezeichnung',
       'Türtyp (T30/RS/T90/Panik P/Einbruchschutz WK/usw.)',
+      'Zulassungsnummer',
+      'Hersteller',
+      'Herstellernummer',
+      'DoP-Number',
+      'Baujahr',
       'Flügelanzahl',
       'Türmaterial / Türart (Alurohrrahmen RRAL / Stahlrohrrahmen RRST / Holz / Stahlblech / usw.)',
-      'Türhersteller \n Türsystem \n Profilsystem',
-      'DIN L/R \n Standflügel/Gangflügel \n Standflügelverriegelung',
-      'Türschließer \n Automatikantrieb \n Do = Dorma, Ge = Geze, usw.',
-      'GSR = Gleitschienen Schließfolgeregelung \n EMF = elektromagnetische Feststellung \n EMR = mit Rauchmelder',
+      'DIN-Konfiguration',
+      'Schließart',
+      'Gleitschienen, Schließfolgeregelung, Feststellung',
       'Schloßmaße',
       'Türschließer auf Bandseite',
       'Türschließer auf Bandgegenseite',
-      'Sturzhöhe unter 1 Meter',
+      'Sturzhöhe auf Bandseite innen über 1m',
+      'Sturzhöhe auf Bandgegenseite außen über 1m',
       'Fluchtürsteuerung \n Türwächter',
       'Zutrittskontrolle',
       'Fluchtwegsituation',
       'Fluchwegbeschilderung vorhanden?',
       'Blindzylinder',
       'PZ-Zylinder',
-      'Garnitur D / D - K / D',
+      'Beschlagart',
       'Panikfunktion B / E / usw.',
       'Fluchtrichtung eingehalten',
       'Vollpanik (Standflügel)',
@@ -557,9 +572,10 @@ class ExcelExportService {
 
     for (int col = 0; col < fixedHeaders.length; col++) {
       ExcelColor bg = fillWhite;
-      // Light-light blue highlight for alternating columns T (19), V (21), X (23), Z (25), and AB (27).
-      // Columns U (20), W (22), Y (24), AA (26) and A..S are white.
-      if (col == 19 || col == 21 || col == 23 || col == 25 || col == 27) {
+      // Light-light blue highlight for alternating columns in Kontrolle Panikfunktion & okay:
+      // Columns 24, 26, 28, 30, 32.
+      // Columns 0..23 and 25, 27, 29, 31 are white.
+      if (col == 24 || col == 26 || col == 28 || col == 30 || col == 32) {
         bg = fillSoftBlue;
       } else {
         bg = fillWhite;
@@ -611,7 +627,7 @@ class ExcelExportService {
     );
 
     // Accent column indices matching template soft-blue highlight columns
-    final accentCols = <int>{14, 16, 19, 21, 23, 25};
+    final accentCols = <int>{18, 20, 24, 26, 28, 30};
 
     // ── ROW 3+: Data Rows ────────────────────────────────────────────────
     int rowIndex = 3;
@@ -638,10 +654,6 @@ class ExcelExportService {
       if (fsa.isNotEmpty && fsa != '?' && fsa != '-') {
         noteParts.add('FSA Abnahme: $fsa');
       }
-      final approval = _cleanText(d['approvalNumber']);
-      if (approval.isNotEmpty && approval != '?' && approval != '-') {
-        noteParts.add('Zulassung: $approval');
-      }
       final userNotes = _cleanNoteText(d['notes'] ?? d['junctionNotes'], 80);
       if (userNotes.isNotEmpty) {
         noteParts.add(userNotes);
@@ -659,16 +671,21 @@ class ExcelExportService {
         _cleanText(d['roomNumber'].toString().isNotEmpty ? d['roomNumber'] : '-'),
         _wrapText(_cleanText(d['roomDesignation']), 40),
         _wrapText(_cleanText(d['doorType']), 30),
+        _cleanText(d['approvalNumber']),
+        _wrapText(_cleanText(d['manufacturer']), 30),
+        _cleanText(d['manufacturerNumber']),
+        _cleanText(d['dopNumber']),
+        _cleanText(d['manufactureYear']),
         '${d['wingCount'] ?? 1}',
         _wrapText(_cleanText(d['material']), 30),
-        _wrapText(_cleanText(d['manufacturer']), 30),
         _cleanText(d['dinConfiguration']),
         _wrapText(_cleanText(d['closerType']), 25),
-        _wrapText(_cleanText(d['closingSequenceSystem']), 14), // Col M: snug wrap
-        _wrapText(_cleanText(d['lockDimensions']), 12),         // Col N: snug wrap
+        _wrapText(_cleanText(d['closingSequenceSystem']), 14),
+        _wrapText(_cleanText(d['lockDimensions']), 12),
         _xStr(d['closerOnHingeSide']),
         _xStr(d['closerOnOppositeSide']),
-        _formatLintelHeight(d['lintelHeightInsideOver1m'] ?? d['lintelHeightOutsideOver1m'], d['lintelHeightInsideValue'] ?? d['lintelHeightOutsideValue']),
+        _formatLintelHeight(d['lintelHeightInsideOver1m'] ?? d['lintelHeightUnder1m'], d['lintelHeightInsideValue'] ?? d['lintelHeightValue']),
+        _formatLintelHeight(d['lintelHeightOutsideOver1m'] ?? d['lintelHeightOver1m'], d['lintelHeightOutsideValue']),
         _formatEscapeDoorControl(d['escapeDoorControl']),
         _formatAccessControl(d['accessControl']),
         _xStr(d['escapeRouteSituation']),
@@ -688,7 +705,7 @@ class ExcelExportService {
         ExcelColor cellBg = fillWhite;
         if (accentCols.contains(c)) {
           cellBg = fillSoftBlue;
-        } else if (c == 27) {
+        } else if (c == 32) {
           // Okay column: light blue background for 'J', light-light blue for 'N'
           final isOk = (doorValues[c] == 'J');
           cellBg = isOk ? fillMediumBlue : fillSoftBlue;
@@ -784,14 +801,14 @@ class ExcelExportService {
     // ── BOTTOM SUMMARY ROW: Total Sums ───────────────────────────────────
     for (int c = 0; c < totalCols; c++) {
       ExcelColor bg = fillWhite;
-      if (c >= 24 && c <= 27) {
-        // Columns Y (24), Z (25), AA (26), AB (27) are light-light blue
+      if (c >= 29 && c <= 32) {
+        // Columns 29, 30, 31, 32 are light-light blue
         bg = fillSoftBlue;
       } else if (c >= fixedColsCount && c < notesColIdx) {
         // Dynamic inserted columns of errors are light-light blue
         bg = fillSoftBlue;
       } else {
-        // Columns A..X (0..23) and Anmerkung (notesColIdx) are white
+        // Columns 0..28 and Anmerkung (notesColIdx) are white
         bg = fillWhite;
       }
 
@@ -800,7 +817,7 @@ class ExcelExportService {
         fontSize: 10,
         fontColorHex: fontBlack,
         backgroundColorHex: bg,
-        horizontalAlign: (c >= 24 && c <= 27) ? HorizontalAlign.Center : ((c == 0) ? HorizontalAlign.Right : HorizontalAlign.Center),
+        horizontalAlign: (c >= 29 && c <= 32) ? HorizontalAlign.Center : ((c == 0) ? HorizontalAlign.Right : HorizontalAlign.Center),
         verticalAlign: VerticalAlign.Center,
         topBorder: borderThick,
         bottomBorder: borderThick,
@@ -819,7 +836,7 @@ class ExcelExportService {
       );
     }
 
-    // Merge A to X (columns 0 to 23) in white
+    // Merge A to AC (columns 0 to 28) in white
     final emptySpanStyle = CellStyle(
       bold: true,
       fontSize: 10,
@@ -834,14 +851,14 @@ class ExcelExportService {
     );
     sheet.merge(
       CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIndex),
-      CellIndex.indexByColumnRow(columnIndex: 23, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 28, rowIndex: rowIndex),
       customValue: TextCellValue(''),
     );
-    for (int c = 0; c <= 23; c++) {
+    for (int c = 0; c <= 28; c++) {
       sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).cellStyle = emptySpanStyle;
     }
 
-    // Merge Y to AB (columns 24 to 27) with light-light blue background and label "Summe für Mängelbeseitigung"
+    // Merge AD to AG (columns 29 to 32) with light-light blue background and label "Summe für Mängelbeseitigung"
     final blueSpanStyle = CellStyle(
       bold: true,
       fontSize: 10,
@@ -855,11 +872,11 @@ class ExcelExportService {
       rightBorder: borderThick,
     );
     sheet.merge(
-      CellIndex.indexByColumnRow(columnIndex: 24, rowIndex: rowIndex),
-      CellIndex.indexByColumnRow(columnIndex: 27, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 29, rowIndex: rowIndex),
+      CellIndex.indexByColumnRow(columnIndex: 32, rowIndex: rowIndex),
       customValue: TextCellValue('Summe für Mängelbeseitigung'),
     );
-    for (int c = 24; c <= 27; c++) {
+    for (int c = 29; c <= 32; c++) {
       sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex)).cellStyle = blueSpanStyle;
     }
 

@@ -941,12 +941,12 @@ class ExcelDataImporter {
       return match?.group(1)?.trim() ?? '';
     }
 
-    final client = extract('Kunde', ['Objekt', 'Datum', 'Ansprechpartner', 'Monteur', 'Auftragsnummer']);
-    final object = extract('Objekt', ['Kunde', 'Datum', 'Ansprechpartner', 'Monteur', 'Auftragsnummer']);
-    final dateStr = extract('Datum', ['Kunde', 'Objekt', 'Ansprechpartner', 'Monteur', 'Auftragsnummer']);
-    final contact = extract('Ansprechpartner', ['Kunde', 'Objekt', 'Datum', 'Monteur', 'Auftragsnummer']);
-    final inspector = extract('Monteur', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Auftragsnummer']);
-    final jobNum = extract('Auftragsnummer', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Monteur']);
+    final client = extract('Kunde', ['Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
+    final object = extract('Objekt', ['Kunde', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
+    final dateStr = extract('Datum', ['Kunde', 'Objekt', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
+    final contact = extract('(?:Ansprechpartner|Kontakt Person vor Ort)', ['Kunde', 'Objekt', 'Datum', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
+    final inspector = extract('(?:Monteur|Service Techniker)', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
+    final jobNum = extract('(?:Auftragsnummer|Auftragsnr\\.)', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Projekt']);
 
     String formattedDate = '';
     if (dateStr.isNotEmpty) {

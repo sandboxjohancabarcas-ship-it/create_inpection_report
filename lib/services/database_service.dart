@@ -437,6 +437,48 @@ class DatabaseService {
     }
   }
 
+  /// Exports the Master DB (door_inspection.db) to a specified destination path.
+  static Future<void> exportMasterDb(String destinationPath) async {
+    await closeDb();
+    final dbPath = await getDatabasesPath();
+    final sourcePath = join(dbPath, 'door_inspection.db');
+    final sourceFile = File(sourcePath);
+    if (!await sourceFile.exists()) {
+      throw Exception('Export fehlgeschlagen: Master-Datenbank existiert nicht.');
+    }
+    await sourceFile.copy(destinationPath);
+    print('[DatabaseService] Master DB exported to: $destinationPath');
+  }
+
+  /// Imports an external .db file to replace the Master DB (door_inspection.db).
+  static Future<void> importMasterDb(String sourcePath) async {
+    final sourceFile = File(sourcePath);
+    if (!await sourceFile.exists()) {
+      throw Exception('Import fehlgeschlagen: Quelldatei nicht gefunden.');
+    }
+    if (!sourcePath.toLowerCase().endsWith('.db')) {
+      throw Exception('Import fehlgeschlagen: Ungültiges Dateiformat. Bitte wählen Sie eine .db Datei.');
+    }
+
+    final tempDb = await openDatabase(sourcePath, readOnly: true);
+    try {
+      final tables = await tempDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tableNames = tables.map((t) => t['name'] as String).toSet();
+      if (!tableNames.contains('doors') || !tableNames.contains('inspections')) {
+        throw Exception('Die ausgewählte Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
+      }
+    } finally {
+      await tempDb.close();
+    }
+
+    await closeDb();
+    final dbPath = await getDatabasesPath();
+    final targetPath = join(dbPath, 'door_inspection.db');
+    await sourceFile.copy(targetPath);
+    _db = null;
+    print('[DatabaseService] Master DB restored from: $sourcePath');
+  }
+
   static Future<int> insertDoor(Door door) async {
     final db = await getDb();
     final id = await db.insert(

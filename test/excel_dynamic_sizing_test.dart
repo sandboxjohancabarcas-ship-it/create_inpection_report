@@ -77,13 +77,13 @@ void main() {
         expect(line.length <= 40, true);
       }
 
-      // Verify defect header is populated at Col 28
-      final defectHeader = table.rows[2][28]?.toString() ?? '';
+      // Verify defect header is populated at Col 33
+      final defectHeader = table.rows[2][33]?.toString() ?? '';
       expect(defectHeader.isNotEmpty, true);
       expect(defectHeader.contains('0.13'), true);
 
-      // Verify note wrapped at max 80 chars per line at Col 29
-      final exportedNote = table.rows[3][29]?.toString() ?? '';
+      // Verify note wrapped at max 80 chars per line at Col 34
+      final exportedNote = table.rows[3][34]?.toString() ?? '';
       expect(exportedNote.contains('\n'), true);
       for (final line in exportedNote.split('\n')) {
         expect(line.length <= 80, true);
@@ -193,9 +193,9 @@ void main() {
         expect(exportedDoorNum.contains('\n'), false, reason: 'Tür Nr "$exportedDoorNum" must have NO break line');
       }
 
-      // Check Summary Row (last row): Col 24 (Col Y) contains full summary text
+      // Check Summary Row (last row): Col 29 contains full summary text
       final lastRowIdx = table.rows.length - 1;
-      final summaryText = table.rows[lastRowIdx][24]?.toString() ?? '';
+      final summaryText = table.rows[lastRowIdx][29]?.toString() ?? '';
       expect(summaryText, 'Summe für Mängelbeseitigung');
       expect(summaryText.contains('\n'), false);
 
