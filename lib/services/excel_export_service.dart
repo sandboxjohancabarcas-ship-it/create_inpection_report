@@ -581,6 +581,7 @@ class ExcelExportService {
         bg = fillWhite;
       }
 
+      final headerStyle = getRotatedHeaderStyle(col, bg: bg);
       _setCell(
         sheet,
         colWidths,
@@ -588,15 +589,17 @@ class ExcelExportService {
         col: col,
         row: 2,
         text: fixedHeaders[col],
-        style: getRotatedHeaderStyle(col, bg: bg),
+        style: headerStyle,
         trackWidth: false,
       );
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 2)).cellStyle = headerStyle;
     }
 
     // Rotated Defect Headers (Row 2)
     for (int i = 0; i < sortedDefectKeys.length; i++) {
       final colIdx = fixedColsCount + i;
       final defectLabel = defectMap[sortedDefectKeys[i]]!;
+      final defectStyle = getRotatedHeaderStyle(colIdx);
       _setCell(
         sheet,
         colWidths,
@@ -604,12 +607,19 @@ class ExcelExportService {
         col: colIdx,
         row: 2,
         text: defectLabel,
-        style: getRotatedHeaderStyle(colIdx),
+        style: defectStyle,
         trackWidth: false,
       );
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 2)).cellStyle = defectStyle;
     }
 
     // Header for Anmerkung column (Row 2 is empty cell under group header)
+    final notesHeaderStyle = CellStyle(
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
     _setCell(
       sheet,
       colWidths,
@@ -617,14 +627,10 @@ class ExcelExportService {
       col: notesColIdx,
       row: 2,
       text: '',
-      style: CellStyle(
-        topBorder: borderThick,
-        bottomBorder: borderThick,
-        leftBorder: borderThick,
-        rightBorder: borderThick,
-      ),
+      style: notesHeaderStyle,
       trackWidth: false,
     );
+    sheet.cell(CellIndex.indexByColumnRow(columnIndex: notesColIdx, rowIndex: 2)).cellStyle = notesHeaderStyle;
 
     // Accent column indices matching template soft-blue highlight columns
     final accentCols = <int>{18, 20, 24, 26, 28, 30};
@@ -1011,6 +1017,28 @@ class ExcelExportService {
           }
           final bytes = utf8.encode(xmlStr);
           newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
+        } else if (name == 'xl/styles.xml') {
+          var xmlStr = utf8.decode(file.content as List<int>);
+          // Ensure applyBorder="1" on every <xf> with borderId != "0"
+          // and applyFont="1" on every <xf> with fontId != "0"
+          xmlStr = xmlStr.replaceAllMapped(
+            RegExp(r'<xf\b([^>]*?)(/?)>'),
+            (m) {
+              var attrs = m.group(1)!;
+              final slash = m.group(2)!;
+              final borderMatch = RegExp(r'borderId="([1-9]\d*)"').firstMatch(attrs);
+              if (borderMatch != null && !attrs.contains('applyBorder=')) {
+                attrs += ' applyBorder="1"';
+              }
+              final fontMatch = RegExp(r'fontId="([1-9]\d*)"').firstMatch(attrs);
+              if (fontMatch != null && !attrs.contains('applyFont=')) {
+                attrs += ' applyFont="1"';
+              }
+              return '<xf$attrs$slash>';
+            },
+          );
+          final bytes = utf8.encode(xmlStr);
+          newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
         } else if (name == 'xl/worksheets/sheet1.xml') {
           var xmlStr = utf8.decode(file.content as List<int>);
 
@@ -1020,6 +1048,21 @@ class ExcelExportService {
           xmlStr = xmlStr.replaceAll(RegExp(r'<headerFooter[\s\S]*?</headerFooter>'), '');
           xmlStr = xmlStr.replaceAll(RegExp(r'<legacyDrawingHF[^>]*/>'), '');
           xmlStr = xmlStr.replaceAll(RegExp(r'<pageSetup[^>]*/>'), '');
+
+          // Insert sheetPr right before <dimension for fitToPage print scaling
+          const sheetPrXml = '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>';
+          if (xmlStr.contains('<sheetPr>')) {
+            xmlStr = xmlStr.replaceFirst('<sheetPr>', '<sheetPr><pageSetUpPr fitToPage="1"/>');
+          } else if (xmlStr.contains('<sheetPr/>')) {
+            xmlStr = xmlStr.replaceFirst('<sheetPr/>', sheetPrXml);
+          } else if (xmlStr.contains('<dimension')) {
+            xmlStr = xmlStr.replaceFirst('<dimension', '$sheetPrXml<dimension');
+          } else {
+            xmlStr = xmlStr.replaceFirstMapped(
+              RegExp(r'<worksheet\b[^>]*>'),
+              (m) => '${m.group(0)}$sheetPrXml',
+            );
+          }
 
           // Freeze panes for Rows 1 to 3 (A4 active cell)
           final freezeXml =
@@ -1034,12 +1077,14 @@ class ExcelExportService {
               ? '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen&amp;R&amp;G'
               : '&amp;L&amp;14&amp;&quot;-,Fett&quot;Prüfprotokol Türen';
 
-          final headerFooterXml =
-              '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+          // Landscape Fit-to-1-page-wide setup matching master template
+          final printSetupXml =
+              '<pageMargins left="0.25" right="0.25" top="0.75" bottom="0.5" header="0.3" footer="0.3"/>'
+              '<pageSetup paperSize="8" orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
               '<headerFooter><oddHeader>$headerText</oddHeader><evenHeader>$headerText</evenHeader></headerFooter>'
               '${hasLogo ? '<legacyDrawingHF r:id="rId1"/>' : ''}';
 
-          xmlStr = xmlStr.replaceFirst('</worksheet>', '$headerFooterXml</worksheet>');
+          xmlStr = xmlStr.replaceFirst('</worksheet>', '$printSetupXml</worksheet>');
           final bytes = utf8.encode(xmlStr);
           newArchive.addFile(ArchiveFile(name, bytes.length, bytes));
         } else if (name == 'xl/workbook.xml') {
