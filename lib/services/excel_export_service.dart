@@ -330,16 +330,16 @@ class ExcelExportService {
     bool isLeftEdge(int col) => groupDefinitions.any((g) => g.start == col);
     bool isRightEdge(int col) => groupDefinitions.any((g) => g.end == col);
 
-    // Row 0 Metadata Style
+    // Row 0 Metadata Style (Dicke Rahmenlinien)
     final metaLeftStyle = CellStyle(
       fontSize: 10,
       fontColorHex: fontBlack,
       horizontalAlign: HorizontalAlign.Left,
       verticalAlign: VerticalAlign.Bottom,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
     );
 
     final positionBannerLabelStyle = CellStyle(
@@ -348,10 +348,10 @@ class ExcelExportService {
       backgroundColorHex: fillYellow,
       horizontalAlign: HorizontalAlign.Right,
       verticalAlign: VerticalAlign.Center,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
     );
 
     final positionNumberStyle = CellStyle(
@@ -360,17 +360,17 @@ class ExcelExportService {
       backgroundColorHex: fillYellow,
       horizontalAlign: HorizontalAlign.Center,
       verticalAlign: VerticalAlign.Center,
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
     );
 
     final blankHeaderStyle = CellStyle(
-      topBorder: borderThin,
-      bottomBorder: borderThin,
-      leftBorder: borderThin,
-      rightBorder: borderThin,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
     );
 
     // Row 2 Rotated Column Header Base Style (Centered horizontally with 90° rotation and thick outer borders)
@@ -414,7 +414,7 @@ class ExcelExportService {
     }
     colWidths[notesColIdx] = _notesColWidth;
 
-    // ── ROW 0: Header Row 1 (Metadata Line & Yellow Position Banner) ─────
+    // ── ROW 0: Header Row 1 (Metadata Line & Yellow Position Banner - Dicke Rahmenlinien) ─────
     for (int c = 0; c < totalCols; c++) {
       _setCell(
         sheet,
@@ -426,46 +426,42 @@ class ExcelExportService {
         style: blankHeaderStyle,
         trackWidth: false,
       );
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0)).cellStyle = blankHeaderStyle;
     }
 
     final metaText = 'Kunde: $clientName | Objekt: $objectAddress | Datum: $dateStr | Auftragsnr.: $jobNumber | Projekt: $projectNumber | Kontakt Person vor Ort: $contactPerson | Service Techniker: $inspectorName';
-    _setCell(
-      sheet,
-      colWidths,
-      rowLineCounts,
-      col: 0,
-      row: 0,
-      text: metaText,
-      style: metaLeftStyle,
-      trackWidth: false,
-    );
-
     final int metaMergeEnd = (sortedDefectKeys.isNotEmpty) ? 23 : 31;
-    sheet.merge(
-      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
-      CellIndex.indexByColumnRow(columnIndex: metaMergeEnd, rowIndex: 0),
-    );
-
-    if (sortedDefectKeys.isNotEmpty) {
-      final bannerLabel = jobNumber.isNotEmpty ? 'Mängelbeseitigung $jobNumber, Position:' : 'Angebot, Position:';
+    for (int c = 0; c <= metaMergeEnd; c++) {
       _setCell(
         sheet,
         colWidths,
         rowLineCounts,
-        col: 24,
+        col: c,
         row: 0,
-        text: bannerLabel,
-        style: positionBannerLabelStyle,
+        text: (c == 0) ? metaText : '',
+        style: metaLeftStyle,
         trackWidth: false,
       );
-      for (int c = 25; c <= 32; c++) {
+    }
+    sheet.merge(
+      CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
+      CellIndex.indexByColumnRow(columnIndex: metaMergeEnd, rowIndex: 0),
+      customValue: TextCellValue(metaText),
+    );
+    for (int c = 0; c <= metaMergeEnd; c++) {
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0)).cellStyle = metaLeftStyle;
+    }
+
+    if (sortedDefectKeys.isNotEmpty) {
+      final bannerLabel = jobNumber.isNotEmpty ? 'Mängelbeseitigung $jobNumber, Position:' : 'Angebot, Position:';
+      for (int c = 24; c <= 32; c++) {
         _setCell(
           sheet,
           colWidths,
           rowLineCounts,
           col: c,
           row: 0,
-          text: '',
+          text: (c == 24) ? bannerLabel : '',
           style: positionBannerLabelStyle,
           trackWidth: false,
         );
@@ -473,7 +469,11 @@ class ExcelExportService {
       sheet.merge(
         CellIndex.indexByColumnRow(columnIndex: 24, rowIndex: 0),
         CellIndex.indexByColumnRow(columnIndex: 32, rowIndex: 0),
+        customValue: TextCellValue(bannerLabel),
       );
+      for (int c = 24; c <= 32; c++) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0)).cellStyle = positionBannerLabelStyle;
+      }
 
       for (int i = 0; i < sortedDefectKeys.length; i++) {
         final colIdx = fixedColsCount + i;
@@ -487,6 +487,7 @@ class ExcelExportService {
           style: positionNumberStyle,
           trackWidth: false,
         );
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: colIdx, rowIndex: 0)).cellStyle = positionNumberStyle;
       }
     }
 
