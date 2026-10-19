@@ -83,7 +83,7 @@ void main() {
       final sheetName = decoder.tables.keys.first;
       final table = decoder.tables[sheetName]!;
 
-      // Verify Column Headers (Row 2) - Standard 33 Master Template Columns
+      // Verify Column Headers (Row 2) - Standard 34 Master Template Columns
       final row2Headers = table.rows[2].map((e) => e?.toString() ?? '').toList();
 
       expect(row2Headers[0], 'Pos.');
@@ -104,21 +104,22 @@ void main() {
       expect(row2Headers[15], 'Schließart');
       expect(row2Headers[16], 'Gleitschienen, Schließfolgeregelung, Feststellung');
       expect(row2Headers[17], 'Schloßmaße');
-      expect(row2Headers[18], 'Türschließer auf Bandseite');
-      expect(row2Headers[19], 'Türschließer auf Bandgegenseite');
-      expect(row2Headers[20], 'Sturzhöhe auf Bandseite innen über 1m');
-      expect(row2Headers[21], 'Sturzhöhe auf Bandgegenseite außen über 1m');
-      expect(row2Headers[22], 'Fluchtürsteuerung \n Türwächter');
+      expect(row2Headers[18], 'FSA/Antrieb');
+      expect(row2Headers[19], 'Türschließer auf Bandseite');
+      expect(row2Headers[20], 'Türschließer auf Bandgegenseite');
+      expect(row2Headers[21], 'Sturzhöhe auf Bandseite innen über 1m');
+      expect(row2Headers[22], 'Sturzhöhe auf Bandgegenseite außen über 1m');
       expect(row2Headers[23], 'Zutrittskontrolle');
-      expect(row2Headers[24], 'Fluchtwegsituation');
-      expect(row2Headers[25], 'Fluchwegbeschilderung vorhanden?');
-      expect(row2Headers[26], 'Blindzylinder');
-      expect(row2Headers[27], 'PZ-Zylinder');
-      expect(row2Headers[28], 'Beschlagart');
-      expect(row2Headers[29], 'Panikfunktion B / E / usw.');
-      expect(row2Headers[30], 'Fluchtrichtung eingehalten');
-      expect(row2Headers[31], 'Vollpanik (Standflügel)');
-      expect(row2Headers[32], 'Tür einschl. Komponenten in ordendlicher Funktion');
+      expect(row2Headers[24], 'Fluchtürsteuerung \n Türwächter');
+      expect(row2Headers[25], 'Fluchtwegsituation');
+      expect(row2Headers[26], 'Fluchwegbeschilderung vorhanden?');
+      expect(row2Headers[27], 'Blindzylinder');
+      expect(row2Headers[28], 'PZ-Zylinder');
+      expect(row2Headers[29], 'Beschlagart');
+      expect(row2Headers[30], 'Panikfunktion B / E / usw.');
+      expect(row2Headers[31], 'Fluchtrichtung eingehalten');
+      expect(row2Headers[32], 'Vollpanik (Standflügel)');
+      expect(row2Headers[33], 'Tür einschl. Komponenten in ordendlicher Funktion');
 
       // Verify Data Row (Row 3)
       final row3Data = table.rows[3].map((e) => e?.toString() ?? '').toList();
@@ -140,21 +141,22 @@ void main() {
       expect(row3Data[15], 'TS93');
       expect(row3Data[16], 'GSR');
       expect(row3Data[17], '65/72/9');
-      expect(row3Data[18], 'X');
-      expect(row3Data[19], '');
-      expect(row3Data[20], '2m');
-      expect(row3Data[21], '> 5m');
-      expect(row3Data[22], 'Ja ?');
+      expect(row3Data[18], '15.05.2024');
+      expect(row3Data[19], 'X');
+      expect(row3Data[20], '');
+      expect(row3Data[21], '2m');
+      expect(row3Data[22], '> 5m');
       expect(row3Data[23], 'RFID');
-      expect(row3Data[24], 'X');
+      expect(row3Data[24], 'Ja ?');
       expect(row3Data[25], 'X');
-      expect(row3Data[26], '');
-      expect(row3Data[27], 'X');
-      expect(row3Data[28], 'Drücker');
-      expect(row3Data[29], 'Funktion B');
-      expect(row3Data[30], 'X');
+      expect(row3Data[26], 'X');
+      expect(row3Data[27], '');
+      expect(row3Data[28], 'X');
+      expect(row3Data[29], 'Drücker');
+      expect(row3Data[30], 'Funktion B');
       expect(row3Data[31], 'X');
-      expect(row3Data[32], 'J');
+      expect(row3Data[32], 'X');
+      expect(row3Data[33], 'J');
 
       // Test roundtrip import
       final importResult = await ExcelDataImporter.importFromFile(file);
