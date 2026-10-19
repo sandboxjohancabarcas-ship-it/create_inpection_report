@@ -12,6 +12,7 @@ import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
 import '../widgets/create_project_dialog.dart';
 import 'inspection_doors_page.dart';
+import 'package:intl/intl.dart';
 
 class DoorListPage extends StatefulWidget {
   const DoorListPage({super.key});
@@ -126,15 +127,19 @@ class _DoorListPageState extends State<DoorListPage> {
 
         if (!mounted) return;
 
+        final bool hasInspections = await LocalDatabaseService.hasInspectionsToSave();
+
         final String? action = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Inspektionspaket importieren'),
-            content: const Text(
+            content: Text(
               'Wie möchten Sie das Paket importieren?\n\n'
               '• Hinzufügen (Merge): Ergänzt Ihre bestehenden Aufträge auf diesem Gerät.\n\n'
-              '• Ersetzen: Ersetzt die vorherigen Daten durch dieses Paket.\n\n'
-              'Hinweis: Vor jedem Import wird automatisch eine Sicherheitskopie Ihrer aktuellen Daten erstellt.'
+              '• Ersetzen: Ersetzt die vorherigen Daten durch dieses Paket.\n\n' +
+              (hasInspections
+                  ? 'Hinweis: Da bestehende Prüfungsdaten vorhanden sind, werden Sie vor dem Import aufgefordert, den Speicherort für eine Sicherheitskopie auszuwählen.'
+                  : 'Hinweis: Es sind keine vorherigen Prüfungsdaten vorhanden, die gesichert werden müssen.')
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Abbrechen')),
@@ -151,6 +156,49 @@ class _DoorListPageState extends State<DoorListPage> {
         );
 
         if (action == null) return;
+
+        String? savedBackupPath;
+        if (hasInspections) {
+          final workingDbPath = await LocalDatabaseService.getWorkingDbPath();
+          final workingDbFile = File(workingDbPath);
+          final timeStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+          final tag = action == 'replace' ? 'pre_replace' : 'pre_merge';
+          final defaultFileName = 'Sicherheitskopie_WartungsTool_${tag}_$timeStr.db';
+
+          savedBackupPath = await FileExportHelper.saveFileSafely(
+            defaultFileName: defaultFileName,
+            dialogTitle: 'Sicherheitskopie der aktuellen Daten speichern unter',
+            sourceFile: workingDbFile,
+            allowedExtensions: ['db'],
+          );
+
+          if (savedBackupPath == null) {
+            if (!mounted) return;
+            final bool? proceed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Keine Sicherheitskopie gespeichert'),
+                content: const Text(
+                  'Sie haben keinen Speicherort für die Sicherheitskopie ausgewählt.\n\n'
+                  'Möchten Sie den Import wirklich ohne Sicherheitskopie fortsetzen?'
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Import abbrechen'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Ohne Backup importieren'),
+                  ),
+                ],
+              ),
+            );
+            if (proceed != true) {
+              return;
+            }
+          }
+        }
 
         setState(() => _isSyncing = true);
         ImportReport? report;
@@ -170,9 +218,12 @@ class _DoorListPageState extends State<DoorListPage> {
           if (report != null && mounted) {
             await ImportReportDialog.show(context, report);
           } else if (mounted) {
+            final String msg = savedBackupPath != null
+                ? 'Paket erfolgreich importiert (Sicherheitskopie gespeichert: ${p.basename(savedBackupPath)}).'
+                : 'Paket erfolgreich importiert.';
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Paket erfolgreich importiert (Sicherheits-Backup angelegt).'),
+              SnackBar(
+                content: Text(msg),
                 backgroundColor: Colors.green,
               ),
             );

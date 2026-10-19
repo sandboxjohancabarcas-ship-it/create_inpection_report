@@ -39,6 +39,53 @@ class PhotoNameHelper {
     );
   }
 
+  /// Generates the standardized photo filename for door properties (Zulassungsnummer, Hersteller, Herstellernummer).
+  /// Format: [alias]_[propertyname]_[indexNumber].jpg
+  /// Examples:
+  /// - 000100-1-EG-21.2_Zulassungsnummer_1.jpg
+  /// - 000100-1-EG-21.2_Hersteller_1.jpg
+  /// - 000100-1-EG-21.2_Herstellernummer_1.jpg
+  static String formatPropertyPhotoName({
+    required String doorAlias,
+    required String propertyName,
+    required int indexNumber,
+    String extension = 'jpg',
+  }) {
+    final cleanAlias = sanitizeForFilename(doorAlias.trim().isNotEmpty ? doorAlias.trim() : 'Door');
+    String prop = propertyName.trim();
+    if (prop.toLowerCase() == 'hersteller nummer') {
+      prop = 'Herstellernummer';
+    } else if (prop.toLowerCase() == 'zulangsnummer') {
+      prop = 'Zulassungsnummer';
+    } else if (prop.toLowerCase() == 'tür' || prop.toLowerCase() == 'tuer') {
+      prop = 'Tuer';
+    }
+    final cleanProp = sanitizeForFilename(prop.isNotEmpty ? prop : 'Eigenschaft');
+    final cleanExt = extension.trim();
+    final indexNum = indexNumber > 0 ? indexNumber : 1;
+    if (cleanExt.isEmpty) {
+      return '${cleanAlias}_${cleanProp}_$indexNum';
+    }
+    final ext = cleanExt.startsWith('.') ? cleanExt.substring(1) : cleanExt;
+    return '${cleanAlias}_${cleanProp}_$indexNum.$ext';
+  }
+
+  /// Generates the standardized photo filename for a door photo in "Grundinformationen".
+  /// Format: [alias]_Tuer_[indexNumber].jpg
+  /// Example: 000100-1-EG-21.2_Tuer_1.jpg
+  static String formatDoorPhotoName({
+    required String doorAlias,
+    required int indexNumber,
+    String extension = 'jpg',
+  }) {
+    return formatPropertyPhotoName(
+      doorAlias: doorAlias,
+      propertyName: 'Tuer',
+      indexNumber: indexNumber,
+      extension: extension,
+    );
+  }
+
   /// Sanitizes invalid filesystem characters (: * ? " < > | \ /) to prevent file write issues.
   static String sanitizeForFilename(String input) {
     return input.replaceAll(RegExp(r'[\\/:*?"<>|]'), '-').trim();

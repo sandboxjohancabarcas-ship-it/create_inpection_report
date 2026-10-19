@@ -9,6 +9,7 @@ import '../widgets/barcode_scanner_dialog.dart';
 import 'error_management_page.dart';
 import 'door_history_page.dart';
 import '../utils/inspection_year_utils.dart';
+import '../utils/property_photo_helper.dart';
 
 class DoorInspectionForm extends StatefulWidget {
   final Door? door; // null = create mode
@@ -57,6 +58,15 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   String manufacturerNumber = '?';
   String manufactureYear = '?';
   String? fsaDriveAcceptanceDate;
+
+  // Photo sequence tracking for properties (starts at 1)
+  final Map<String, int> _propertyPhotoCounters = {
+    'Zulassungsnummer': 1,
+    'Hersteller': 1,
+    'Herstellernummer': 1,
+    'Tuer': 1,
+  };
+  int _doorPhotoCount = 0;
 
   // Boolean states
   bool escapeSignage = false;
@@ -882,6 +892,52 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return hasValue ? currentValue : null;
   }
 
+  Future<void> _takePropertyPhoto({
+    required String propertyName,
+    ValueChanged<String>? onPhotoSaved,
+  }) async {
+    if (_isFormReadOnly) return;
+
+    String alias = doorAliasController.text.trim();
+    if (alias.isEmpty) {
+      alias = provisionalAliasController.text.trim();
+    }
+    if (alias.isEmpty) {
+      alias = _activeDoor?.doorAlias ?? widget.door?.doorAlias ?? 'Tuer';
+    }
+
+    final currentIndex = _propertyPhotoCounters[propertyName] ?? 1;
+
+    final String? savedPath = await PropertyPhotoHelper.captureAndSavePropertyPhoto(
+      context: context,
+      doorAlias: alias,
+      propertyName: propertyName,
+      indexNumber: currentIndex,
+    );
+
+    if (savedPath != null) {
+      setState(() {
+        _propertyPhotoCounters[propertyName] = currentIndex + 1;
+        if (propertyName.toLowerCase() == 'tuer' || propertyName.toLowerCase() == 'tür') {
+          _doorPhotoCount++;
+        }
+        onPhotoSaved?.call('Foto');
+      });
+
+      if (mounted) {
+        final String successMsg = (propertyName.toLowerCase() == 'tuer' || propertyName.toLowerCase() == 'tür')
+            ? 'Türfoto gespeichert unter:\n$savedPath'
+            : 'Foto für $propertyName gespeichert unter:\n$savedPath';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMsg),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
   Future<String?> _showYearOnlyPickerDialog(BuildContext context, String currentYearStr) async {
     final DateTime now = DateTime.now();
     final int currentYearInt = int.tryParse(currentYearStr) ?? now.year;
@@ -1219,7 +1275,24 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const SizedBox(height: 20),
 
             // Basic Information Section
-            const Text("Grundinformationen", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Grundinformationen", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                OutlinedButton.icon(
+                  onPressed: _isFormReadOnly
+                      ? null
+                      : () => _takePropertyPhoto(propertyName: 'Tuer'),
+                  icon: const Icon(Icons.camera_alt, size: 18),
+                  label: Text(_doorPhotoCount > 0 ? "Türfoto ($_doorPhotoCount)" : "Türfoto aufnehmen"),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
             
             // Door number
@@ -1319,6 +1392,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               currentValue: approvalNumber,
               options: DoorOptionsService.getStringOptions('approvalNumber'),
               onChanged: (val) => setState(() => approvalNumber = val),
+              onTakePhoto: () => _takePropertyPhoto(
+                propertyName: "Zulassungsnummer",
+                onPhotoSaved: (val) => approvalNumber = val,
+              ),
             ),
 
             // Hersteller (Manufacturer - Custom drop-down)
@@ -1327,6 +1404,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               currentValue: manufacturer,
               options: DoorOptionsService.getStringOptions('manufacturer'),
               onChanged: (val) => setState(() => manufacturer = val),
+              onTakePhoto: () => _takePropertyPhoto(
+                propertyName: "Hersteller",
+                onPhotoSaved: (val) => manufacturer = val,
+              ),
             ),
 
             // Herstellernummer (Manufacturer number - Placed directly below Hersteller)
@@ -1335,6 +1416,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               currentValue: manufacturerNumber,
               options: DoorOptionsService.getStringOptions('manufacturerNumber'),
               onChanged: (val) => setState(() => manufacturerNumber = val),
+              onTakePhoto: () => _takePropertyPhoto(
+                propertyName: "Herstellernummer",
+                onPhotoSaved: (val) => manufacturerNumber = val,
+              ),
             ),
 
             // DoP-Nummer (Leistungserklärung) - Free alphanumeric field

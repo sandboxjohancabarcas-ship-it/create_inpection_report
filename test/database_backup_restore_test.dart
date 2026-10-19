@@ -118,6 +118,35 @@ void main() {
 
       await backupFile.delete();
     });
+
+    test('hasInspectionsToSave returns false when working DB is empty, and true when inspections or doors exist', () async {
+      final localDb = await LocalDatabaseService.getDb();
+      await localDb.delete('doors');
+      await localDb.delete('inspections');
+
+      // 1. Empty DB -> should return false (no request needed)
+      final hasDataEmpty = await LocalDatabaseService.hasInspectionsToSave();
+      expect(hasDataEmpty, isFalse);
+
+      // 2. DB with inspection -> should return true (request needed)
+      await localDb.insert('inspections', {
+        'inspectionId': 999,
+        'clientName': 'Client To Save',
+        'objectAddress': 'Test Strasse 1',
+      });
+      final hasDataWithInsp = await LocalDatabaseService.hasInspectionsToSave();
+      expect(hasDataWithInsp, isTrue);
+
+      // 3. Clear inspections, add door -> should return true
+      await localDb.delete('inspections');
+      await localDb.insert('doors', {
+        'pos': 1,
+        'doorAlias': 'DOOR-SAVE-CHECK',
+        'doorNumber': 'D-1',
+      });
+      final hasDataWithDoor = await LocalDatabaseService.hasInspectionsToSave();
+      expect(hasDataWithDoor, isTrue);
+    });
   });
 
   group('AppVersionDialog Widget Rendering Tests', () {

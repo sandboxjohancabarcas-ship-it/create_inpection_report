@@ -8,12 +8,15 @@ class EditableDropdownField extends StatefulWidget {
   final List<String> options;
   final ValueChanged<String> onChanged;
 
+  final VoidCallback? onTakePhoto;
+
   const EditableDropdownField({
     super.key,
     required this.label,
     required this.currentValue,
     required this.options,
     required this.onChanged,
+    this.onTakePhoto,
   });
 
   @override
@@ -34,7 +37,7 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
   @override
   void didUpdateWidget(covariant EditableDropdownField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentValue != widget.currentValue && widget.currentValue != _controller.text) {
+    if (widget.currentValue != _controller.text) {
       _controller.text = widget.currentValue;
     }
   }
@@ -48,8 +51,13 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
 
   @override
   Widget build(BuildContext context) {
-    // Unique list of options, ensuring '?' is included first
-    final List<String> allOptions = ['?', ...widget.options.where((o) => o != '?')];
+    // Unique list of options, ensuring '?' is included first, followed by 'Foto' if photo feature is available
+    final bool hasFoto = widget.onTakePhoto != null || widget.options.contains('Foto');
+    final List<String> allOptions = [
+      '?',
+      if (hasFoto) 'Foto',
+      ...widget.options.where((o) => o != '?' && o != 'Foto'),
+    ];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -69,6 +77,39 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
           widget.onChanged(selection);
         },
         fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+          Widget? suffix;
+          final dropdownButton = PopupMenuButton<String>(
+            icon: const Icon(Icons.arrow_drop_down),
+            onSelected: (String value) {
+              controller.text = value;
+              widget.onChanged(value);
+            },
+            itemBuilder: (context) {
+              return allOptions.map((opt) {
+                return PopupMenuItem<String>(
+                  value: opt,
+                  child: Text(opt),
+                );
+              }).toList();
+            },
+          );
+
+          if (widget.onTakePhoto != null) {
+            suffix = Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.camera_alt),
+                  tooltip: 'Foto für ${widget.label} aufnehmen',
+                  onPressed: widget.onTakePhoto,
+                ),
+                dropdownButton,
+              ],
+            );
+          } else {
+            suffix = dropdownButton;
+          }
+
           return TextField(
             controller: controller,
             focusNode: focusNode,
@@ -76,21 +117,7 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
               labelText: widget.label,
               border: const OutlineInputBorder(),
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              suffixIcon: PopupMenuButton<String>(
-                icon: const Icon(Icons.arrow_drop_down),
-                onSelected: (String value) {
-                  controller.text = value;
-                  widget.onChanged(value);
-                },
-                itemBuilder: (context) {
-                  return allOptions.map((opt) {
-                    return PopupMenuItem<String>(
-                      value: opt,
-                      child: Text(opt),
-                    );
-                  }).toList();
-                },
-              ),
+              suffixIcon: suffix,
             ),
             onChanged: widget.onChanged,
           );

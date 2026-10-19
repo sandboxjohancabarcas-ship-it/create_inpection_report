@@ -1873,6 +1873,28 @@ class LocalDatabaseService {
     }
   }
 
+  /// Returns the path to the current working database file.
+  static Future<String> getWorkingDbPath() async => _getWorkingDbPath();
+
+  /// Checks whether the inspector app currently has any active inspections or doors to save.
+  static Future<bool> hasInspectionsToSave() async {
+    try {
+      final sourcePath = await _getWorkingDbPath();
+      final sourceFile = File(sourcePath);
+      if (!await sourceFile.exists() || (await sourceFile.length()) == 0) {
+        return false;
+      }
+      final db = await getDb();
+      final inspResult = await db.rawQuery('SELECT count(*) as c FROM inspections');
+      final inspCount = (inspResult.first['c'] as int?) ?? 0;
+      final doorResult = await db.rawQuery('SELECT count(*) as c FROM doors');
+      final doorCount = (doorResult.first['c'] as int?) ?? 0;
+      return (inspCount > 0 || doorCount > 0);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Creates an automatic safety backup of the working database prior to any import or replace action.
   /// Keeps the most recent [maxBackups] copies in the app's backup directory.
   static Future<File?> createSafetyBackup({String tag = 'pre_import', int maxBackups = 10}) async {
@@ -1960,7 +1982,7 @@ class LocalDatabaseService {
 
   /// Imports an external .db file to replace the internal working.db.
   /// Validates file existence, format, and schema compatibility.
-  static Future<void> importWorkingDb(String sourcePath) async {
+  static Future<void> importWorkingDb(String sourcePath, {bool createAutoBackup = false}) async {
     final sourceFile = File(sourcePath);
     
     // 1. Basic File Validation
@@ -1993,8 +2015,10 @@ class LocalDatabaseService {
       await tempDb?.close();
     }
 
-    // 3. Create Safety Backup of current working database before replacing
-    await createSafetyBackup(tag: 'pre_replace');
+    // 3. Create Safety Backup of current working database if requested
+    if (createAutoBackup) {
+      await createSafetyBackup(tag: 'pre_replace');
+    }
 
     // 4. Execute Import (Replace local working DB)
     await closeDb();
@@ -2012,9 +2036,11 @@ class LocalDatabaseService {
 
   /// Imports an external inspection package and merges it into the local working DB.
   /// Allows technicians to load multiple inspection packages without losing existing local data.
-  static Future<ImportReport> importAndMergePackage(String packagePath) async {
-    // Create safety backup before merge
-    await createSafetyBackup(tag: 'pre_merge');
+  static Future<ImportReport> importAndMergePackage(String packagePath, {bool createAutoBackup = false}) async {
+    // Create safety backup before merge if requested
+    if (createAutoBackup) {
+      await createSafetyBackup(tag: 'pre_merge');
+    }
     final localDb = await getDb();
     
     if (Platform.isWindows || Platform.isLinux) {

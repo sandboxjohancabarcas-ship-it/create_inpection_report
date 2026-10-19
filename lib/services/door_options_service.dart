@@ -25,7 +25,7 @@ class DoorOptionsService {
       "default": "?"
     },
     "manufacturer": {
-      "options": ["?", "Schüco", "Schüco ADS 80", "Schüco ADS 65.Ni SP", "Hueck-Alu", "Schüco Jansen-Stahl", "Forster Fuego-St.", "Forster Presto-St.", "MBB-Stahl", "RP-Stahl", "Hörmann-St.", "Teckentrup-St.", "Novoferm-St.", "Schörghuber-Holz", "Herholz-Holz", "Specht-Holz", "Schwarze-Stahl", "Hoba-Holz"],
+      "options": ["?", "Foto", "Schüco", "Schüco ADS 80", "Schüco ADS 65.Ni SP", "Hueck-Alu", "Schüco Jansen-Stahl", "Forster Fuego-St.", "Forster Presto-St.", "MBB-Stahl", "RP-Stahl", "Hörmann-St.", "Teckentrup-St.", "Novoferm-St.", "Schörghuber-Holz", "Herholz-Holz", "Specht-Holz", "Schwarze-Stahl", "Hoba-Holz"],
       "default": "?"
     },
     "dinConfiguration": {
@@ -116,11 +116,11 @@ class DoorOptionsService {
       "default": "Nein"
     },
     "approvalNumber": {
-      "options": ["?"],
+      "options": ["?", "Foto"],
       "default": "?"
     },
     "manufacturerNumber": {
-      "options": ["?"],
+      "options": ["?", "Foto"],
       "default": "?"
     },
     "lintelHeightValue": {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:collection/collection.dart';
 import '../models/models.dart';
@@ -51,6 +52,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
   final TextEditingController _searchController = TextEditingController();
   String? _inspectionDate;
   bool _isEditable = true;
+  Timer? _snackBarDismissTimer;
 
   @override
   void initState() {
@@ -60,8 +62,27 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
 
   @override
   void dispose() {
+    _snackBarDismissTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _showDismissibleSnackBar(SnackBar snackBar) {
+    if (!mounted) return;
+    _snackBarDismissTimer?.cancel();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(snackBar);
+    _snackBarDismissTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        messenger.hideCurrentSnackBar();
+        Future.delayed(const Duration(milliseconds: 350), () {
+          if (mounted) {
+            messenger.clearSnackBars();
+          }
+        });
+      }
+    });
   }
 
   Future<void> _loadDoors({bool isInitial = false}) async {
@@ -179,10 +200,10 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDismissibleSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
+          persist: false,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           content: Text(
@@ -194,7 +215,10 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           action: SnackBarAction(
             label: 'Rückgängig',
             textColor: Colors.white,
-            onPressed: () => _toggleDoorInspectionStatus(door),
+            onPressed: () {
+              _snackBarDismissTimer?.cancel();
+              _toggleDoorInspectionStatus(door);
+            },
           ),
         ),
       );
@@ -222,10 +246,10 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
     }
     if (mounted) {
       final isInspected = newStatus.toLowerCase() == 'inspected';
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showDismissibleSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
+          persist: false,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           content: Text(
@@ -1165,7 +1189,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                         child: Row(
                           children: [
                             ChoiceChip(
-                              label: Text('Alle ($totalCount)'),
+                              label: Text('Türen gesamt ($totalCount)'),
                               selected: _filter == InspectionDoorFilter.all,
                               onSelected: (_) => setState(() => _filter = InspectionDoorFilter.all),
                             ),
@@ -1180,7 +1204,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                             const SizedBox(width: 6),
                             ChoiceChip(
                               avatar: Icon(Icons.hourglass_top, size: 14, color: _filter == InspectionDoorFilter.pending ? Colors.white : Colors.orange.shade800),
-                              label: Text('Offen ($pendingCount)'),
+                              label: Text('Ungeprüft ($pendingCount)'),
                               selected: _filter == InspectionDoorFilter.pending,
                               selectedColor: Colors.orange.shade800,
                               onSelected: (_) => setState(() => _filter = InspectionDoorFilter.pending),
