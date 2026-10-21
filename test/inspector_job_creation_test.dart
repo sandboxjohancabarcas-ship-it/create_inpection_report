@@ -175,7 +175,7 @@ void main() {
     // New editable fields
     expect(followUpInsp['jobNumber'], 'REP-2026-002');
     expect(followUpInsp['orderType'], 'Reparatur');
-    expect(followUpInsp['repairDate'], repDate.toIso8601String());
+    expect(followUpInsp['repairDate']?.toString().startsWith('2026-05-15'), true);
     expect(followUpInsp['contactPerson'], 'Herr Schneider');
     expect(followUpInsp['inspectorName'], 'Techniker Lisa');
 

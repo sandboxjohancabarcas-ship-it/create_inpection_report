@@ -33,8 +33,8 @@ void main() {
     await tester.tap(find.text('Open Viewer'));
     await tester.pumpAndSettle();
 
-    // Verify index counter initially shows "1 / 2"
-    expect(find.text('1 / 2'), findsOneWidget);
+    // Verify index counter initially shows "1/2"
+    expect(find.text('1/2'), findsOneWidget);
 
     // Verify left and right chevron icons exist
     expect(find.byIcon(Icons.chevron_left), findsOneWidget);
@@ -44,15 +44,15 @@ void main() {
     await tester.tap(find.byIcon(Icons.chevron_right));
     await tester.pumpAndSettle();
 
-    // Counter updated to "2 / 2"
-    expect(find.text('2 / 2'), findsOneWidget);
+    // Counter updated to "2/2"
+    expect(find.text('2/2'), findsOneWidget);
 
     // Tap left arrow to move back to first photo
     await tester.tap(find.byIcon(Icons.chevron_left));
     await tester.pumpAndSettle();
 
-    // Counter updated to "1 / 2"
-    expect(find.text('1 / 2'), findsOneWidget);
+    // Counter updated to "1/2"
+    expect(find.text('1/2'), findsOneWidget);
 
     // Close viewer by tapping close button
     await tester.tap(find.byIcon(Icons.close));

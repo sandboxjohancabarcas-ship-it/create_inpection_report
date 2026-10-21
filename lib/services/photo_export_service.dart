@@ -148,7 +148,11 @@ class PhotoExportService {
         );
 
         try {
-          final bytes = base64Decode(photoBase64);
+          String cleanBase64 = photoBase64.trim();
+          if (cleanBase64.contains(',')) {
+            cleanBase64 = cleanBase64.split(',').last.trim();
+          }
+          final bytes = base64Decode(cleanBase64);
           final filePath = p.join(targetDir, fileName);
           final file = File(filePath);
           await file.writeAsBytes(bytes);

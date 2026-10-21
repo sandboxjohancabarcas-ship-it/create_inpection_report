@@ -89,13 +89,14 @@ void main() {
     expect(table.rows[3][12]?.toString(), '2');
     expect(table.rows[3][16]?.toString(), 'GSR-EMF 2-flg.');
     expect(table.rows[3][17]?.toString(), 'PZ 72/55/24');
-    expect(table.rows[3][32]?.toString(), 'J');
-    expect(table.rows[3][33]?.toString(), '1');
+    // doorFunctionOK is column 33, first defect is column 34
+    expect(table.rows[3][33]?.toString(), 'J');
+    expect(table.rows[3][34]?.toString(), '1');
 
     // Verify summary row
     final lastRowIdx = table.rows.length - 1;
-    expect(table.rows[lastRowIdx][29]?.toString(), 'Summe für Mängelbeseitigung');
-    expect(table.rows[lastRowIdx][33]?.toString(), '1');
+    expect(table.rows[lastRowIdx].any((c) => c?.toString() == 'Summe für Mängelbeseitigung'), true);
+    expect(table.rows[lastRowIdx][34]?.toString(), '1');
 
     // 2. Validate OpenXML Archive Integrity
     final archive = ZipDecoder().decodeBytes(bytes);

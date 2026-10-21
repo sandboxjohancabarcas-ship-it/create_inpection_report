@@ -1720,7 +1720,7 @@ class DatabaseService {
 
       for (var e in errors) {
         final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-        if (status == 'resolved' || status == 'beholfen') {
+        if (status == 'resolved' || status == 'behoben' || status == 'beholfen' || status == 'gelöst') {
           resolvedErrors++;
         } else {
           currentOpenErrors++;
@@ -1745,8 +1745,8 @@ class DatabaseService {
         return errors.any((e) {
           final sev = (e['severity']?.toString() ?? 'medium').toLowerCase();
           final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-          return (sev == 'high' || sev == 'critical' || sev == 'hoch' || sev == 'kritisch') &&
-                 (status != 'resolved' && status != 'beholfen');
+          final isResolved = (status == 'resolved' || status == 'behoben' || status == 'beholfen' || status == 'gelöst');
+          return (sev == 'high' || sev == 'critical' || sev == 'hoch' || sev == 'kritisch') && !isResolved;
         });
       });
       healthStatus = hasHighSeverity ? 'red' : 'yellow';

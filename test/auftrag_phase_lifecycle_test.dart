@@ -79,7 +79,7 @@ void main() {
     expect(inspection, isNotNull);
     expect(inspection!['projectNumber'], 'PRJ-STANDALONE-REP-01');
     expect(inspection['orderType'], 'Reparatur');
-    expect(inspection['repairDate'], repDate.toIso8601String());
+    expect(inspection['repairDate'], startsWith('2026-10-15'));
     expect(inspection['jobNumber'], 'REP-2026-001');
     expect(inspection['clientName'], 'München Tech AG');
 

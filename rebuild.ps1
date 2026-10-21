@@ -1,10 +1,29 @@
-# WartungsTool - Android Build Script
+# WartungsTool - Android Build Script with Automated Pre-Build Integration Test Gate
+param(
+    [switch]$SkipTests = $false
+)
+
 Set-Location $PSScriptRoot
 
-Write-Host "Starting Android build sequence..." -ForegroundColor Cyan
+Write-Host "====================================================================" -ForegroundColor Cyan
+Write-Host "  WartungsTool - Android Release Build Sequence" -ForegroundColor Cyan
+Write-Host "====================================================================" -ForegroundColor Cyan
+
+# 0. Pre-Build Integration Test Routine Gatekeeper
+if (-not $SkipTests) {
+    Write-Host "`n[0/5] Executing Pre-Build Integration Test Routine Gatekeeper..." -ForegroundColor Cyan
+    & "$PSScriptRoot\scripts\run_test_routine.ps1" -PreBuild
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "`nABORT: Pre-Build Integration Tests FAILED. Android release build cancelled." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "-> Pre-Build Quality Gate: PASSED. Proceeding to compilation." -ForegroundColor Green
+} else {
+    Write-Host "`n[0/5] Skipping test routine (-SkipTests specified)." -ForegroundColor Yellow
+}
 
 # 1. Environment Pre-checks
-Write-Host "[1/5] Validating environment (Java 17 & Flutter)..." -ForegroundColor Gray
+Write-Host "`n[1/5] Validating environment (Java 17 & Flutter)..." -ForegroundColor Gray
 try {
     $javaVersion = java -version 2>&1 | Out-String
     if ($javaVersion -notmatch '17') {
@@ -36,9 +55,7 @@ $transformPaths = @(
 foreach ($path in $transformPaths) {
     if (Test-Path $path) {
         Write-Host "  Deleting: $path" -ForegroundColor DarkGray
-        # Use cmd /c rd for more aggressive directory removal on Windows
         cmd /c "rd /s /q `"$path`"" 2>$null
-        # Fallback with PowerShell if cmd failed
         if (Test-Path $path) {
             Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue
         }
