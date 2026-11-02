@@ -2,6 +2,7 @@
 // Handles temporary data for current inspections: doors, errors, requests
 
 import 'package:wartungstool/models/models.dart';
+import 'package:wartungstool/models/craftnote_models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/door_validator.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -38,7 +39,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 17,  // v17: Added orderType and repairDate columns to inspections table
+      version: 18,  // v18: Added Craftnote cloud integration columns + craftnote_upload_queue table
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -99,7 +100,11 @@ class LocalDatabaseService {
             projectNumber TEXT,
             isLocked INTEGER DEFAULT 0,
             orderType TEXT DEFAULT 'Wartung',
-            repairDate TEXT
+            repairDate TEXT,
+            craftnoteProjectId TEXT,
+            craftnoteFileId TEXT,
+            craftnoteSyncStatus TEXT DEFAULT 'none',
+            craftnoteLastSyncTime TEXT
           );
         ''');
 
@@ -152,12 +157,26 @@ class LocalDatabaseService {
           );
         ''');
 
+        // Craftnote offline upload queue table
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS craftnote_upload_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionId INTEGER,
+            craftnoteProjectId TEXT NOT NULL,
+            packageFilePath TEXT NOT NULL,
+            pdfFilePath TEXT,
+            queuedAt TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            lastError TEXT
+          );
+        ''');
 
         // Add indices for optimized searching
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_number ON doors (doorNumber)');
         await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_local_doors_alias ON doors (doorAlias)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_doors_provisional_alias ON doors (provisionalAlias)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_local_ec_description ON error_catalog (description)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_local_insp_craftnote ON inspections (craftnoteProjectId)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -334,6 +353,31 @@ class LocalDatabaseService {
             print('Local Database upgraded to version 17: orderType and repairDate columns added to inspections table.');
           } catch (e) {
             print('Local DB migration warning (v17 columns): $e');
+          }
+        }
+
+        if (oldVersion < 18) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteProjectId TEXT");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteFileId TEXT");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteSyncStatus TEXT DEFAULT 'none'");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteLastSyncTime TEXT");
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_local_insp_craftnote ON inspections (craftnoteProjectId)");
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS craftnote_upload_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionId INTEGER,
+                craftnoteProjectId TEXT NOT NULL,
+                packageFilePath TEXT NOT NULL,
+                pdfFilePath TEXT,
+                queuedAt TEXT NOT NULL,
+                attempts INTEGER DEFAULT 0,
+                lastError TEXT
+              );
+            ''');
+            print('[LocalDatabaseService] Local Database upgraded to version 18: Craftnote columns and upload queue added.');
+          } catch (e) {
+            print('Local DB migration warning (v18 columns): $e');
           }
         }
       },
@@ -2346,5 +2390,72 @@ class LocalDatabaseService {
     } catch (_) {
       return {};
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CRAFTNOTE CLOUD INTEGRATION & OFFLINE QUEUE
+  // ─────────────────────────────────────────────────────────────
+
+  /// Updates Craftnote linkage and synchronization status for an inspection in Local DB.
+  static Future<void> updateInspectionCraftnoteStatus(
+    int inspectionId, {
+    String? projectId,
+    String? fileId,
+    String? syncStatus,
+    String? lastSyncTime,
+  }) async {
+    final db = await getDb();
+    final values = <String, dynamic>{};
+    if (projectId != null) values['craftnoteProjectId'] = projectId;
+    if (fileId != null) values['craftnoteFileId'] = fileId;
+    if (syncStatus != null) values['craftnoteSyncStatus'] = syncStatus;
+    values['craftnoteLastSyncTime'] = lastSyncTime ?? DateTime.now().toIso8601String();
+
+    await db.update(
+      'inspections',
+      values,
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+  }
+
+  /// Enqueues an upload task into local SQLite for background/retry sync.
+  static Future<int> enqueueCraftnoteUpload(CraftnoteUploadQueueItem item) async {
+    final db = await getDb();
+    return await db.insert(
+      'craftnote_upload_queue',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Retrieves all pending Craftnote uploads ordered by queued timestamp ascending.
+  static Future<List<CraftnoteUploadQueueItem>> getPendingCraftnoteUploads() async {
+    final db = await getDb();
+    final rows = await db.query(
+      'craftnote_upload_queue',
+      orderBy: 'queuedAt ASC',
+    );
+    return rows.map((r) => CraftnoteUploadQueueItem.fromMap(r)).toList();
+  }
+
+  /// Removes an upload queue item once successfully synced.
+  static Future<int> deleteCraftnoteUploadQueueItem(int id) async {
+    final db = await getDb();
+    return await db.delete(
+      'craftnote_upload_queue',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Increments retry count and sets last error message for an upload queue item.
+  static Future<void> incrementCraftnoteUploadAttempt(int id, {String? error}) async {
+    final db = await getDb();
+    await db.rawUpdate('''
+      UPDATE craftnote_upload_queue
+      SET attempts = attempts + 1, lastError = ?
+      WHERE id = ?
+    ''', [error, id]);
   }
 }

@@ -17,6 +17,7 @@ class InspectionSummaryCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final String? craftnoteSyncStatus;
   final VoidCallback? onToggleLock;
   final bool isSelected;
   final ValueChanged<bool?>? onSelectionChanged;
@@ -32,6 +33,7 @@ class InspectionSummaryCard extends StatelessWidget {
     this.repairDate,
     this.doorCount,
     this.isLocked,
+    this.craftnoteSyncStatus,
     this.onEdit,
     this.onTap,
     this.onLongPress,
@@ -142,6 +144,60 @@ class InspectionSummaryCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (craftnoteSyncStatus != null && craftnoteSyncStatus != 'none')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: craftnoteSyncStatus == 'synced'
+                      ? Colors.green.shade50
+                      : (craftnoteSyncStatus == 'queued'
+                          ? Colors.orange.shade50
+                          : Colors.blue.shade50),
+                  border: Border.all(
+                    color: craftnoteSyncStatus == 'synced'
+                        ? Colors.green.shade300
+                        : (craftnoteSyncStatus == 'queued'
+                            ? Colors.orange.shade300
+                            : Colors.blue.shade300),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      craftnoteSyncStatus == 'synced'
+                          ? Icons.cloud_done
+                          : (craftnoteSyncStatus == 'queued'
+                              ? Icons.cloud_queue
+                              : Icons.cloud_download),
+                      size: 12,
+                      color: craftnoteSyncStatus == 'synced'
+                          ? Colors.green.shade900
+                          : (craftnoteSyncStatus == 'queued'
+                              ? Colors.orange.shade900
+                              : Colors.blue.shade900),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      craftnoteSyncStatus == 'synced'
+                          ? 'Craftnote'
+                          : (craftnoteSyncStatus == 'queued'
+                              ? 'Warteschlange'
+                              : 'Importiert'),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: craftnoteSyncStatus == 'synced'
+                            ? Colors.green.shade900
+                            : (craftnoteSyncStatus == 'queued'
+                                ? Colors.orange.shade900
+                                : Colors.blue.shade900),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
         subtitle: Column(

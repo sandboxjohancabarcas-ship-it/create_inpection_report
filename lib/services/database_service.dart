@@ -27,7 +27,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 27, // v27: Added orderType and repairDate columns to inspections table
+      version: 28, // v28: Added Craftnote cloud integration columns (craftnoteProjectId, craftnoteFileId, craftnoteSyncStatus, craftnoteLastSyncTime)
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -92,12 +92,17 @@ class DatabaseService {
             projectNumber TEXT,
             isLocked INTEGER DEFAULT 0,
             orderType TEXT DEFAULT 'Wartung',
-            repairDate TEXT
+            repairDate TEXT,
+            craftnoteProjectId TEXT,
+            craftnoteFileId TEXT,
+            craftnoteSyncStatus TEXT DEFAULT 'none',
+            craftnoteLastSyncTime TEXT
           );
         ''');
         await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
         await db.execute('CREATE INDEX idx_insp_job ON inspections (jobNumber)');
         await db.execute('CREATE INDEX idx_insp_date ON inspections (date)');
+        await db.execute('CREATE INDEX idx_insp_craftnote ON inspections (craftnoteProjectId)');
 
         // InspectionDoors table
         await db.execute('''
@@ -331,12 +336,48 @@ class DatabaseService {
             print('Main DB migration warning (v27 columns): $e');
           }
         }
+
+        if (oldVersion < 28) {
+          try {
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteProjectId TEXT");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteFileId TEXT");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteSyncStatus TEXT DEFAULT 'none'");
+            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteLastSyncTime TEXT");
+            await db.execute("CREATE INDEX IF NOT EXISTS idx_insp_craftnote ON inspections (craftnoteProjectId)");
+            print('[DatabaseService] Main DB upgraded to v28: Craftnote cloud integration columns added.');
+          } catch (e) {
+            print('Main DB migration warning (v28 columns): $e');
+          }
+        }
       },
     );
 
     await populateMissingAliases(_db!);
 
     return _db!;
+  }
+
+  /// Updates Craftnote linkage and synchronization status for an inspection.
+  static Future<void> updateInspectionCraftnoteStatus(
+    int inspectionId, {
+    String? projectId,
+    String? fileId,
+    String? syncStatus,
+    String? lastSyncTime,
+  }) async {
+    final db = await getDb();
+    final values = <String, dynamic>{};
+    if (projectId != null) values['craftnoteProjectId'] = projectId;
+    if (fileId != null) values['craftnoteFileId'] = fileId;
+    if (syncStatus != null) values['craftnoteSyncStatus'] = syncStatus;
+    values['craftnoteLastSyncTime'] = lastSyncTime ?? DateTime.now().toIso8601String();
+
+    await db.update(
+      'inspections',
+      values,
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
   }
 
   /// Sets or updates the lock status for a given inspection ID in Master DB.

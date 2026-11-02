@@ -623,6 +623,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           repairDate: job['repairDate']?.toString(),
                           doorCount: job['doorCount'] != null ? (job['doorCount'] as num).toInt() : null,
                           isLocked: job['isLocked'],
+                          craftnoteSyncStatus: job['craftnoteSyncStatus']?.toString(),
                           onToggleLock: () async {
                             final currentlyLocked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
                             await DatabaseService.setInspectionLockStatus(id, !currentlyLocked);

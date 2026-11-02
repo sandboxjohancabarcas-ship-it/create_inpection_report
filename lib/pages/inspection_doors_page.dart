@@ -11,6 +11,9 @@ import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../services/photo_export_service.dart';
+import '../models/craftnote_models.dart';
+import '../services/craftnote_api_service.dart';
+import '../services/craftnote_sync_service.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
@@ -318,6 +321,131 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
           if (await tf.exists()) await tf.delete();
         } catch (_) {}
       }
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  Future<void> _handleCompleteAndUploadToCraftnote() async {
+    // 1. Verify all doors have been inspected or show warning if uninspected doors exist
+    final uninspectedCount = _doors.where((d) => (_doorInspectionStatuses[d.id] ?? '') != 'Inspected').length;
+    if (uninspectedCount > 0) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Ungeprüfte Türen vorhanden'),
+          content: Text(
+            'Es sind noch $uninspectedCount von ${_doors.length} Türen nicht als "Geprüft" markiert.\n\n'
+            'Möchten Sie den Prüfauftrag trotzdem abschließen und an Craftnote übertragen?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Trotzdem abschließen & senden'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+    // 2. Check if a Craftnote project is linked
+    final insp = await LocalDatabaseService.getInspectionById(widget.inspectionId);
+    String? projectId = insp?['craftnoteProjectId']?.toString();
+
+    if (projectId == null || projectId.trim().isEmpty) {
+      // Prompt inspector to link to a Craftnote project
+      final service = CraftnoteApiService();
+      List<CraftnoteProject> projects = [];
+      try {
+        projects = await service.getProjects();
+      } catch (_) {}
+
+      if (!mounted) return;
+
+      final selected = await showDialog<CraftnoteProject>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Craftnote-Projekt zuordnen'),
+          content: SizedBox(
+            width: 450,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Dieser Auftrag ist noch keinem Craftnote-Projekt zugeordnet. Bitte wählen Sie das Zielprojekt:'),
+                const SizedBox(height: 12),
+                if (projects.isEmpty)
+                  const Text('Keine Projekte verfügbar oder Offline.')
+                else
+                  ...projects.map((p) => ListTile(
+                    dense: true,
+                    title: Text(p.name),
+                    subtitle: Text(p.orderNumber.isNotEmpty ? '#${p.orderNumber}' : p.id),
+                    onTap: () => Navigator.pop(ctx, p),
+                  )),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Abbrechen')),
+          ],
+        ),
+      );
+
+      if (selected == null) return;
+      projectId = selected.id;
+      await LocalDatabaseService.updateInspectionCraftnoteStatus(
+        widget.inspectionId,
+        projectId: projectId,
+      );
+    }
+
+    setState(() => _isSyncing = true);
+    try {
+      final syncService = CraftnoteSyncService();
+      final result = await syncService.completeAndUploadFromLocalDb(
+        inspectionId: widget.inspectionId,
+      );
+
+      if (mounted) {
+        if (result.isQueuedOffline) {
+          _showDismissibleSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.orange.shade800,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        } else if (result.success) {
+          _showDismissibleSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        } else {
+          _showDismissibleSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+        await _loadDoors();
+      }
+    } catch (e) {
+      if (mounted) {
+        _showDismissibleSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Synchronisieren mit Craftnote: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
   }
@@ -933,6 +1061,12 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               }
             },
           ),
+          if (!widget.isManagerMode)
+            IconButton(
+              icon: const Icon(Icons.cloud_upload, color: Colors.blue),
+              tooltip: 'Inspektion abschließen & an Craftnote senden',
+              onPressed: _isSyncing ? null : _handleCompleteAndUploadToCraftnote,
+            ),
           const MasterPortalHomeButton(),
         ],
         leading: isSelectionMode ? IconButton(

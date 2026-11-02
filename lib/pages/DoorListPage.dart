@@ -11,6 +11,9 @@ import '../widgets/app_version_dialog.dart';
 import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
 import '../widgets/create_project_dialog.dart';
+import '../widgets/craftnote_job_picker_modal.dart';
+import '../widgets/craftnote_settings_dialog.dart';
+import '../services/craftnote_sync_service.dart';
 import 'inspection_doors_page.dart';
 import 'package:intl/intl.dart';
 
@@ -29,6 +32,8 @@ class _DoorListPageState extends State<DoorListPage> {
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   final Set<int> _selectedIds = {};
+  int _pendingUploadCount = 0;
+  final CraftnoteSyncService _craftnoteSyncService = CraftnoteSyncService();
 
   @override
   void initState() {
@@ -42,14 +47,65 @@ class _DoorListPageState extends State<DoorListPage> {
       clientFilter: _selectedClient,
     );
     final clientList = await LocalDatabaseService.getAllLocalClients();
+    final pendingList = await LocalDatabaseService.getPendingCraftnoteUploads();
+
     if (mounted) {
       setState(() {
         inspections = results;
+        _pendingUploadCount = pendingList.length;
         _clients = ['Alle', ...clientList];
         if (!_clients.contains(_selectedClient)) {
           _selectedClient = 'Alle';
         }
       });
+    }
+  }
+
+  Future<void> _handleCraftnoteImport() async {
+    final result = await CraftnoteJobPickerModal.show(context);
+    if (result != null && result.success) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.green,
+          ),
+        );
+        await loadInspections();
+      }
+    }
+  }
+
+  Future<void> _handleProcessOfflineQueue() async {
+    setState(() => _isSyncing = true);
+    try {
+      final report = await _craftnoteSyncService.processPendingUploadQueue();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              report.succeeded > 0
+                  ? '${report.succeeded} Auftrag/Aufträge erfolgreich mit Craftnote synchronisiert.'
+                  : (report.hasErrors
+                      ? 'Synchronisierung fehlgeschlagen: ${report.errorMessages.join(", ")}'
+                      : 'Keine ausstehenden Aufträge in der Warteschlange.'),
+            ),
+            backgroundColor: report.succeeded > 0 ? Colors.green : Colors.orange,
+          ),
+        );
+        await loadInspections();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler bei der Synchronisierung: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -404,10 +460,52 @@ class _DoorListPageState extends State<DoorListPage> {
                     });
                   },
                 ),
+                if (_pendingUploadCount > 0)
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.cloud_queue, color: Colors.orange),
+                        tooltip: '$_pendingUploadCount Auftrag/Aufträge in Offline-Warteschlange (Antippen zum Synchronisieren)',
+                        onPressed: _isSyncing ? null : _handleProcessOfflineQueue,
+                      ),
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            '$_pendingUploadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.cloud_download, color: Colors.blue),
+                  tooltip: 'Aus Craftnote laden',
+                  onPressed: _isSyncing ? null : _handleCraftnoteImport,
+                ),
                 IconButton(
                   icon: const Icon(Icons.file_open),
                   tooltip: 'Paket importieren',
                   onPressed: _isSyncing ? null : _handleImportPaket,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  tooltip: 'Craftnote-Einstellungen',
+                  onPressed: () => CraftnoteSettingsDialog.show(context),
                 ),
                 IconButton(
                   icon: const Icon(Icons.info_outline),
@@ -507,6 +605,7 @@ class _DoorListPageState extends State<DoorListPage> {
                   repairDate: insp['repairDate']?.toString(),
                   doorCount: insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null,
                   isLocked: insp['isLocked'],
+                  craftnoteSyncStatus: insp['craftnoteSyncStatus']?.toString(),
                   isSelected: isSelected,
                   onSelectionChanged: (value) => _toggleSelection(id),
                   onLongPress: () => _toggleSelection(id),

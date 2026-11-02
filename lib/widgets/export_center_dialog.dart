@@ -8,10 +8,14 @@ import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/services/pdf_export_service.dart';
 import 'package:wartungstool/services/photo_export_service.dart';
+import 'package:wartungstool/services/craftnote_api_service.dart';
+import 'package:wartungstool/services/craftnote_sync_service.dart';
+import 'package:wartungstool/models/craftnote_models.dart';
+import 'package:wartungstool/widgets/craftnote_settings_dialog.dart';
 import '../utils/file_export_helper.dart';
 
 enum ExportScope { singleInspection, clientAudit, doorHistory }
-enum ExportFormat { excel, pdf, dbPackage, photos }
+enum ExportFormat { excel, pdf, dbPackage, photos, craftnote }
 
 class ExportCenterDialog extends StatefulWidget {
   final int? initialInspectionId;
@@ -53,6 +57,10 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
   int? _selectedInspectionId;
   String? _selectedClient;
   String? _selectedDoorAlias;
+
+  List<CraftnoteProject> _craftnoteProjects = [];
+  CraftnoteProject? _selectedCraftnoteProject;
+  bool _isLoadingCraftnoteProjects = false;
 
   bool _isLoading = true;
   bool _isExporting = false;
@@ -135,6 +143,30 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
     }
   }
 
+  Future<void> _loadCraftnoteProjects() async {
+    setState(() => _isLoadingCraftnoteProjects = true);
+    try {
+      final service = CraftnoteApiService();
+      final projects = await service.getProjects();
+      if (mounted) {
+        setState(() {
+          _craftnoteProjects = projects;
+          if (projects.isNotEmpty) {
+            _selectedCraftnoteProject = projects.first;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Craftnote-Projekte konnten nicht geladen werden: $e';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingCraftnoteProjects = false);
+    }
+  }
+
   Future<String> _getExportDirectory() async {
     Directory? downloadsDir;
     try {
@@ -214,6 +246,23 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           } else {
             _exportSuccessPath = '${photoResult.totalPhotos} Foto(s) erfolgreich exportiert in:\n$targetPath';
           }
+        } else if (_selectedFormat == ExportFormat.craftnote) {
+          if (_selectedScope != ExportScope.singleInspection || _selectedInspectionId == null) {
+            throw Exception('Craftnote-Export wird für Einzel-Inspektionen unterstützt.');
+          }
+          if (_selectedCraftnoteProject == null) {
+            throw Exception('Bitte wählen Sie ein Craftnote-Zielprojekt aus.');
+          }
+          final syncService = CraftnoteSyncService();
+          final syncResult = await syncService.exportInspectionFromMasterDb(
+            inspectionId: _selectedInspectionId!,
+            craftnoteProjectId: _selectedCraftnoteProject!.id,
+          );
+          if (!syncResult.success) {
+            throw Exception(syncResult.message);
+          }
+          _exportSuccessPath = 'Erfolgreich nach Craftnote übertragen:\nProjekt: ${_selectedCraftnoteProject!.name} (ID: ${_selectedCraftnoteProject!.id})';
+          targetPath = 'craftnote:${_selectedCraftnoteProject!.id}';
         }
       } else if (_selectedScope == ExportScope.clientAudit) {
         if (_selectedClient == null || _selectedClient!.isEmpty) {
@@ -521,8 +570,99 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                     selected: _selectedFormat == ExportFormat.photos,
                     onSelected: (val) => setState(() => _selectedFormat = ExportFormat.photos),
                   ),
+                  ChoiceChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.cloud_upload, color: Colors.orange, size: 18),
+                        SizedBox(width: 8),
+                        Text('Craftnote Cloud'),
+                      ],
+                    ),
+                    selected: _selectedFormat == ExportFormat.craftnote,
+                    onSelected: (val) {
+                      setState(() => _selectedFormat = ExportFormat.craftnote);
+                      if (_craftnoteProjects.isEmpty) {
+                        _loadCraftnoteProjects();
+                      }
+                    },
+                  ),
                 ],
               ),
+
+              if (_selectedFormat == ExportFormat.craftnote) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      '3. Craftnote-Zielprojekt wählen',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.settings, size: 18),
+                      tooltip: 'Craftnote API-Einstellungen',
+                      onPressed: () async {
+                        final updated = await CraftnoteSettingsDialog.show(context);
+                        if (updated == true) _loadCraftnoteProjects();
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 18),
+                      tooltip: 'Projekte neu laden',
+                      onPressed: _loadCraftnoteProjects,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_isLoadingCraftnoteProjects)
+                  const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
+                else if (_craftnoteProjects.isEmpty)
+                  Card(
+                    color: Colors.amber.shade50,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.amber.shade800),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text('Keine Projekte geladen oder Zugangsdaten unvollständig.'),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              final updated = await CraftnoteSettingsDialog.show(context);
+                              if (updated == true) _loadCraftnoteProjects();
+                            },
+                            child: const Text('Einstellungen'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    value: _selectedCraftnoteProject?.id,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    items: _craftnoteProjects.map((p) {
+                      return DropdownMenuItem<String>(
+                        value: p.id,
+                        child: Text('${p.name} ${p.orderNumber.isNotEmpty ? "(#${p.orderNumber})" : ""}'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedCraftnoteProject = _craftnoteProjects.firstWhere((p) => p.id == val);
+                        });
+                      }
+                    },
+                  ),
+              ],
 
               const SizedBox(height: 24),
 
@@ -548,11 +688,13 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                           ],
                         ),
                       ),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.folder_open, size: 16),
-                        label: const Text('Ordner öffnen'),
-                        onPressed: () => _openFileLocation(_exportSuccessPath!),
-                      ),
+                      if (!_exportSuccessPath!.startsWith('craftnote:') &&
+                          !_exportSuccessPath!.contains('Craftnote übertragen'))
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.folder_open, size: 16),
+                          label: const Text('Ordner öffnen'),
+                          onPressed: () => _openFileLocation(_exportSuccessPath!),
+                        ),
                     ],
                   ),
                 ),
