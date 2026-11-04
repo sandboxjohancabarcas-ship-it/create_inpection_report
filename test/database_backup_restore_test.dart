@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/widgets/app_version_dialog.dart';
@@ -19,10 +18,13 @@ void main() {
   });
 
   group('Database Backup and Restore Service Tests', () {
-    test('Master DB exportMasterDb and importMasterDb backup and restore data completely', () async {
+    test(
+        'Master DB exportMasterDb and importMasterDb backup and restore data completely',
+        () async {
       final db = await DatabaseService.getDb();
-      final uniqueAlias = 'BC-BACKUP-TEST-${DateTime.now().microsecondsSinceEpoch}';
-      
+      final uniqueAlias =
+          'BC-BACKUP-TEST-${DateTime.now().microsecondsSinceEpoch}';
+
       final doorId = await db.insert('doors', {
         'pos': 99,
         'doorAlias': uniqueAlias,
@@ -39,7 +41,8 @@ void main() {
       });
 
       // 1. Export backup
-      final backupPath = '${Directory.systemTemp.path}/test_master_backup_${DateTime.now().microsecondsSinceEpoch}.db';
+      final backupPath =
+          '${Directory.systemTemp.path}/test_master_backup_${DateTime.now().microsecondsSinceEpoch}.db';
       await DatabaseService.exportMasterDb(backupPath);
       final backupFile = File(backupPath);
       expect(await backupFile.exists(), true);
@@ -60,36 +63,48 @@ void main() {
 
       // 4. Verify restored state
       final restoredDb = await DatabaseService.getDb();
-      final doors = await restoredDb.query('doors', where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
+      final doors = await restoredDb
+          .query('doors', where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
       expect(doors.isNotEmpty, true);
       expect(doors.first['doorNumber'], 'T-BACKUP');
 
-      final newDoors = await restoredDb.query('doors', where: 'doorNumber = ?', whereArgs: ['T-NEW']);
+      final newDoors = await restoredDb
+          .query('doors', where: 'doorNumber = ?', whereArgs: ['T-NEW']);
       expect(newDoors.isEmpty, true);
 
       await backupFile.delete();
     });
 
-    test('Local DB exportWorkingDb and importWorkingDb backup and restore inspector data completely', () async {
+    test(
+        'Local DB exportWorkingDb and importWorkingDb backup and restore inspector data completely',
+        () async {
       final localDb = await LocalDatabaseService.getDb();
-      final uniqueAlias = 'BC-LOCAL-BACKUP-${DateTime.now().microsecondsSinceEpoch}';
+      final uniqueAlias =
+          'BC-LOCAL-BACKUP-${DateTime.now().microsecondsSinceEpoch}';
 
-      await localDb.insert('doors', {
-        'pos': 42,
-        'doorAlias': uniqueAlias,
-        'doorNumber': 'T-LOCAL',
-        'doorType': 'T30',
-        'floor': 'EG',
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await localDb.insert(
+          'doors',
+          {
+            'pos': 42,
+            'doorAlias': uniqueAlias,
+            'doorNumber': 'T-LOCAL',
+            'doorType': 'T30',
+            'floor': 'EG',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
-      await localDb.insert('inspections', {
-        'inspectionId': 555,
-        'clientName': 'Local Backup Client',
-        'objectAddress': 'Local Weg 2',
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await localDb.insert(
+          'inspections',
+          {
+            'inspectionId': 555,
+            'clientName': 'Local Backup Client',
+            'objectAddress': 'Local Weg 2',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
       // 1. Export backup
-      final backupPath = '${Directory.systemTemp.path}/test_local_backup_${DateTime.now().microsecondsSinceEpoch}.db';
+      final backupPath =
+          '${Directory.systemTemp.path}/test_local_backup_${DateTime.now().microsecondsSinceEpoch}.db';
       await LocalDatabaseService.exportWorkingDb(backupPath);
       final backupFile = File(backupPath);
       expect(await backupFile.exists(), true);
@@ -99,7 +114,8 @@ void main() {
       final liveLocalDb = await LocalDatabaseService.getDb();
       await liveLocalDb.insert('doors', {
         'pos': 999,
-        'doorAlias': 'BC-LOCAL-MODIFIED-${DateTime.now().microsecondsSinceEpoch}',
+        'doorAlias':
+            'BC-LOCAL-MODIFIED-${DateTime.now().microsecondsSinceEpoch}',
         'doorNumber': 'T-LOCAL-NEW',
         'doorType': 'T60',
       });
@@ -109,17 +125,21 @@ void main() {
 
       // 4. Verify restored state
       final restoredLocalDb = await LocalDatabaseService.getDb();
-      final doors = await restoredLocalDb.query('doors', where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
+      final doors = await restoredLocalDb
+          .query('doors', where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
       expect(doors.isNotEmpty, true);
       expect(doors.first['doorNumber'], 'T-LOCAL');
 
-      final newDoors = await restoredLocalDb.query('doors', where: 'doorNumber = ?', whereArgs: ['T-LOCAL-NEW']);
+      final newDoors = await restoredLocalDb
+          .query('doors', where: 'doorNumber = ?', whereArgs: ['T-LOCAL-NEW']);
       expect(newDoors.isEmpty, true);
 
       await backupFile.delete();
     });
 
-    test('hasInspectionsToSave returns false when working DB is empty, and true when inspections or doors exist', () async {
+    test(
+        'hasInspectionsToSave returns false when working DB is empty, and true when inspections or doors exist',
+        () async {
       final localDb = await LocalDatabaseService.getDb();
       await localDb.delete('doors');
       await localDb.delete('inspections');
@@ -150,7 +170,8 @@ void main() {
   });
 
   group('AppVersionDialog Widget Rendering Tests', () {
-    testWidgets('AppVersionDialog renders app info and backup/restore controls', (tester) async {
+    testWidgets('AppVersionDialog renders app info and backup/restore controls',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -168,7 +189,8 @@ void main() {
       expect(find.byIcon(Icons.restore_page_outlined), findsOneWidget);
     });
 
-    testWidgets('AppVersionDialog in Manager mode renders Manager-Portal info', (tester) async {
+    testWidgets('AppVersionDialog in Manager mode renders Manager-Portal info',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(

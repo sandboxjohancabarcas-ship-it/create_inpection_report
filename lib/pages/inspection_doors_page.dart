@@ -11,8 +11,6 @@ import '../widgets/edit_inspection_dialog.dart';
 import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../services/photo_export_service.dart';
-import '../models/craftnote_models.dart';
-import '../services/craftnote_api_service.dart';
 import '../services/craftnote_sync_service.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
@@ -349,58 +347,6 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       if (proceed != true) return;
     }
 
-    // 2. Check if a Craftnote project is linked
-    final insp = await LocalDatabaseService.getInspectionById(widget.inspectionId);
-    String? projectId = insp?['craftnoteProjectId']?.toString();
-
-    if (projectId == null || projectId.trim().isEmpty) {
-      // Prompt inspector to link to a Craftnote project
-      final service = CraftnoteApiService();
-      List<CraftnoteProject> projects = [];
-      try {
-        projects = await service.getProjects();
-      } catch (_) {}
-
-      if (!mounted) return;
-
-      final selected = await showDialog<CraftnoteProject>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Craftnote-Projekt zuordnen'),
-          content: SizedBox(
-            width: 450,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Dieser Auftrag ist noch keinem Craftnote-Projekt zugeordnet. Bitte wählen Sie das Zielprojekt:'),
-                const SizedBox(height: 12),
-                if (projects.isEmpty)
-                  const Text('Keine Projekte verfügbar oder Offline.')
-                else
-                  ...projects.map((p) => ListTile(
-                    dense: true,
-                    title: Text(p.name),
-                    subtitle: Text(p.orderNumber.isNotEmpty ? '#${p.orderNumber}' : p.id),
-                    onTap: () => Navigator.pop(ctx, p),
-                  )),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Abbrechen')),
-          ],
-        ),
-      );
-
-      if (selected == null) return;
-      projectId = selected.id;
-      await LocalDatabaseService.updateInspectionCraftnoteStatus(
-        widget.inspectionId,
-        projectId: projectId,
-      );
-    }
-
     setState(() => _isSyncing = true);
     try {
       final syncService = CraftnoteSyncService();
@@ -409,31 +355,36 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
       );
 
       if (mounted) {
-        if (result.isQueuedOffline) {
-          _showDismissibleSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.orange.shade800,
-              duration: const Duration(seconds: 6),
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  result.isQueuedOffline
+                      ? Icons.cloud_queue
+                      : (result.success ? Icons.cloud_done : Icons.error_outline),
+                  color: result.isQueuedOffline
+                      ? Colors.orange
+                      : (result.success ? Colors.green : Colors.red),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  result.isQueuedOffline
+                      ? 'Offline eingereiht'
+                      : (result.success ? 'Export erfolgreich' : 'Export fehlgeschlagen'),
+                ),
+              ],
             ),
-          );
-        } else if (result.success) {
-          _showDismissibleSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-        } else {
-          _showDismissibleSnackBar(
-            SnackBar(
-              content: Text(result.message),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        }
+            content: SelectableText(result.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
         await _loadDoors();
       }
     } catch (e) {

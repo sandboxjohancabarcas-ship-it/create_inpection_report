@@ -33,20 +33,27 @@ void main() {
       } catch (_) {}
     });
 
-    test('Door.generateAlias generates distinct aliases when floor differs for same doorNumber', () {
-      final egAlias = Door.generateAlias(projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1');
-      final ogAlias = Door.generateAlias(projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1');
+    test(
+        'Door.generateAlias generates distinct aliases when floor differs for same doorNumber',
+        () {
+      final egAlias = Door.generateAlias(
+          projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1');
+      final ogAlias = Door.generateAlias(
+          projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1');
 
       expect(egAlias, isNot(equals(ogAlias)));
       expect(egAlias, contains('EG'));
       expect(ogAlias, contains('1.OG'));
     });
 
-    test('Inserting doors with same doorNumber on different floors preserves both records', () async {
+    test(
+        'Inserting doors with same doorNumber on different floors preserves both records',
+        () async {
       final egDoor = Door(
         id: null,
         pos: 1,
-        doorAlias: Door.generateAlias(projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1'),
+        doorAlias: Door.generateAlias(
+            projectNumber: 'P-100', pos: 1, floor: 'EG', doorNumber: '1'),
         doorNumber: '1',
         floor: 'EG',
         roomNumber: '101',
@@ -78,7 +85,8 @@ void main() {
       final ogDoor = Door(
         id: null,
         pos: 2,
-        doorAlias: Door.generateAlias(projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1'),
+        doorAlias: Door.generateAlias(
+            projectNumber: 'P-100', pos: 2, floor: '1.OG', doorNumber: '1'),
         doorNumber: '1',
         floor: '1.OG',
         roomNumber: '201',
@@ -111,49 +119,54 @@ void main() {
       await DatabaseService.insertDoor(ogDoor);
 
       final allDoors = await DatabaseService.getAllDoors();
-      expect(allDoors.length, equals(2), reason: 'Both EG and 1.OG doors should exist without overwriting');
+      expect(allDoors.length, equals(2),
+          reason: 'Both EG and 1.OG doors should exist without overwriting');
     });
 
-      final testDataDir = Directory(r'C:\Users\Cabarcas\WartungTool\create_inpection_report-1\test\test_data');
+    final testDataDir = Directory(
+        r'C:\Users\Cabarcas\WartungTool\create_inpection_report-1\test\test_data');
 
-      // Convert xlsm files to xlsx in the test data directory
-      if (testDataDir.existsSync()) {
-        try {
-          final xlsmFiles = testDataDir
-              .listSync()
-              .where((entity) {
-                if (entity is! File) return false;
-                final name = p.basename(entity.path);
-                return name.endsWith('.xlsm') && !name.startsWith('~\$');
-              })
-              .cast<File>()
-              .toList();
-          for (final xlsmFile in xlsmFiles) {
-            final xlsxPath = xlsmFile.path.substring(0, xlsmFile.path.length - 5) + '.xlsx';
-            xlsmFile.copySync(xlsxPath);
-            print('Converted test data file: ${xlsmFile.path} -> $xlsxPath');
-          }
-        } catch (e) {
-          print('Error converting xlsm to xlsx test data files: $e');
+    // Convert xlsm files to xlsx in the test data directory
+    if (testDataDir.existsSync()) {
+      try {
+        final xlsmFiles = testDataDir
+            .listSync()
+            .where((entity) {
+              if (entity is! File) return false;
+              final name = p.basename(entity.path);
+              return name.endsWith('.xlsm') && !name.startsWith('~\$');
+            })
+            .cast<File>()
+            .toList();
+        for (final xlsmFile in xlsmFiles) {
+          final xlsxPath =
+              '${xlsmFile.path.substring(0, xlsmFile.path.length - 5)}.xlsx';
+          xlsmFile.copySync(xlsxPath);
+          print('Converted test data file: ${xlsmFile.path} -> $xlsxPath');
         }
+      } catch (e) {
+        print('Error converting xlsm to xlsx test data files: $e');
       }
+    }
 
-      final filesToTest = testDataDir.existsSync()
-          ? testDataDir
-              .listSync()
-              .where((entity) {
-                if (entity is! File) return false;
-                final name = p.basename(entity.path);
-                return name.endsWith('.xlsx') && !name.startsWith('~\$');
-              })
-              .cast<File>()
-              .toList()
-          : <File>[];
+    final filesToTest = testDataDir.existsSync()
+        ? testDataDir
+            .listSync()
+            .where((entity) {
+              if (entity is! File) return false;
+              final name = p.basename(entity.path);
+              return name.endsWith('.xlsx') && !name.startsWith('~\$');
+            })
+            .cast<File>()
+            .toList()
+        : <File>[];
 
     for (final file in filesToTest) {
       final filename = p.basename(file.path);
 
-      test('importFromFile should parse doors and inspections correctly for $filename', () async {
+      test(
+          'importFromFile should parse doors and inspections correctly for $filename',
+          () async {
         final bytes = await file.readAsBytes();
         final decoder = SpreadsheetDecoder.decodeBytes(bytes);
         final hasFehler = decoder.tables.containsKey('Fehlerübersicht');
@@ -177,44 +190,64 @@ void main() {
         }
 
         if (result.warnings.isNotEmpty) {
-          print('INFO: Warnings parsed for $filename:\n${result.warnings.join('\n')}');
+          print(
+              'INFO: Warnings parsed for $filename:\n${result.warnings.join('\n')}');
         }
 
         final db = await DatabaseService.getDb();
-        
-        final expectedProjMatch = RegExp(r'(P-\d+)', caseSensitive: false).firstMatch(filename);
-        final expectedProjectNumber = expectedProjMatch != null ? expectedProjMatch.group(1)!.toUpperCase() : '';
+
+        final expectedProjMatch =
+            RegExp(r'(P-\d+)', caseSensitive: false).firstMatch(filename);
+        final expectedProjectNumber = expectedProjMatch != null
+            ? expectedProjMatch.group(1)!.toUpperCase()
+            : '';
         final dbInspections = await db.query('inspections');
         expect(dbInspections, isNotEmpty);
         for (final insp in dbInspections) {
           expect(insp['projectNumber'], equals(expectedProjectNumber));
         }
 
-        final inspectionsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
-        final doorsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
-        final junctionsCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ?? 0;
-        final errorsLinkedCount = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ?? 0;
+        final inspectionsCount = Sqflite.firstIntValue(
+                await db.rawQuery('SELECT COUNT(*) FROM inspections')) ??
+            0;
+        final doorsCount = Sqflite.firstIntValue(
+                await db.rawQuery('SELECT COUNT(*) FROM doors')) ??
+            0;
+        final junctionsCount = Sqflite.firstIntValue(
+                await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ??
+            0;
+        final errorsLinkedCount = Sqflite.firstIntValue(await db
+                .rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ??
+            0;
 
-        print('======================================================================');
+        print(
+            '======================================================================');
         print('MIGRATION REPORT FOR FILE: $filename');
-        print('======================================================================');
+        print(
+            '======================================================================');
         print('1. OVERALL METRICS:');
-        print('   - Total inspections (sheets) processed: ${result.sheetsProcessed}');
+        print(
+            '   - Total inspections (sheets) processed: ${result.sheetsProcessed}');
         print('   - Total doors created/imported: ${result.doorsImported}');
         print('   - Total door errors linked: ${result.errorsLinked}');
-        print('   - Total error catalog conflicts: ${result.catalogConflicts.length}');
-        print('   - Total import warnings/mismatches: ${result.warnings.length}');
-        print('----------------------------------------------------------------------');
+        print(
+            '   - Total error catalog conflicts: ${result.catalogConflicts.length}');
+        print(
+            '   - Total import warnings/mismatches: ${result.warnings.length}');
+        print(
+            '----------------------------------------------------------------------');
         print('2. DETAILED MIGRATION PROTOCOL (RAW LOGS):');
         for (final logLine in result.logs) {
           print('   [LOG] $logLine');
         }
-        print('----------------------------------------------------------------------');
+        print(
+            '----------------------------------------------------------------------');
         print('3. PER-INSPECTION (SHEET) BREAKDOWN:');
-        
+
         // Parse sheet log statements to extract per-sheet numbers
         // E.g., Blatt "Türliste EG" abgeschlossen: 14 Türen importiert, 5 Mängel verknüpft.
-        final sheetPattern = RegExp(r'Blatt "([^"]+)" abgeschlossen: (\d+) Türen importiert, (\d+) Mängel verknüpft\.');
+        final sheetPattern = RegExp(
+            r'Blatt "([^"]+)" abgeschlossen: (\d+) Türen importiert, (\d+) Mängel verknüpft\.');
         int sheetsFound = 0;
         for (final logLine in result.logs) {
           final match = sheetPattern.firstMatch(logLine);
@@ -223,10 +256,13 @@ void main() {
             final sheetName = match.group(1)!;
             final sheetDoors = int.parse(match.group(2)!);
             final sheetErrors = int.parse(match.group(3)!);
-            
+
             // Associate warnings to this sheet by checking if the warning contains the sheet name
-            final sheetWarnings = result.warnings.where((w) => w.contains(sheetName) || w.contains('"$sheetName"')).toList();
-            
+            final sheetWarnings = result.warnings
+                .where(
+                    (w) => w.contains(sheetName) || w.contains('"$sheetName"'))
+                .toList();
+
             print('   - Inspection Worksheet "$sheetName":');
             print('     * Doors created: $sheetDoors');
             print('     * Defects linked: $sheetErrors');
@@ -239,9 +275,11 @@ void main() {
         if (sheetsFound == 0) {
           print('   - No worksheets successfully parsed.');
         }
-        print('----------------------------------------------------------------------');
+        print(
+            '----------------------------------------------------------------------');
         print('4. ERROR CATALOG ANALYSIS & MISMATCHES:');
-        final catalogLogs = result.logs.where((l) => l.contains('Fehlerkatalog') || l.contains('KATALOGKONFLIKTE'));
+        final catalogLogs = result.logs.where((l) =>
+            l.contains('Fehlerkatalog') || l.contains('KATALOGKONFLIKTE'));
         for (final clog in catalogLogs) {
           print('   [Catalog] $clog');
         }
@@ -251,24 +289,29 @@ void main() {
             print('     * Code: ${conf.code}');
             print('       - Reason: ${conf.reason}');
             print('       - Excel Description: ${conf.incoming.description}');
-            print('       - DB Description: ${conf.existing?.description ?? "N/A"}');
+            print(
+                '       - DB Description: ${conf.existing?.description ?? "N/A"}');
           }
         } else {
           print('   No catalog conflicts found.');
         }
-        print('----------------------------------------------------------------------');
+        print(
+            '----------------------------------------------------------------------');
         print('5. DOOR CONFLICTS FOR REVIEW:');
         if (result.doorConflicts.isNotEmpty) {
-          print('   Door Conflicts Detailed (${result.doorConflicts.length} conflicts):');
+          print(
+              '   Door Conflicts Detailed (${result.doorConflicts.length} conflicts):');
           for (final dc in result.doorConflicts) {
-            print('     * Door Number: ${dc.incomingDoor.doorNumber} (Floor: ${dc.incomingDoor.floor})');
+            print(
+                '     * Door Number: ${dc.incomingDoor.doorNumber} (Floor: ${dc.incomingDoor.floor})');
             print('       - Type: ${dc.type.label}');
             print('       - Message: ${dc.message}');
           }
         } else {
           print('   No door conflicts detected.');
         }
-        print('======================================================================\n');
+        print(
+            '======================================================================\n');
 
         expect(inspectionsCount, equals(result.sheetsProcessed));
         expect(doorsCount, lessThanOrEqualTo(result.doorsImported));
@@ -279,20 +322,32 @@ void main() {
         final masterErrorRows = await db.query('inspection_door_errors');
         for (final row in masterErrorRows) {
           final code = row['errorCode'] as String? ?? '';
-          expect(code.isNotEmpty, isTrue, reason: 'All imported errors must have a populated errorCode natural key');
+          expect(code.isNotEmpty, isTrue,
+              reason:
+                  'All imported errors must have a populated errorCode natural key');
         }
 
         // Verify cross-database transfer via job package download to LocalDatabaseService
         final inspections = await db.query('inspections');
-        final inspectionIds = inspections.map((r) => r['inspectionId'] as int).toList();
+        final inspectionIds =
+            inspections.map((r) => r['inspectionId'] as int).toList();
 
-        await LocalDatabaseService.downloadJobPackage(inspectionIds: inspectionIds);
+        await LocalDatabaseService.downloadJobPackage(
+            inspectionIds: inspectionIds);
 
         final localDb = await LocalDatabaseService.getDb();
-        final localInspectionsCount = Sqflite.firstIntValue(await localDb.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
-        final localDoorsCount = Sqflite.firstIntValue(await localDb.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
-        final localJunctionsCount = Sqflite.firstIntValue(await localDb.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ?? 0;
-        final localErrorCount = Sqflite.firstIntValue(await localDb.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ?? 0;
+        final localInspectionsCount = Sqflite.firstIntValue(
+                await localDb.rawQuery('SELECT COUNT(*) FROM inspections')) ??
+            0;
+        final localDoorsCount = Sqflite.firstIntValue(
+                await localDb.rawQuery('SELECT COUNT(*) FROM doors')) ??
+            0;
+        final localJunctionsCount = Sqflite.firstIntValue(await localDb
+                .rawQuery('SELECT COUNT(*) FROM inspection_doors')) ??
+            0;
+        final localErrorCount = Sqflite.firstIntValue(await localDb
+                .rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ??
+            0;
 
         print('Local DB inspectionsCount: $localInspectionsCount');
         print('Local DB doorsCount: $localDoorsCount');
@@ -302,12 +357,16 @@ void main() {
         expect(localInspectionsCount, equals(inspectionsCount));
         expect(localDoorsCount, equals(doorsCount));
         expect(localJunctionsCount, equals(junctionsCount));
-        expect(localErrorCount, equals(result.errorsLinked), reason: 'Local DB should receive all errors via job package download');
+        expect(localErrorCount, equals(result.errorsLinked),
+            reason:
+                'Local DB should receive all errors via job package download');
 
         final localErrorRows = await localDb.query('inspection_door_errors');
         for (final row in localErrorRows) {
           final code = row['errorCode'] as String? ?? '';
-          expect(code.isNotEmpty, isTrue, reason: 'Local DB errors must retain valid errorCode natural keys');
+          expect(code.isNotEmpty, isTrue,
+              reason:
+                  'Local DB errors must retain valid errorCode natural keys');
         }
       });
     }
@@ -359,46 +418,62 @@ void main() {
         'notes': 'Test',
       });
 
-      final results = await DatabaseService.searchInspections('SPRIN-BIL40-UG-45');
+      final results =
+          await DatabaseService.searchInspections('SPRIN-BIL40-UG-45');
       expect(results.length, equals(1));
       expect(results.first['inspectionId'], equals(inspId));
     });
 
     test('_sanitizeDoorNumber filters out summary and footer text', () {
-      final sanitized = ExcelDataImporter.sanitizeDoorNumberForTest('Gesamtzahl Türen: 45');
+      final sanitized =
+          ExcelDataImporter.sanitizeDoorNumberForTest('Gesamtzahl Türen: 45');
       expect(sanitized.startsWith('TÜR-'), isTrue);
     });
 
     test('formatNotesForTest cleans and formats raw Excel notes properly', () {
-      final rawInput = "  Tür schließt schwer.\r\n   Schließblech nachstellen.  \r\n\r\n\r\nDichtung defekt.  ";
+      final rawInput =
+          "  Tür schließt schwer.\r\n   Schließblech nachstellen.  \r\n\r\n\r\nDichtung defekt.  ";
       final formatted = ExcelDataImporter.formatNotesForTest(rawInput);
-      expect(formatted, equals("Tür schließt schwer.\nSchließblech nachstellen.\n\nDichtung defekt."));
+      expect(
+          formatted,
+          equals(
+              "Tür schließt schwer.\nSchließblech nachstellen.\n\nDichtung defekt."));
     });
 
-    test('Importing Tesdorpfstraße file raises catalog conflicts for unlisted error headers on latest sheet and applies resolutions', () async {
-      final file = File(r'C:\Users\cabarcas\Projects\WartungsTool\test\test_data\26-14332-AB P-000600 Tesdorpfstraße 8 Türliste final.xlsm');
+    test(
+        'Importing Tesdorpfstraße file raises catalog conflicts for unlisted error headers on latest sheet and applies resolutions',
+        () async {
+      final file = File(
+          r'C:\Users\cabarcas\Projects\WartungsTool\test\test_data\26-14332-AB P-000600 Tesdorpfstraße 8 Türliste final.xlsm');
       if (!file.existsSync()) return;
 
       // 1. Initial import without resolutions -> Must raise catalog conflicts for unknown headers on latest inspection (2026-03-24)
       final result1 = await ExcelDataImporter.importFromFile(file);
       expect(result1.catalogConflicts, isNotEmpty);
-      final conflictDescs = result1.catalogConflicts.map((c) => c.description).toList();
-      expect(conflictDescs.any((c) => c.contains('Dormakaba') || c.contains('Brand- und Rauchschutz')), isTrue);
+      final conflictDescs =
+          result1.catalogConflicts.map((c) => c.description).toList();
+      expect(
+          conflictDescs.any((c) =>
+              c.contains('Dormakaba') || c.contains('Brand- und Rauchschutz')),
+          isTrue);
 
       final db = await DatabaseService.getDb();
 
       // Master Door 34 note is from the latest inspection (2026-03-24)
-      final doors34 = await db.query('doors', where: "doorNumber = '34' OR doorAlias LIKE '%-34'");
+      final doors34 = await db.query('doors',
+          where: "doorNumber = '34' OR doorAlias LIKE '%-34'");
       expect(doors34, isNotEmpty);
       final door34 = doors34.first;
-      expect(door34['notes'], contains('Es macht keinen Sinn das Raucherkennungsteil zu tauschen'));
+      expect(door34['notes'],
+          contains('Es macht keinen Sinn das Raucherkennungsteil zu tauschen'));
 
       // 2. Re-import with Manager Resolutions:
       // - Add "0.32" as a new approved catalog item
       // - Map "Dormakaba" to existing code "11.5"
       final resolutions = <ConflictResolution>[];
       for (final conflict in result1.catalogConflicts) {
-        if (conflict.code == '0.32' || conflict.description.contains('Brand- und Rauchschutz')) {
+        if (conflict.code == '0.32' ||
+            conflict.description.contains('Brand- und Rauchschutz')) {
           resolutions.add(ConflictResolution(
             conflict: conflict,
             action: ResolutionAction.addAsNew,
@@ -429,10 +504,14 @@ void main() {
       expect(door3Errors, isNotEmpty);
     });
 
-    test('Importing Hammerbrookstraße file provides clear discrepancy explanation for Schlossabmessungen', () async {
-      var file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße 63-65, Türliste Mängelbeseitigung.xlsm');
+    test(
+        'Importing Hammerbrookstraße file provides clear discrepancy explanation for Schlossabmessungen',
+        () async {
+      var file = File(
+          r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße 63-65, Türliste Mängelbeseitigung.xlsm');
       if (!file.existsSync()) {
-        file = File(r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße_63-65_20097_Hamburg.xlsm');
+        file = File(
+            r'test/test_data/26-14640-AB P-000331 Hammerbrookstraße_63-65_20097_Hamburg.xlsm');
       }
       if (!file.existsSync()) {
         fail('Test file not found: ${file.path}');
@@ -441,18 +520,25 @@ void main() {
       await DatabaseService.checkAndInitializeCatalog();
       final result = await ExcelDataImporter.importFromFile(file);
 
-      print('Hammerbrookstraße door conflicts count: ${result.doorConflicts.length}');
+      print(
+          'Hammerbrookstraße door conflicts count: ${result.doorConflicts.length}');
       for (final conflict in result.doorConflicts) {
-        print('Conflict: Door=${conflict.incomingDoor.doorAlias} (${conflict.incomingDoor.doorNumber}), Type=${conflict.type}, Field=${conflict.fieldName} (${conflict.fieldLabel}), Incoming="${conflict.incomingValue}", Existing/Standard="${conflict.existingValue}", Message=${conflict.message}');
+        print(
+            'Conflict: Door=${conflict.incomingDoor.doorAlias} (${conflict.incomingDoor.doorNumber}), Type=${conflict.type}, Field=${conflict.fieldName} (${conflict.fieldLabel}), Incoming="${conflict.incomingValue}", Existing/Standard="${conflict.existingValue}", Message=${conflict.message}');
       }
 
-      final lockConflicts = result.doorConflicts.where((c) => c.fieldName == 'lockDimensions').toList();
-      expect(lockConflicts, isNotEmpty, reason: 'Custom lock format 65/72/9/24x235/FR differs from catalog 65/72/9/24-235FR');
+      final lockConflicts = result.doorConflicts
+          .where((c) => c.fieldName == 'lockDimensions')
+          .toList();
+      expect(lockConflicts, isNotEmpty,
+          reason:
+              'Custom lock format 65/72/9/24x235/FR differs from catalog 65/72/9/24-235FR');
 
       final firstLockConflict = lockConflicts.first;
       expect(firstLockConflict.incomingValue, equals('65/72/9/24x235/FR'));
       expect(firstLockConflict.existingValue, equals('65/72/9/24-235FR'));
-      expect(firstLockConflict.message, contains('Standardwert im Katalog ist: "65/72/9/24-235FR"'));
+      expect(firstLockConflict.message,
+          contains('Standardwert im Katalog ist: "65/72/9/24-235FR"'));
       expect(firstLockConflict.message, contains('65/72/9/24x235/FR'));
       expect(firstLockConflict.message, contains('Türlisten'));
     });

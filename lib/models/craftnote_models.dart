@@ -120,6 +120,7 @@ class CraftnoteFile {
     this.downloadUrl,
   });
 
+  bool get isFolder => type.toUpperCase() == 'FOLDER';
   bool get isSqliteDatabase => name.toLowerCase().endsWith('.db');
   bool get isPdfReport => name.toLowerCase().endsWith('.pdf');
 

@@ -13,8 +13,9 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     
-    // Initialize Master Database (Manager Role)
+    // Initialize Master Database & Error Catalog (Manager Role)
     await DatabaseService.getDb();
+    await DatabaseService.checkAndInitializeCatalog();
   }
 
   // Initialize Local Working Database (Both Roles)

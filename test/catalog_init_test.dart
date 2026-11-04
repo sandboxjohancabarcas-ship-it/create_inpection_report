@@ -53,5 +53,24 @@ void main() {
       expect(catalog.length, equals(1));
       expect(catalog.first.code, equals('EXISTING'));
     });
+
+    test('checkAndInitializeCatalog with force: true should reload and upsert catalog entries even when catalog already has entries', () async {
+      // Pre-populate with placeholder/existing entry
+      final db = await DatabaseService.getDb();
+      await db.insert('error_catalog', {
+        'code': '0.10',
+        'description': 'Old description to be updated',
+      });
+
+      // Force reload
+      await DatabaseService.checkAndInitializeCatalog(force: true);
+
+      final catalog = await DatabaseService.getAllErrorCatalog();
+
+      // Should have reloaded all catalog items and updated 0.10
+      expect(catalog.length, greaterThan(1));
+      final updated = catalog.firstWhere((item) => item.code == '0.10');
+      expect(updated.description, equals('Hinweis: Kein Zugang / Keine Prüfung'));
+    });
   });
 }

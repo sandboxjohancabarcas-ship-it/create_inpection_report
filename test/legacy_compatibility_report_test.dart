@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:wartungstool/models/import_report.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
@@ -20,7 +19,9 @@ void main() {
       await LocalDatabaseService.getDb();
 
       final testDataDir = Directory('test/test_data');
-      final files = testDataDir.existsSync() ? testDataDir.listSync().whereType<File>().toList() : <File>[];
+      final files = testDataDir.existsSync()
+          ? testDataDir.listSync().whereType<File>().toList()
+          : <File>[];
       File? found;
       for (final f in files) {
         if (f.path.endsWith('.db') && f.path.contains('Hammerbrook')) {
@@ -39,13 +40,15 @@ void main() {
       legacyFixturePath = found?.absolute.path ?? '';
     });
 
-    test('Fixture file exists and is valid SQLite database with schema v16', () async {
+    test('Fixture file exists and is valid SQLite database with schema v16',
+        () async {
       if (legacyFixturePath.isEmpty || !File(legacyFixturePath).existsSync()) {
         print('Legacy fixture DB not found in test_data, skipping test');
         return;
       }
       final file = File(legacyFixturePath);
-      expect(file.existsSync(), isTrue, reason: 'Legacy fixture db file must exist');
+      expect(file.existsSync(), isTrue,
+          reason: 'Legacy fixture db file must exist');
 
       final db = await openDatabase(file.absolute.path, readOnly: true);
       final verRes = await db.rawQuery('PRAGMA user_version');
@@ -57,7 +60,7 @@ void main() {
 
       final inspections = await db.query('inspections');
       expect(inspections.length, equals(1));
-      
+
       final tableInfo = await db.rawQuery('PRAGMA table_info(inspections)');
       final columnNames = tableInfo.map((r) => r['name'] as String).toSet();
       expect(columnNames.contains('orderType'), isFalse);
@@ -66,12 +69,15 @@ void main() {
       await db.close();
     });
 
-    test('Master DB importAndMergePackage imports legacy fixture, preserves Wartung orderType, and generates LegacyMigrationAudit', () async {
+    test(
+        'Master DB importAndMergePackage imports legacy fixture, preserves Wartung orderType, and generates LegacyMigrationAudit',
+        () async {
       if (legacyFixturePath.isEmpty || !File(legacyFixturePath).existsSync()) {
         print('Legacy fixture DB not found in test_data, skipping test');
         return;
       }
-      final report = await DatabaseService.importAndMergePackage(legacyFixturePath);
+      final report =
+          await DatabaseService.importAndMergePackage(legacyFixturePath);
 
       expect(report.totalDoorsProcessed, equals(71));
       expect(report.totalErrorsImported, equals(17));
@@ -96,23 +102,29 @@ void main() {
       expect(text, contains('Auftrag: ${audit.jobNumber}'));
       expect(text, contains('Standard-Auftragsphase: Wartung'));
       expect(text, contains('1. NEUE FUNKTIONEN DER AKTUELLEN VERSION'));
-      expect(text, contains('2. DURCHGEFÜHRTE ATTRIBUT-KONVERTIERUNGEN & WHITELISTING'));
-      expect(text, contains('3. ZUR MANUELLEN PRÜFUNG / ERGÄNZUNG DURCH DEN MANAGER'));
+      expect(text,
+          contains('2. DURCHGEFÜHRTE ATTRIBUT-KONVERTIERUNGEN & WHITELISTING'));
+      expect(text,
+          contains('3. ZUR MANUELLEN PRÜFUNG / ERGÄNZUNG DURCH DEN MANAGER'));
       expect(text, contains('4. HANDLUNGSEMPFEHLUNGEN FÜR DEN MANAGER'));
 
       // Verify inspections in Master DB preserved orderType = 'Wartung' (not forced to 'Erledigt')
       final masterDb = await DatabaseService.getDb();
-      final masterInspections = await masterDb.query('inspections', where: 'jobNumber = ?', whereArgs: [audit.jobNumber]);
+      final masterInspections = await masterDb.query('inspections',
+          where: 'jobNumber = ?', whereArgs: [audit.jobNumber]);
       expect(masterInspections.length, equals(1));
       expect(masterInspections.first['orderType'], equals('Wartung'));
     });
 
-    test('LocalDatabaseService imports legacy package, sets Wartung, and attaches LegacyMigrationAudit', () async {
+    test(
+        'LocalDatabaseService imports legacy package, sets Wartung, and attaches LegacyMigrationAudit',
+        () async {
       if (legacyFixturePath.isEmpty || !File(legacyFixturePath).existsSync()) {
         print('Legacy fixture DB not found in test_data, skipping test');
         return;
       }
-      final report = await LocalDatabaseService.importAndMergePackage(legacyFixturePath);
+      final report =
+          await LocalDatabaseService.importAndMergePackage(legacyFixturePath);
 
       expect(report.totalDoorsProcessed, equals(71));
       expect(report.totalErrorsImported, equals(17));
@@ -121,22 +133,28 @@ void main() {
       expect(report.legacyAudit!.targetVersion, equals(17));
 
       final localDb = await LocalDatabaseService.getDb();
-      final localInspections = await localDb.query('inspections', where: 'jobNumber = ?', whereArgs: [report.legacyAudit!.jobNumber]);
+      final localInspections = await localDb.query('inspections',
+          where: 'jobNumber = ?', whereArgs: [report.legacyAudit!.jobNumber]);
       expect(localInspections.length, equals(1));
       expect(localInspections.first['orderType'], equals('Wartung'));
     });
 
-    test('BatchMigrationService aggregates legacy audits correctly across file list', () async {
+    test(
+        'BatchMigrationService aggregates legacy audits correctly across file list',
+        () async {
       if (legacyFixturePath.isEmpty || !File(legacyFixturePath).existsSync()) {
         print('Legacy fixture DB not found in test_data, skipping test');
         return;
       }
-      final batchResult = await BatchMigrationService.migrateFiles([File(legacyFixturePath)]);
+      final batchResult =
+          await BatchMigrationService.migrateFiles([File(legacyFixturePath)]);
 
       expect(batchResult.compliantFilesProcessed, equals(1));
       expect(batchResult.aggregatedReport.hasLegacyAudit, isTrue);
       expect(batchResult.aggregatedReport.legacyAudits.length, equals(1));
-      expect(batchResult.aggregatedReport.legacyAudits.first.jobNumber.isNotEmpty, isTrue);
+      expect(
+          batchResult.aggregatedReport.legacyAudits.first.jobNumber.isNotEmpty,
+          isTrue);
       expect(batchResult.aggregatedReport.totalDoorsProcessed, equals(71));
     });
   });

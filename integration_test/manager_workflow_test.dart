@@ -1,11 +1,9 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/models.dart';
-import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/excel_data_importer.dart';
@@ -119,15 +117,18 @@ void main() {
   });
 
   group('Manager Desktop Integration Test Suite (M-UC-01 to M-UC-11)', () {
-
     // =========================================================================
     // M-UC-01: Multi-Facility Excel Ingestion with Real-World Datasets
     // =========================================================================
-    testWidgets('M-UC-01 [Manager Desktop]: Ingest Real-World Facility Datasets (Hammerbrookstraße & Bargkoppelstieg)', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-01 [Manager Desktop]: Ingest Real-World Facility Datasets (Hammerbrookstraße & Bargkoppelstieg)',
+        (WidgetTester tester) async {
       await DatabaseService.checkAndInitializeCatalog();
 
-      final fileHammerbrook = File('test/test_data/26-14640-AB P-000331 Hammerbrookstraße_63-65_20097_Hamburg.xlsm');
-      expect(fileHammerbrook.existsSync(), isTrue, reason: 'Hammerbrookstraße dataset must exist in test_data');
+      final fileHammerbrook = File(
+          'test/test_data/26-14640-AB P-000331 Hammerbrookstraße_63-65_20097_Hamburg.xlsm');
+      expect(fileHammerbrook.existsSync(), isTrue,
+          reason: 'Hammerbrookstraße dataset must exist in test_data');
 
       final result1 = await ExcelDataImporter.importFromFile(fileHammerbrook);
       expect(result1.sheetsProcessed, greaterThanOrEqualTo(1));
@@ -139,9 +140,14 @@ void main() {
 
       final inspections = await DatabaseService.getAllInspections();
       expect(inspections.isNotEmpty, isTrue);
-      expect(inspections.any((i) => i['projectNumber'] == 'P-000331' || i['objectAddress'].toString().contains('Hammerbrook')), isTrue);
+      expect(
+          inspections.any((i) =>
+              i['projectNumber'] == 'P-000331' ||
+              i['objectAddress'].toString().contains('Hammerbrook')),
+          isTrue);
 
-      final fileBargkoppel = File('test/test_data/26-15337-AB P-000096 Bargkoppelstieg 10-14 Türliste Türen.xlsm');
+      final fileBargkoppel = File(
+          'test/test_data/26-15337-AB P-000096 Bargkoppelstieg 10-14 Türliste Türen.xlsm');
       if (fileBargkoppel.existsSync()) {
         final result2 = await ExcelDataImporter.importFromFile(fileBargkoppel);
         expect(result2.sheetsProcessed, greaterThanOrEqualTo(1));
@@ -152,7 +158,9 @@ void main() {
     // =========================================================================
     // M-UC-02: Door Identity Conflict Resolution (keepBoth vs acceptIncoming)
     // =========================================================================
-    testWidgets('M-UC-02 [Manager Desktop]: Resolve Door Collision via keepBoth (_NEU suffix) and acceptIncoming', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-02 [Manager Desktop]: Resolve Door Collision via keepBoth (_NEU suffix) and acceptIncoming',
+        (WidgetTester tester) async {
       final existingDoor = _makeTestDoor(
         pos: 1,
         doorAlias: 'DOOR-COLLISION-01',
@@ -197,7 +205,8 @@ void main() {
       expect(doorOriginal!.doorAlias, equals('DOOR-COLLISION-01'));
       expect(doorOriginal.doorType, equals('T30'));
 
-      final doorNeu = await DatabaseService.getDoorByAlias('DOOR-COLLISION-01_NEU');
+      final doorNeu =
+          await DatabaseService.getDoorByAlias('DOOR-COLLISION-01_NEU');
       expect(doorNeu, isNotNull);
       expect(doorNeu!.doorType, equals('T90'));
       expect(doorNeu.escapeRouteSituation, isTrue);
@@ -206,7 +215,9 @@ void main() {
     // =========================================================================
     // M-UC-03: Error Catalog Conflict Review & Resolution Engine
     // =========================================================================
-    testWidgets('M-UC-03 [Manager Desktop]: Error Conflict Review (replaceExisting & addAsNew for non-standard defect)', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-03 [Manager Desktop]: Error Conflict Review (replaceExisting & addAsNew for non-standard defect)',
+        (WidgetTester tester) async {
       final existingDefect = ErrorCatalog(
         code: 'ALT-HINWEIS-01',
         description: 'Alter Hinweis Schließfunktion',
@@ -246,7 +257,9 @@ void main() {
     // =========================================================================
     // M-UC-04: Error Catalog Consolidation, Fuzzy Match (>=85%) & Cascade Updates
     // =========================================================================
-    testWidgets('M-UC-04 [Manager Desktop]: Catalog Consolidation Fuzzy Similarity Match & Cascade Propagation', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-04 [Manager Desktop]: Catalog Consolidation Fuzzy Similarity Match & Cascade Propagation',
+        (WidgetTester tester) async {
       await DatabaseService.insertErrorCatalog(ErrorCatalog(
         code: 'M-01',
         description: 'Türschließer undicht',
@@ -268,11 +281,13 @@ void main() {
       expect(similarMatch.existing.code, equals('M-01'));
 
       // 2. Next code proposal
-      final nextCode = CatalogIntegrityService.proposeNextCodeForCategory('Schließer', officialCatalog);
+      final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(
+          'Schließer', officialCatalog);
       expect(nextCode, isNotEmpty);
 
       // 3. Propose and approve field defect with cascade to linked inspection door
-      final d1Id = await DatabaseService.insertDoor(_makeTestDoor(pos: 1, doorNumber: 'T-PROP-CASCADE'));
+      final d1Id = await DatabaseService.insertDoor(
+          _makeTestDoor(pos: 1, doorNumber: 'T-PROP-CASCADE'));
       final inspId = await DatabaseService.insertInspection({
         'clientName': 'Cascade AG',
         'objectAddress': 'Cascade Allee 1',
@@ -305,17 +320,22 @@ void main() {
       });
 
       // Manager approves proposal to official code 'M-88'
-      await db.update('error_catalog', {'code': 'M-88', 'status': 'Approved'}, where: 'errorId = ?', whereArgs: [999]);
-      await db.update('inspection_door_errors', {'errorCode': 'M-88'}, where: 'errorId = ?', whereArgs: [999]);
+      await db.update('error_catalog', {'code': 'M-88', 'status': 'Approved'},
+          where: 'errorId = ?', whereArgs: [999]);
+      await db.update('inspection_door_errors', {'errorCode': 'M-88'},
+          where: 'errorId = ?', whereArgs: [999]);
 
-      final updatedErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      final updatedErrors =
+          await DatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
       expect(updatedErrors.first['code'], equals('M-88'));
     });
 
     // =========================================================================
     // M-UC-05: Door Lifetime Clinical Record ("Tür-Akte" / Patient Timeline)
     // =========================================================================
-    testWidgets('M-UC-05 [Manager Desktop]: Query Door Lifetime Clinical Record (Historical Inspections & Defect Evolution)', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-05 [Manager Desktop]: Query Door Lifetime Clinical Record (Historical Inspections & Defect Evolution)',
+        (WidgetTester tester) async {
       final doorId = await DatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'AKTE-DOOR-42',
@@ -333,7 +353,8 @@ void main() {
         'jobNumber': 'JOB-2024-01',
         'orderType': 'Wartung',
       });
-      final j1Id = await DatabaseService.insertInspectionDoor({'inspectionId': insp1Id, 'doorId': doorId, 'status': 'Failed'});
+      final j1Id = await DatabaseService.insertInspectionDoor(
+          {'inspectionId': insp1Id, 'doorId': doorId, 'status': 'Failed'});
       await DatabaseService.insertInspectionDoorError(InspectionDoorError(
         inspectionDoorId: j1Id,
         errorId: 1,
@@ -353,7 +374,8 @@ void main() {
         'orderType': 'Reparatur',
         'repairDate': '2025-06-15',
       });
-      final j2Id = await DatabaseService.insertInspectionDoor({'inspectionId': insp2Id, 'doorId': doorId, 'status': 'Passed'});
+      final j2Id = await DatabaseService.insertInspectionDoor(
+          {'inspectionId': insp2Id, 'doorId': doorId, 'status': 'Passed'});
       await DatabaseService.insertInspectionDoorError(InspectionDoorError(
         inspectionDoorId: j2Id,
         errorId: 1,
@@ -365,7 +387,8 @@ void main() {
       ));
 
       // Query Door History Data
-      final historyData = await DatabaseService.getDoorHistoryData(doorAlias: 'AKTE-DOOR-42');
+      final historyData =
+          await DatabaseService.getDoorHistoryData(doorAlias: 'AKTE-DOOR-42');
       expect(historyData, isNotNull);
       expect(historyData!['door'], isNotNull);
       expect((historyData['door'] as Door).doorNumber, equals('T-AKTE-42'));
@@ -384,29 +407,43 @@ void main() {
     // =========================================================================
     // M-UC-06: Dynamic Door Options CRUD
     // =========================================================================
-    testWidgets('M-UC-06 [Manager Desktop]: Dynamic CRUD on Dropdown Options (Manufacturers, Closers, Types)', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-06 [Manager Desktop]: Dynamic CRUD on Dropdown Options (Manufacturers, Closers, Types)',
+        (WidgetTester tester) async {
       DoorOptionsService.setMockOptions({
-        'manufacturer': {'options': ['Hörmann', 'Schüco'], 'default': 'Hörmann'},
-        'doorType': {'options': ['T30-1', 'T90-1'], 'default': 'T30-1'},
+        'manufacturer': {
+          'options': ['Hörmann', 'Schüco'],
+          'default': 'Hörmann'
+        },
+        'doorType': {
+          'options': ['T30-1', 'T90-1'],
+          'default': 'T30-1'
+        },
       });
 
-      expect(DoorOptionsService.getStringOptions('manufacturer'), contains('Hörmann'));
-      expect(DoorOptionsService.getStringOptions('manufacturer'), isNot(contains('Geze Custom Master')));
+      expect(DoorOptionsService.getStringOptions('manufacturer'),
+          contains('Hörmann'));
+      expect(DoorOptionsService.getStringOptions('manufacturer'),
+          isNot(contains('Geze Custom Master')));
 
       // Simulate manager adding new custom option
-      final currentMfrs = List<String>.from(DoorOptionsService.getStringOptions('manufacturer'));
+      final currentMfrs = List<String>.from(
+          DoorOptionsService.getStringOptions('manufacturer'));
       currentMfrs.add('Geze Custom Master');
       DoorOptionsService.setMockOptions({
         'manufacturer': {'options': currentMfrs, 'default': 'Hörmann'},
       });
 
-      expect(DoorOptionsService.getStringOptions('manufacturer'), contains('Geze Custom Master'));
+      expect(DoorOptionsService.getStringOptions('manufacturer'),
+          contains('Geze Custom Master'));
     });
 
     // =========================================================================
     // M-UC-07: Defect Rectification / Repair Order Lifecycle (orderType: Reparatur)
     // =========================================================================
-    testWidgets('M-UC-07 [Manager Desktop]: Order Type Reparatur Defect Resolution & doorFunctionOK Auto-Update', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-07 [Manager Desktop]: Order Type Reparatur Defect Resolution & doorFunctionOK Auto-Update',
+        (WidgetTester tester) async {
       final doorId = await DatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorNumber: 'T-REP-MASTER',
@@ -428,7 +465,8 @@ void main() {
         'status': 'Defective',
       });
 
-      final errId = await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final errId =
+          await DatabaseService.insertInspectionDoorError(InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: 1,
         errorCode: 'M-01',
@@ -439,25 +477,30 @@ void main() {
       ));
 
       final db = await DatabaseService.getDb();
-      await db.update('inspection_door_errors', {'resolutionStatus': 'Behoben'}, where: 'id = ?', whereArgs: [errId]);
+      await db.update('inspection_door_errors', {'resolutionStatus': 'Behoben'},
+          where: 'id = ?', whereArgs: [errId]);
       await DatabaseService.updateInspectionDoorStatus(
         inspectionId: inspectionId,
         doorId: doorId,
         status: 'Passed',
       );
-      await db.update('doors', {'doorFunctionOK': 1}, where: 'id = ?', whereArgs: [doorId]);
+      await db.update('doors', {'doorFunctionOK': 1},
+          where: 'id = ?', whereArgs: [doorId]);
 
       final updatedDoor = await DatabaseService.getDoorById(doorId);
       expect(updatedDoor!.doorFunctionOK, isTrue);
 
-      final detailedErrors = await DatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      final detailedErrors =
+          await DatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
       expect(detailedErrors.first['resolutionStatus'], equals('Behoben'));
     });
 
     // =========================================================================
     // M-UC-08: Inspection Locking Security Enforcement Guard
     // =========================================================================
-    testWidgets('M-UC-08 [Manager Desktop]: Verify Inspection Lock Permission Boundaries (isLocked Guard)', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-08 [Manager Desktop]: Verify Inspection Lock Permission Boundaries (isLocked Guard)',
+        (WidgetTester tester) async {
       final inspectionId = await DatabaseService.insertInspection({
         'clientName': 'Lock Test AG',
         'objectAddress': 'Sicherheitsstraße 5',
@@ -471,23 +514,31 @@ void main() {
       expect(insp!['isLocked'], equals(1));
 
       // 1. Inspector mode cannot edit locked inspection
-      expect(InspectionYearUtils.isEditable(isManagerMode: false, isLocked: 1), isFalse);
-      expect(InspectionYearUtils.isMetadataEditable(isManagerMode: false), isFalse);
+      expect(InspectionYearUtils.isEditable(isManagerMode: false, isLocked: 1),
+          isFalse);
+      expect(InspectionYearUtils.isMetadataEditable(isManagerMode: false),
+          isFalse);
 
       // 2. Manager mode retains full administrative access
-      expect(InspectionYearUtils.isEditable(isManagerMode: true, isLocked: 1), isTrue);
-      expect(InspectionYearUtils.isMetadataEditable(isManagerMode: true), isTrue);
+      expect(InspectionYearUtils.isEditable(isManagerMode: true, isLocked: 1),
+          isTrue);
+      expect(
+          InspectionYearUtils.isMetadataEditable(isManagerMode: true), isTrue);
 
       // 3. Unlock inspection and verify inspector permissions restored
       final db = await DatabaseService.getDb();
-      await db.update('inspections', {'isLocked': 0}, where: 'inspectionId = ?', whereArgs: [inspectionId]);
-      expect(InspectionYearUtils.isEditable(isManagerMode: false, isLocked: 0), isTrue);
+      await db.update('inspections', {'isLocked': 0},
+          where: 'inspectionId = ?', whereArgs: [inspectionId]);
+      expect(InspectionYearUtils.isEditable(isManagerMode: false, isLocked: 0),
+          isTrue);
     });
 
     // =========================================================================
     // M-UC-09: Batch Migration Engine Compliant File Detection
     // =========================================================================
-    testWidgets('M-UC-09 [Manager Desktop]: Batch Migration Engine Discovers & Validates Compliant Facility Files', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-09 [Manager Desktop]: Batch Migration Engine Discovers & Validates Compliant Facility Files',
+        (WidgetTester tester) async {
       expect(BatchMigrationService.isCompliantFile('facility.xlsm'), isTrue);
       expect(BatchMigrationService.isCompliantFile('doors.xlsx'), isTrue);
       expect(BatchMigrationService.isCompliantFile('package.db'), isTrue);
@@ -495,16 +546,21 @@ void main() {
       expect(BatchMigrationService.isCompliantFile('document.pdf'), isFalse);
       expect(BatchMigrationService.isCompliantFile('data.txt'), isFalse);
 
-      final files = BatchMigrationService.getFilesFromDirectory('test/test_data');
+      final files =
+          BatchMigrationService.getFilesFromDirectory('test/test_data');
       expect(files.isNotEmpty, isTrue);
-      final compliant = files.where((f) => BatchMigrationService.isCompliantFile(f.path)).toList();
+      final compliant = files
+          .where((f) => BatchMigrationService.isCompliantFile(f.path))
+          .toList();
       expect(compliant.length, greaterThanOrEqualTo(10));
     });
 
     // =========================================================================
     // M-UC-10: Photo Export Service (Structured Archive Naming)
     // =========================================================================
-    testWidgets('M-UC-10 [Manager Desktop]: Photo Export with Standardized Sanitized Filenames', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-10 [Manager Desktop]: Photo Export with Standardized Sanitized Filenames',
+        (WidgetTester tester) async {
       final doorId = await DatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'PHOTO-DOOR-01',
@@ -524,7 +580,8 @@ void main() {
         'status': 'Failed',
       });
 
-      final testPhotoBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      final testPhotoBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
       await DatabaseService.insertInspectionDoorError(InspectionDoorError(
         inspectionDoorId: inspDoorId,
@@ -536,7 +593,8 @@ void main() {
         attachments: testPhotoBase64,
       ));
 
-      final tempDir = await Directory.systemTemp.createTemp('photo_export_test_');
+      final tempDir =
+          await Directory.systemTemp.createTemp('photo_export_test_');
       final exportResult = await PhotoExportService.exportInspectionPhotos(
         inspectionId: inspectionId,
         destinationDir: tempDir.path,
@@ -548,7 +606,8 @@ void main() {
       expect(exportResult.exportedFileNames.first, contains('PHOTO-DOOR-01'));
       expect(exportResult.exportedFileNames.first, contains('M-01'));
 
-      final exportedFile = File(p.join(tempDir.path, exportResult.exportedFileNames.first));
+      final exportedFile =
+          File(p.join(tempDir.path, exportResult.exportedFileNames.first));
       expect(await exportedFile.exists(), isTrue);
       expect(await exportedFile.length(), greaterThan(0));
       await tempDir.delete(recursive: true);
@@ -557,7 +616,9 @@ void main() {
     // =========================================================================
     // M-UC-11: Client Audit Excel Export (Workbook Generation)
     // =========================================================================
-    testWidgets('M-UC-11 [Manager Desktop]: Generate Formatted Client Inspection Excel Audit Workbook', (WidgetTester tester) async {
+    testWidgets(
+        'M-UC-11 [Manager Desktop]: Generate Formatted Client Inspection Excel Audit Workbook',
+        (WidgetTester tester) async {
       final doorId = await DatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'EXCEL-DOOR-01',
@@ -585,14 +646,17 @@ void main() {
         'status': 'Passed',
       });
 
-      final tempDir = await Directory.systemTemp.createTemp('excel_export_test_');
-      final targetExcelPath = p.join(tempDir.path, 'Audit_Report_JOB-AUDIT-2026.xlsx');
+      final tempDir =
+          await Directory.systemTemp.createTemp('excel_export_test_');
+      final targetExcelPath =
+          p.join(tempDir.path, 'Audit_Report_JOB-AUDIT-2026.xlsx');
 
-      final exportedFile = await ExcelExportService.exportSingleInspection(inspectionId, targetExcelPath);
+      final exportedFile = await ExcelExportService.exportSingleInspection(
+          inspectionId, targetExcelPath);
       expect(await exportedFile.exists(), isTrue);
-      expect(await exportedFile.length(), greaterThan(1000)); // Non-empty valid workbook
+      expect(await exportedFile.length(),
+          greaterThan(1000)); // Non-empty valid workbook
       await tempDir.delete(recursive: true);
     });
-
   });
 }

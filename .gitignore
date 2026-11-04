@@ -52,3 +52,6 @@ flutter_setup_backup.bat
 lib/models/settings.json
 *.db
 ~$*
+
+craftnote_projects_cache.json
+craftnote_projects_overview.md

@@ -12,9 +12,23 @@ void main() {
       CraftnoteCredentialsService.resetToDefaults();
     });
 
-    test('Initial defaults use safe placeholders and isConfigured is false', () {
-      expect(CraftnoteCredentialsService.apiKey, CraftnoteCredentialsService.defaultPlaceholderApiKey);
-      expect(CraftnoteCredentialsService.clientId, CraftnoteCredentialsService.defaultPlaceholderClientId);
+    test('Initial defaults use configured default keys and isConfigured is true', () {
+      expect(CraftnoteCredentialsService.apiKey, '64045d24-397a-407b-b4ae-2ceef59018dd');
+      expect(CraftnoteCredentialsService.clientId, 'd04f732b-6c89-4804-97d8-63a0ea7c1199');
+      expect(CraftnoteCredentialsService.isConfigured, isTrue);
+    });
+
+    test('isConfigured is false for placeholder or empty keys', () {
+      CraftnoteCredentialsService.setCredentials(
+        apiKey: 'CRAFTNOTE_API_KEY_PLACEHOLDER',
+        clientId: 'any',
+      );
+      expect(CraftnoteCredentialsService.isConfigured, isFalse);
+
+      CraftnoteCredentialsService.setCredentials(
+        apiKey: 'PLACEHOLDER_KEY',
+        clientId: 'any',
+      );
       expect(CraftnoteCredentialsService.isConfigured, isFalse);
     });
 
@@ -66,9 +80,10 @@ void main() {
       final service = CraftnoteApiService();
       final files = await service.getProjectFiles('CN-PROJ-MOCK-01');
 
-      expect(files.length, 2);
+      expect(files.length, greaterThanOrEqualTo(2));
       expect(files.any((f) => f.isSqliteDatabase), isTrue);
       expect(files.any((f) => f.isPdfReport), isTrue);
+      expect(files.any((f) => f.isFolder), isTrue);
     });
 
     test('downloadFile in mock mode writes valid dummy binary payload', () async {
@@ -182,6 +197,70 @@ void main() {
       expect(projects.first.fullAddress, contains('Am Sandtorkai 1, 20457 Hamburg'));
     });
 
+    test('getProjects parses projects with OpenAPI envelope { "projects": [...] }', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'projects': [
+              {
+                'id': 'PROJ-LIVE-1',
+                'name': 'UKE Hamburg Neubau',
+                'orderNumber': '26-11111-AB',
+                'street': 'Martinistraße 52',
+                'zipcode': '20246',
+                'city': 'Hamburg',
+                'clientName': 'UKE',
+              }
+            ]
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = CraftnoteApiService(
+        client: mockClient,
+        apiKey: 'key',
+        baseUrl: 'https://test.craftnote.de/api/v1',
+      );
+
+      final projects = await service.getProjects();
+      expect(projects.length, 1);
+      expect(projects.first.id, 'PROJ-LIVE-1');
+      expect(projects.first.name, 'UKE Hamburg Neubau');
+    });
+
+    test('getProjectFiles parses files with OpenAPI envelope { "files": [...] }', () async {
+      final mockClient = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'files': [
+              {
+                'id': 'FILE-100',
+                'name': 'Prüfpaket.db',
+                'type': 'DOCUMENT',
+                'size': 12345,
+                'creationTimestamp': 1700000000,
+              }
+            ]
+          }),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      });
+
+      final service = CraftnoteApiService(
+        client: mockClient,
+        apiKey: 'key',
+        baseUrl: 'https://test.craftnote.de/api/v1',
+      );
+
+      final files = await service.getProjectFiles('PROJ-LIVE-1');
+      expect(files.length, 1);
+      expect(files.first.name, 'Prüfpaket.db');
+      expect(files.first.size, 12345);
+    });
+
     test('postMessage sends correct JSON payload to /projects/{id}/messages', () async {
       bool messageSent = false;
       final mockClient = MockClient((request) async {
@@ -201,6 +280,53 @@ void main() {
 
       await service.postMessage('PROJ-123', 'Prüfpaket hochgeladen durch Manager');
       expect(messageSent, isTrue);
+    });
+
+    test('findProjects paginates across pages and finds project by orderNumber', () async {
+      int requestCount = 0;
+      final mockClient = MockClient((request) async {
+        requestCount++;
+        final offset = int.parse(request.url.queryParameters['offset'] ?? '0');
+        if (offset == 0) {
+          // Page 1: doesn't have target project
+          return http.Response(
+            jsonEncode({
+              'projects': [
+                {'id': 'P-1', 'name': 'Other Project', 'orderNumber': '26-00001-AB'}
+              ]
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        } else {
+          // Page 2: has target project
+          return http.Response(
+            jsonEncode({
+              'projects': [
+                {
+                  'id': '0bcce8b1-bb9b-4d67-b41e-f700d3a57bfd',
+                  'name': '202121 Industrie GmbH Unit 2 - Unbekannt',
+                  'orderNumber': '26-00251-AN',
+                }
+              ]
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
+      });
+
+      final service = CraftnoteApiService(
+        client: mockClient,
+        apiKey: 'key',
+        baseUrl: 'https://test.craftnote.de/api/v1',
+      );
+
+      final matches = await service.findProjects(orderNumber: '26-00251-AN', pageSize: 1);
+      expect(matches.length, 1);
+      expect(matches.first.id, '0bcce8b1-bb9b-4d67-b41e-f700d3a57bfd');
+      expect(matches.first.name, '202121 Industrie GmbH Unit 2 - Unbekannt');
+      expect(requestCount, 2);
     });
   });
 }

@@ -32,20 +32,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     _loadErrors();
   }
 
-
-
-
-
-
   Future<void> _loadErrors() async {
     setState(() => isLoading = true);
     try {
-      // Only show Approved items in the main management list
-      final approved = await DatabaseService.getAllErrorCatalog(status: 'Approved');
-      // Check for Pending items to show in the workflow badge
-      final pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      // Check if catalog is empty and auto-populate if necessary
+      var approved =
+          await DatabaseService.getAllErrorCatalog(status: 'Approved');
+      var pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      if (approved.isEmpty && pending.isEmpty) {
+        await DatabaseService.checkAndInitializeCatalog();
+        approved = await DatabaseService.getAllErrorCatalog(status: 'Approved');
+        pending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      }
+
       final dbCategories = await DatabaseService.getErrorCatalogCategories();
-      
+
       setState(() {
         errors = approved;
         filteredErrors = approved;
@@ -65,10 +66,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   void _filterErrors() {
     setState(() {
       filteredErrors = errors.where((error) {
-        final matchesCategory = selectedCategory == 'Alle' || error.category == selectedCategory;
+        final matchesCategory =
+            selectedCategory == 'Alle' || error.category == selectedCategory;
         final matchesSearch = searchController.text.isEmpty ||
-            error.description.toLowerCase().contains(searchController.text.toLowerCase()) ||
-            error.code.toLowerCase().contains(searchController.text.toLowerCase());
+            error.description
+                .toLowerCase()
+                .contains(searchController.text.toLowerCase()) ||
+            error.code
+                .toLowerCase()
+                .contains(searchController.text.toLowerCase());
         return matchesCategory && matchesSearch;
       }).toList();
     });
@@ -76,16 +82,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   void _showEditErrorDialog({ErrorCatalog? error}) {
     final codeController = TextEditingController(text: error?.code ?? '');
-    final descriptionController = TextEditingController(text: error?.description ?? '');
-    final categoryController = TextEditingController(text: error?.category ?? '');
+    final descriptionController =
+        TextEditingController(text: error?.description ?? '');
+    final categoryController =
+        TextEditingController(text: error?.category ?? '');
     final validSeverities = ['low', 'medium', 'high', 'critical'];
-    final rawSeverity = (error?.severity ?? 'medium').trim().toLowerCase().replaceAll('"', '');
-    final initialSeverity = validSeverities.contains(rawSeverity) 
-        ? rawSeverity 
+    final rawSeverity =
+        (error?.severity ?? 'medium').trim().toLowerCase().replaceAll('"', '');
+    final initialSeverity = validSeverities.contains(rawSeverity)
+        ? rawSeverity
         : DatabaseService.normalizeSeverity(rawSeverity);
     final severityController = TextEditingController(text: initialSeverity);
-    final recommendationController = TextEditingController(text: error?.recommendation ?? '');
-    final normReferenceController = TextEditingController(text: error?.normReference ?? '');
+    final recommendationController =
+        TextEditingController(text: error?.recommendation ?? '');
+    final normReferenceController =
+        TextEditingController(text: error?.normReference ?? '');
 
     showDialog(
       context: context,
@@ -123,7 +134,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ),
                 SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: validSeverities.contains(severityController.text.toLowerCase())
+                  initialValue: validSeverities
+                          .contains(severityController.text.toLowerCase())
                       ? severityController.text.toLowerCase()
                       : 'medium',
                   decoration: InputDecoration(
@@ -170,12 +182,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (codeController.text.isNotEmpty && descriptionController.text.isNotEmpty) {
+              if (codeController.text.isNotEmpty &&
+                  descriptionController.text.isNotEmpty) {
                 final newError = ErrorCatalog(
                   errorId: error?.errorId,
                   code: codeController.text,
                   description: descriptionController.text,
-                  category: categoryController.text.isNotEmpty ? categoryController.text : 'Allgemein',
+                  category: categoryController.text.isNotEmpty
+                      ? categoryController.text
+                      : 'Allgemein',
                   severity: severityController.text,
                   recommendation: recommendationController.text,
                   normReference: normReferenceController.text,
@@ -198,7 +213,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Fehler löschen'),
-        content: Text('Möchten Sie den Fehler "${error.code} - ${error.description}" wirklich löschen?'),
+        content: Text(
+            'Möchten Sie den Fehler "${error.code} - ${error.description}" wirklich löschen?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -258,7 +274,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Katalog & Freigaben (Manager)', style: TextStyle(fontSize: 18)),
+            const Text('Katalog & Freigaben (Manager)',
+                style: TextStyle(fontSize: 18)),
             Text(
               AppVersionService.getCompactVersionInfo(isManager: true),
               style: const TextStyle(fontSize: 11, color: Colors.white70),
@@ -278,7 +295,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ),
           IconButton(
             icon: const Icon(Icons.drive_folder_upload),
-            onPressed: () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadErrors),
+            onPressed: () => BatchMigrationDialog.show(context,
+                onMigrationCompleted: _loadErrors),
             tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
           ),
           IconButton(
@@ -291,19 +309,24 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const DoorOptionsManagerPage()),
+                MaterialPageRoute(
+                    builder: (context) => const DoorOptionsManagerPage()),
               );
             },
             tooltip: 'Stammdaten-Optionen verwalten',
           ),
           IconButton(
-            icon: Icon(Icons.storage),
+            icon: const Icon(Icons.storage),
             onPressed: () async {
-              await DatabaseService.checkAndInitializeCatalog();
-              _loadErrors();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Fehlerkatalog wurde neu geladen')),
-              );
+              setState(() => isLoading = true);
+              await DatabaseService.checkAndInitializeCatalog(force: true);
+              await _loadErrors();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Fehlerkatalog wurde neu geladen')),
+                );
+              }
             },
             tooltip: 'Fehlerkatalog neu laden',
           ),
@@ -326,7 +349,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       // Search bar
                       TextField(
                         controller: searchController,
-                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface),
                         decoration: InputDecoration(
                           labelText: 'Suchen',
                           prefixIcon: Icon(Icons.search),
@@ -359,7 +383,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     ],
                   ),
                 ),
-                
+
                 // Statistics
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
@@ -369,22 +393,35 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildStatItem('Gesamt', filteredErrors.length, Colors.blue),
+                          _buildStatItem(
+                              'Gesamt', filteredErrors.length, Colors.blue),
                           _buildStatItem('Offen', pendingCount, Colors.orange),
-                          _buildStatItem('Kritisch', 
-                              filteredErrors.where((e) => e.severity == 'critical').length, Colors.purple),
-                          _buildStatItem('Hoch', 
-                              filteredErrors.where((e) => e.severity == 'high').length, Colors.red),
-                          _buildStatItem('Mittel', 
-                              filteredErrors.where((e) => e.severity == 'medium').length, Colors.orange),
+                          _buildStatItem(
+                              'Kritisch',
+                              filteredErrors
+                                  .where((e) => e.severity == 'critical')
+                                  .length,
+                              Colors.purple),
+                          _buildStatItem(
+                              'Hoch',
+                              filteredErrors
+                                  .where((e) => e.severity == 'high')
+                                  .length,
+                              Colors.red),
+                          _buildStatItem(
+                              'Mittel',
+                              filteredErrors
+                                  .where((e) => e.severity == 'medium')
+                                  .length,
+                              Colors.orange),
                         ],
                       ),
                     ),
                   ),
                 ),
-                
+
                 SizedBox(height: 16),
-                
+
                 // Error list
                 Expanded(
                   child: filteredErrors.isEmpty
@@ -392,10 +429,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.search_off, size: 64, color: Colors.grey),
+                              Icon(Icons.search_off,
+                                  size: 64, color: Colors.grey),
                               SizedBox(height: 16),
                               Text('Keine Fehler gefunden',
-                                   style: TextStyle(fontSize: 18)),
+                                  style: TextStyle(fontSize: 18)),
                               Text('Passen Sie Ihre Filter an'),
                             ],
                           ),
@@ -405,10 +443,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           itemBuilder: (context, index) {
                             final error = filteredErrors[index];
                             return Card(
-                              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              margin: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: _getSeverityColor(error.severity),
+                                  backgroundColor:
+                                      _getSeverityColor(error.severity),
                                   child: Text(
                                     error.code.split('.').first,
                                     style: TextStyle(
@@ -430,10 +470,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                     Row(
                                       children: [
                                         Container(
-                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
                                             color: Colors.grey[200],
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                             error.category,
@@ -442,16 +484,21 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ),
                                         SizedBox(width: 8),
                                         Container(
-                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: _getSeverityColor(error.severity).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(12),
+                                            color: _getSeverityColor(
+                                                    error.severity)
+                                                .withValues(alpha: 0.2),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                             _getSeverityDisplay(error.severity),
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: _getSeverityColor(error.severity),
+                                              color: _getSeverityColor(
+                                                  error.severity),
                                             ),
                                           ),
                                         ),
@@ -501,26 +548,28 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-            FloatingActionButton.extended(
-              heroTag: "approval_workflow",
-              onPressed: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ErrorConsolidationPage()),
-                );
-                // Re-load errors if we returned from the consolidation page
-                _loadErrors(); // Refresh to update count and list
-              },
-              // Use a more distinct color to ensure visibility
-              backgroundColor: pendingCount > 0 ? Colors.deepOrange : Colors.blueGrey.shade300,
-              icon: const Icon(Icons.rule),
-              label: Text('$pendingCount Anfragen prüfen'),
-            ),
-
+          FloatingActionButton.extended(
+            heroTag: "approval_workflow",
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => const ErrorConsolidationPage()),
+              );
+              // Re-load errors if we returned from the consolidation page
+              _loadErrors(); // Refresh to update count and list
+            },
+            // Use a more distinct color to ensure visibility
+            backgroundColor:
+                pendingCount > 0 ? Colors.deepOrange : Colors.blueGrey.shade300,
+            icon: const Icon(Icons.rule),
+            label: Text('$pendingCount Anfragen prüfen'),
+          ),
           SizedBox(height: 16),
           FloatingActionButton(
             heroTag: "batch_migration",
-            onPressed: () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadErrors),
+            onPressed: () => BatchMigrationDialog.show(context,
+                onMigrationCompleted: _loadErrors),
             backgroundColor: Colors.teal,
             tooltip: 'Daten-Migration & Import',
             child: const Icon(Icons.drive_folder_upload),

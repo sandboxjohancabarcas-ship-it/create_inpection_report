@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
@@ -34,11 +35,25 @@ class _DoorListPageState extends State<DoorListPage> {
   final Set<int> _selectedIds = {};
   int _pendingUploadCount = 0;
   final CraftnoteSyncService _craftnoteSyncService = CraftnoteSyncService();
+  Timer? _autoSyncTimer;
 
   @override
   void initState() {
     super.initState();
     loadInspections();
+    // Periodically verify if pending uploads can be automatically synchronized
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_pendingUploadCount > 0 && !_isSyncing && mounted) {
+        _autoProcessOfflineQueue();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> loadInspections() async {
@@ -58,7 +73,45 @@ class _DoorListPageState extends State<DoorListPage> {
           _selectedClient = 'Alle';
         }
       });
+
+      // Automatically trigger offline queue processing when online
+      if (pendingList.isNotEmpty && !_isSyncing) {
+        _autoProcessOfflineQueue();
+      }
     }
+  }
+
+  /// Automatically processes pending offline uploads in the background when an active internet connection is present
+  Future<void> _autoProcessOfflineQueue() async {
+    if (_isSyncing) return;
+    final isOnline = await _craftnoteSyncService.hasInternetConnection();
+    if (!isOnline) return;
+
+    try {
+      final report = await _craftnoteSyncService.processPendingUploadQueue();
+      if (report.succeeded > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${report.succeeded} Auftrag/Aufträge aus der Offline-Warteschlange automatisch mit Craftnote synchronisiert.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        final results = await LocalDatabaseService.getAllInspections(
+          query: _searchController.text,
+          clientFilter: _selectedClient,
+        );
+        final pendingList = await LocalDatabaseService.getPendingCraftnoteUploads();
+        if (mounted) {
+          setState(() {
+            inspections = results;
+            _pendingUploadCount = pendingList.length;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _handleCraftnoteImport() async {
@@ -90,7 +143,8 @@ class _DoorListPageState extends State<DoorListPage> {
                       ? 'Synchronisierung fehlgeschlagen: ${report.errorMessages.join(", ")}'
                       : 'Keine ausstehenden Aufträge in der Warteschlange.'),
             ),
-            backgroundColor: report.succeeded > 0 ? Colors.green : Colors.orange,
+            backgroundColor:
+                report.succeeded > 0 ? Colors.green : Colors.orange,
           ),
         );
         await loadInspections();
@@ -112,19 +166,24 @@ class _DoorListPageState extends State<DoorListPage> {
   /// Confirms deletion with the user, consistent with JobSelectionPage logic.
   Future<bool> _confirmDeletion(int count) async {
     return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Löschen bestätigen'),
-        content: Text('$count Tür(en) und zugehörige Prüfungsdaten unwiderruflich löschen?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Löschen bestätigen'),
+            content: Text(
+                '$count Tür(en) und zugehörige Prüfungsdaten unwiderruflich löschen?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child:
+                    const Text('Löschen', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
   }
 
   /// Handles both single and bulk deletion of doors.
@@ -138,7 +197,7 @@ class _DoorListPageState extends State<DoorListPage> {
       setState(() => _isSyncing = true);
       // Since ids are inspectionIds at this level, use purgeExportedData
       await LocalDatabaseService.purgeExportedData(ids);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ausgewählte Türen gelöscht.')),
@@ -151,7 +210,9 @@ class _DoorListPageState extends State<DoorListPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Fehler beim Löschen: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -163,7 +224,8 @@ class _DoorListPageState extends State<DoorListPage> {
   /// Supports merging packages or replacing the working DB.
   Future<void> _handleImportPaket() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
+      FilePickerResult? result =
+          await FilePicker.platform.pickFiles(type: FileType.any);
 
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
@@ -171,7 +233,9 @@ class _DoorListPageState extends State<DoorListPage> {
         if (!mounted) return;
 
         // Check compatibility before showing import options
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 17);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(
+            path,
+            targetVersion: 17);
         if (compat.hasVersionMismatch) {
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
             context,
@@ -183,25 +247,23 @@ class _DoorListPageState extends State<DoorListPage> {
 
         if (!mounted) return;
 
-        final bool hasInspections = await LocalDatabaseService.hasInspectionsToSave();
+        final bool hasInspections =
+            await LocalDatabaseService.hasInspectionsToSave();
 
         final String? action = await showDialog<String>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Inspektionspaket importieren'),
             content: Text(
-              'Wie möchten Sie das Paket importieren?\n\n'
-              '• Hinzufügen (Merge): Ergänzt Ihre bestehenden Aufträge auf diesem Gerät.\n\n'
-              '• Ersetzen: Ersetzt die vorherigen Daten durch dieses Paket.\n\n' +
-              (hasInspections
-                  ? 'Hinweis: Da bestehende Prüfungsdaten vorhanden sind, werden Sie vor dem Import aufgefordert, den Speicherort für eine Sicherheitskopie auszuwählen.'
-                  : 'Hinweis: Es sind keine vorherigen Prüfungsdaten vorhanden, die gesichert werden müssen.')
-            ),
+                'Wie möchten Sie das Paket importieren?\n\n• Hinzufügen (Merge): Ergänzt Ihre bestehenden Aufträge auf diesem Gerät.\n\n• Ersetzen: Ersetzt die vorherigen Daten durch dieses Paket.\n\n${hasInspections ? 'Hinweis: Da bestehende Prüfungsdaten vorhanden sind, werden Sie vor dem Import aufgefordert, den Speicherort für eine Sicherheitskopie auszuwählen.' : 'Hinweis: Es sind keine vorherigen Prüfungsdaten vorhanden, die gesichert werden müssen.'}'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Abbrechen')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context, null),
+                  child: const Text('Abbrechen')),
               OutlinedButton(
                 onPressed: () => Navigator.pop(context, 'replace'),
-                child: const Text('Ersetzen', style: TextStyle(color: Colors.orange)),
+                child: const Text('Ersetzen',
+                    style: TextStyle(color: Colors.orange)),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, 'merge'),
@@ -219,7 +281,8 @@ class _DoorListPageState extends State<DoorListPage> {
           final workingDbFile = File(workingDbPath);
           final timeStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
           final tag = action == 'replace' ? 'pre_replace' : 'pre_merge';
-          final defaultFileName = 'Sicherheitskopie_WartungsTool_${tag}_$timeStr.db';
+          final defaultFileName =
+              'Sicherheitskopie_WartungsTool_${tag}_$timeStr.db';
 
           savedBackupPath = await FileExportHelper.saveFileSafely(
             defaultFileName: defaultFileName,
@@ -235,9 +298,8 @@ class _DoorListPageState extends State<DoorListPage> {
               builder: (ctx) => AlertDialog(
                 title: const Text('Keine Sicherheitskopie gespeichert'),
                 content: const Text(
-                  'Sie haben keinen Speicherort für die Sicherheitskopie ausgewählt.\n\n'
-                  'Möchten Sie den Import wirklich ohne Sicherheitskopie fortsetzen?'
-                ),
+                    'Sie haben keinen Speicherort für die Sicherheitskopie ausgewählt.\n\n'
+                    'Möchten Sie den Import wirklich ohne Sicherheitskopie fortsetzen?'),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(ctx, false),
@@ -313,11 +375,13 @@ class _DoorListPageState extends State<DoorListPage> {
       for (int inspId in _selectedIds) {
         final doors = await LocalDatabaseService.getDoorsByInspectionId(inspId);
         doorsToExport.addAll(doors);
-        final inspStatuses = await LocalDatabaseService.getDoorInspectionStatuses(inspId);
+        final inspStatuses =
+            await LocalDatabaseService.getDoorInspectionStatuses(inspId);
         statuses.addAll(inspStatuses);
       }
 
-      if (doorsToExport.isEmpty) throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
+      if (doorsToExport.isEmpty)
+        throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
 
       final canProceed = await FileExportHelper.confirmUnprocessedDoors(
         context: context,
@@ -331,12 +395,15 @@ class _DoorListPageState extends State<DoorListPage> {
 
       Map<String, dynamic>? inspData;
       if (_selectedIds.isNotEmpty) {
-        inspData = await LocalDatabaseService.getInspectionById(_selectedIds.first);
+        inspData =
+            await LocalDatabaseService.getInspectionById(_selectedIds.first);
       }
       final defaultFileName = FileExportHelper.buildPackageFileName(
-        jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
+        jobNumber: inspData?['jobNumber']?.toString() ??
+            inspData?['auftragsnummer']?.toString(),
         projectNumber: inspData?['projectNumber']?.toString(),
-        objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
+        objectAddress: inspData?['objectAddress']?.toString() ??
+            inspData?['clientName']?.toString(),
         packageType: 'inspektion_ergebnis',
       );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
@@ -366,7 +433,8 @@ class _DoorListPageState extends State<DoorListPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export-Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Export-Fehler: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -376,6 +444,86 @@ class _DoorListPageState extends State<DoorListPage> {
           if (await tf.exists()) await tf.delete();
         } catch (_) {}
       }
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  /// Exports the selected inspection(s) directly to Craftnote without browsing projects.
+  /// Automatically resolves project by Auftragsnummer and routes to Wartungslisten and Fotomaterial.
+  Future<void> _handleCraftnoteExport() async {
+    if (_selectedIds.isEmpty) return;
+
+    setState(() => _isSyncing = true);
+    final results = <CraftnoteSyncResult>[];
+    try {
+      for (final id in _selectedIds) {
+        final res = await _craftnoteSyncService.completeAndUploadFromLocalDb(
+          inspectionId: id,
+        );
+        results.add(res);
+      }
+
+      if (mounted) {
+        setState(() => _selectedIds.clear());
+        await loadInspections();
+        if (!mounted) return;
+
+        if (results.length == 1) {
+          final res = results.first;
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    res.isQueuedOffline
+                        ? Icons.cloud_queue
+                        : (res.success ? Icons.cloud_done : Icons.error_outline),
+                    color: res.isQueuedOffline
+                        ? Colors.orange
+                        : (res.success ? Colors.green : Colors.red),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    res.isQueuedOffline
+                        ? 'Offline eingereiht'
+                        : (res.success ? 'Export erfolgreich' : 'Export fehlgeschlagen'),
+                  ),
+                ],
+              ),
+              content: SelectableText(res.message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          final succeeded = results.where((r) => r.success && !r.isQueuedOffline).length;
+          final queued = results.where((r) => r.isQueuedOffline).length;
+          final failed = results.where((r) => !r.success).length;
+          final summary = '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(summary),
+              backgroundColor: failed == 0 ? Colors.green : Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Export nach Craftnote: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
   }
@@ -415,19 +563,31 @@ class _DoorListPageState extends State<DoorListPage> {
                     decoration: InputDecoration(
                       hintText: 'Suchen (Tür, Code, Fehler)...',
                       border: InputBorder.none,
-                      hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6)),
+                      hintStyle: TextStyle(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6)),
                     ),
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface),
                     onChanged: (value) => loadInspections(),
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text("Prüfpakete (Techniker)", style: TextStyle(fontSize: 18)),
+                      const Text("Prüfpakete (Techniker)",
+                          style: TextStyle(fontSize: 18)),
                       Text(
-                        AppVersionService.getCompactVersionInfo(isManager: false),
-                        style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7)),
+                        AppVersionService.getCompactVersionInfo(
+                            isManager: false),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.7)),
                       ),
                     ],
                   ),
@@ -465,9 +625,12 @@ class _DoorListPageState extends State<DoorListPage> {
                     alignment: Alignment.center,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.cloud_queue, color: Colors.orange),
-                        tooltip: '$_pendingUploadCount Auftrag/Aufträge in Offline-Warteschlange (Antippen zum Synchronisieren)',
-                        onPressed: _isSyncing ? null : _handleProcessOfflineQueue,
+                        icon:
+                            const Icon(Icons.cloud_queue, color: Colors.orange),
+                        tooltip:
+                            '$_pendingUploadCount Auftrag/Aufträge in Offline-Warteschlange (Antippen zum Synchronisieren)',
+                        onPressed:
+                            _isSyncing ? null : _handleProcessOfflineQueue,
                       ),
                       Positioned(
                         right: 6,
@@ -478,7 +641,8 @@ class _DoorListPageState extends State<DoorListPage> {
                             color: Colors.red,
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          constraints:
+                              const BoxConstraints(minWidth: 16, minHeight: 16),
                           child: Text(
                             '$_pendingUploadCount',
                             style: const TextStyle(
@@ -510,7 +674,8 @@ class _DoorListPageState extends State<DoorListPage> {
                 IconButton(
                   icon: const Icon(Icons.info_outline),
                   tooltip: 'App-Info & Version',
-                  onPressed: () => AppVersionDialog.show(context, isManager: false),
+                  onPressed: () =>
+                      AppVersionDialog.show(context, isManager: false),
                 ),
               ],
       ),
@@ -519,12 +684,17 @@ class _DoorListPageState extends State<DoorListPage> {
           if (_clients.length > 1)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
               child: Row(
                 children: [
                   const Icon(Icons.business, size: 18, color: Colors.grey),
                   const SizedBox(width: 8),
-                  const Text('Kunde:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text('Kunde:',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SingleChildScrollView(
@@ -535,7 +705,8 @@ class _DoorListPageState extends State<DoorListPage> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 6.0),
                             child: ChoiceChip(
-                              label: Text(client, style: const TextStyle(fontSize: 12)),
+                              label: Text(client,
+                                  style: const TextStyle(fontSize: 12)),
                               selected: isSelected,
                               onSelected: (selected) {
                                 if (selected) {
@@ -560,21 +731,28 @@ class _DoorListPageState extends State<DoorListPage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.inventory_2_outlined, size: 56, color: Colors.grey.shade400),
+                            Icon(Icons.inventory_2_outlined,
+                                size: 56, color: Colors.grey.shade400),
                             const SizedBox(height: 12),
                             Text(
-                              _searchController.text.isNotEmpty || _selectedClient != 'Alle'
+                              _searchController.text.isNotEmpty ||
+                                      _selectedClient != 'Alle'
                                   ? 'Keine passenden Aufträge gefunden'
                                   : 'Keine Aufträge vorhanden',
-                              style: TextStyle(fontSize: 15, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500),
                             ),
-                            if (_searchController.text.isEmpty && _selectedClient == 'Alle') ...[
+                            if (_searchController.text.isEmpty &&
+                                _selectedClient == 'Alle') ...[
                               const SizedBox(height: 16),
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.add),
                                 label: const Text('Neuen Auftrag anlegen'),
                                 onPressed: () async {
-                                  final created = await CreateProjectDialog.show(
+                                  final created =
+                                      await CreateProjectDialog.show(
                                     context,
                                     isInspectorMode: true,
                                   );
@@ -588,73 +766,78 @@ class _DoorListPageState extends State<DoorListPage> {
                         ),
                       )
                     : ListView.builder(
-              key: const PageStorageKey('inspector_job_list'),
-              itemCount: inspections.length,
-              itemBuilder: (context, index) {
-                final insp = inspections[index];
-                final id = insp['inspectionId'] as int;
-                final isSelected = _selectedIds.contains(id);
+                        key: const PageStorageKey('inspector_job_list'),
+                        itemCount: inspections.length,
+                        itemBuilder: (context, index) {
+                          final insp = inspections[index];
+                          final id = insp['inspectionId'] as int;
+                          final isSelected = _selectedIds.contains(id);
 
-                return InspectionSummaryCard(
-                  inspectionId: id,
-                  clientName: insp['clientName'] ?? 'Unbekannt',
-                  jobNumber: insp['jobNumber'] ?? 'N/A',
-                  projectNumber: insp['projectNumber']?.toString() ?? '',
-                  date: insp['date'] ?? '',
-                  orderType: insp['orderType']?.toString() ?? 'Wartung',
-                  repairDate: insp['repairDate']?.toString(),
-                  doorCount: insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null,
-                  isLocked: insp['isLocked'],
-                  craftnoteSyncStatus: insp['craftnoteSyncStatus']?.toString(),
-                  isSelected: isSelected,
-                  onSelectionChanged: (value) => _toggleSelection(id),
-                  onLongPress: () => _toggleSelection(id),
-                  onTap: () async {
-                    if (isSelectionMode) {
-                      _toggleSelection(id);
-                    } else {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => InspectionDoorsPage(
+                          return InspectionSummaryCard(
                             inspectionId: id,
-                            title: insp['clientName'] ?? 'Türenliste',
-                            isManagerMode: false,
+                            clientName: insp['clientName'] ?? 'Unbekannt',
+                            jobNumber: insp['jobNumber'] ?? 'N/A',
+                            projectNumber:
+                                insp['projectNumber']?.toString() ?? '',
+                            date: insp['date'] ?? '',
+                            orderType:
+                                insp['orderType']?.toString() ?? 'Wartung',
+                            repairDate: insp['repairDate']?.toString(),
+                            doorCount: insp['doorCount'] != null
+                                ? (insp['doorCount'] as num).toInt()
+                                : null,
+                            isLocked: insp['isLocked'],
+                            craftnoteSyncStatus:
+                                insp['craftnoteSyncStatus']?.toString(),
+                            isSelected: isSelected,
+                            onSelectionChanged: (value) => _toggleSelection(id),
+                            onLongPress: () => _toggleSelection(id),
+                            onTap: () async {
+                              if (isSelectionMode) {
+                                _toggleSelection(id);
+                              } else {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => InspectionDoorsPage(
+                                      inspectionId: id,
+                                      title: insp['clientName'] ?? 'Türenliste',
+                                      isManagerMode: false,
+                                    ),
+                                  ),
+                                );
+                                loadInspections();
+                              }
+                            },
+                          );
+                        },
+                      ),
+                // UI: Loading overlay for the sync process
+                if (_isSyncing)
+                  Container(
+                    color: Colors.black26,
+                    child: const Center(
+                      child: Card(
+                        margin: EdgeInsets.all(32),
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text("Synchronisierung läuft..."),
+                            ],
                           ),
                         ),
-                      );
-                      loadInspections();
-                    }
-                  },
-                );
-              },
-            ),
-          // UI: Loading overlay for the sync process
-          if (_isSyncing)
-            Container(
-              color: Colors.black26,
-              child: const Center(
-                child: Card(
-                  margin: EdgeInsets.all(32),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text("Synchronisierung läuft..."),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+              ],
             ),
+          ),
         ],
       ),
-    ),
-  ],
-),
       bottomNavigationBar: !isSelectionMode
           ? null
           : BottomAppBar(
@@ -669,8 +852,14 @@ class _DoorListPageState extends State<DoorListPage> {
                   const VerticalDivider(),
                   TextButton.icon(
                     onPressed: _handleSelectiveExport,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Exportieren'),
+                    icon: const Icon(Icons.save_alt),
+                    label: const Text('Lokal (.db)'),
+                  ),
+                  const VerticalDivider(),
+                  ElevatedButton.icon(
+                    onPressed: _isSyncing ? null : _handleCraftnoteExport,
+                    icon: const Icon(Icons.cloud_upload),
+                    label: const Text('An Craftnote senden'),
                   ),
                 ],
               ),

@@ -25,7 +25,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
 
   void _refreshList() {
     setState(() {
-      _pendingErrorsFuture = DatabaseService.getAllErrorCatalog(status: 'Pending');
+      _pendingErrorsFuture =
+          DatabaseService.getAllErrorCatalog(status: 'Pending');
     });
     _loadCatalogAndCategories();
   }
@@ -34,9 +35,12 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
     setState(() => _isLoadingCatalog = true);
     try {
       final allCatalog = await DatabaseService.getAllErrorCatalog();
-      final official = allCatalog.where((e) => e.status != 'Pending' && e.category != 'Altdaten').toList();
+      final official = allCatalog
+          .where((e) => e.status != 'Pending' && e.category != 'Altdaten')
+          .toList();
       final cats = await DatabaseService.getErrorCatalogCategories();
-      final cleanCats = cats.where((c) => c != 'Altdaten' && c.trim().isNotEmpty).toList();
+      final cleanCats =
+          cats.where((c) => c != 'Altdaten' && c.trim().isNotEmpty).toList();
 
       if (mounted) {
         setState(() {
@@ -52,14 +56,16 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
     }
   }
 
-  Future<void> _processApproval(ErrorCatalog error, bool approved, {String? oldCode, int? oldErrorId}) async {
+  Future<void> _processApproval(ErrorCatalog error, bool approved,
+      {String? oldCode, int? oldErrorId}) async {
     if (!approved) {
       try {
         final rejectedError = error.copyWith(status: 'Rejected');
         await DatabaseService.insertErrorCatalog(rejectedError);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Fehler-Anfrage abgelehnt und archiviert.')),
+            const SnackBar(
+                content: Text('Fehler-Anfrage abgelehnt und archiviert.')),
           );
           _refreshList();
         }
@@ -109,7 +115,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
-                  Text('• ${collision.code} - ${collision.description} (${collision.category})'),
+                  Text(
+                      '• ${collision.code} - ${collision.description} (${collision.category})'),
                   const SizedBox(height: 12),
                 ],
                 if (similar != null) ...[
@@ -118,7 +125,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
-                  Text('• ${similar.existing.code} - ${similar.existing.description}'),
+                  Text(
+                      '• ${similar.existing.code} - ${similar.existing.description}'),
                   const SizedBox(height: 12),
                 ],
                 const Text(
@@ -156,7 +164,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler "${error.code} - ${error.description}" erfolgreich genehmigt!'),
+            content: Text(
+                'Fehler "${error.code} - ${error.description}" erfolgreich genehmigt!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -171,7 +180,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
     }
   }
 
-  Future<void> _mergeWithExisting(ErrorCatalog pendingError, ErrorCatalog targetCatalogItem) async {
+  Future<void> _mergeWithExisting(
+      ErrorCatalog pendingError, ErrorCatalog targetCatalogItem) async {
     try {
       await DatabaseService.mergePendingErrorIntoExisting(
         pendingError: pendingError,
@@ -181,7 +191,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Anfrage erfolgreich mit [${targetCatalogItem.code}] verknüpft!'),
+            content: Text(
+                'Anfrage erfolgreich mit [${targetCatalogItem.code}] verknüpft!'),
             backgroundColor: Colors.teal,
           ),
         );
@@ -240,18 +251,27 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   const SizedBox(height: 10),
                   Expanded(
                     child: filtered.isEmpty
-                        ? const Center(child: Text('Keine passenden Katalogeinträge gefunden.'))
+                        ? const Center(
+                            child: Text(
+                                'Keine passenden Katalogeinträge gefunden.'))
                         : ListView.separated(
                             itemCount: filtered.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final item = filtered[index];
                               return ListTile(
                                 dense: true,
-                                title: Text('${item.code} - ${item.description}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('Kategorie: ${item.category} | Schweregrad: ${item.severity}'),
+                                title: Text(
+                                    '${item.code} - ${item.description}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold)),
+                                subtitle: Text(
+                                    'Kategorie: ${item.category} | Schweregrad: ${item.severity}'),
                                 trailing: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.teal,
+                                      foregroundColor: Colors.white),
                                   onPressed: () {
                                     Navigator.pop(ctx);
                                     _mergeWithExisting(pendingError, item);
@@ -294,7 +314,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
       body: FutureBuilder<List<ErrorCatalog>>(
         future: _pendingErrorsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting || _isLoadingCatalog) {
+          if (snapshot.connectionState == ConnectionState.waiting ||
+              _isLoadingCatalog) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -344,36 +365,47 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   side: BorderSide(
                     color: collision != null
                         ? Colors.red.shade300
-                        : (similar != null ? Colors.orange.shade300 : Colors.grey.shade300),
+                        : (similar != null
+                            ? Colors.orange.shade300
+                            : Colors.grey.shade300),
                     width: (collision != null || similar != null) ? 1.5 : 1,
                   ),
                 ),
                 child: ExpansionTile(
-                  key: PageStorageKey('provisional_error_${item.errorId ?? index}'),
+                  key: PageStorageKey(
+                      'provisional_error_${item.errorId ?? index}'),
                   leading: CircleAvatar(
                     backgroundColor: collision != null
                         ? Colors.red.shade100
-                        : (similar != null ? Colors.orange.shade100 : Colors.blue.shade100),
+                        : (similar != null
+                            ? Colors.orange.shade100
+                            : Colors.blue.shade100),
                     child: Icon(
                       collision != null
                           ? Icons.warning_amber_rounded
-                          : (similar != null ? Icons.compare_arrows : Icons.pending_actions),
+                          : (similar != null
+                              ? Icons.compare_arrows
+                              : Icons.pending_actions),
                       color: collision != null
                           ? Colors.red.shade800
-                          : (similar != null ? Colors.orange.shade800 : Colors.blue.shade800),
+                          : (similar != null
+                              ? Colors.orange.shade800
+                              : Colors.blue.shade800),
                     ),
                   ),
                   title: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           item.code,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -389,10 +421,14 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     padding: const EdgeInsets.only(top: 4),
                     child: Row(
                       children: [
-                        Text('Kategorie: ${item.category}', style: const TextStyle(fontSize: 12)),
-                        if (item.requestedBy != null && item.requestedBy!.isNotEmpty) ...[
+                        Text('Kategorie: ${item.category}',
+                            style: const TextStyle(fontSize: 12)),
+                        if (item.requestedBy != null &&
+                            item.requestedBy!.isNotEmpty) ...[
                           const SizedBox(width: 8),
-                          Text('• Von: ${item.requestedBy}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          Text('• Von: ${item.requestedBy}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.black54)),
                         ],
                       ],
                     ),
@@ -415,15 +451,19 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.error, size: 20, color: Colors.red),
+                                  const Icon(Icons.error,
+                                      size: 20, color: Colors.red),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           '⚠️ Code-Kollision mit bestehendem Eintrag:',
-                                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900),
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.red.shade900),
                                         ),
                                         Text(
                                           '${collision.code} - ${collision.description} (${collision.category})',
@@ -444,20 +484,25 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               decoration: BoxDecoration(
                                 color: Colors.orange.shade50,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.orange.shade300),
+                                border:
+                                    Border.all(color: Colors.orange.shade300),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.lightbulb, size: 20, color: Colors.orange),
+                                  const Icon(Icons.lightbulb,
+                                      size: 20, color: Colors.orange),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           '🔍 Ähnlicher Fehler im offiziellen Katalog gefunden (${similar.similarityPercentage}%):',
-                                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900),
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange.shade900),
                                         ),
                                         Text(
                                           '${similar.existing.code} - ${similar.existing.description}',
@@ -467,9 +512,12 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                                     ),
                                   ),
                                   TextButton.icon(
-                                    onPressed: () => _mergeWithExisting(item, similar.existing),
-                                    icon: const Icon(Icons.merge_type, size: 16),
-                                    label: const Text('Verknüpfen', style: TextStyle(fontSize: 12)),
+                                    onPressed: () => _mergeWithExisting(
+                                        item, similar.existing),
+                                    icon:
+                                        const Icon(Icons.merge_type, size: 16),
+                                    label: const Text('Verknüpfen',
+                                        style: TextStyle(fontSize: 12)),
                                   ),
                                 ],
                               ),
@@ -483,15 +531,20 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               decoration: BoxDecoration(
                                 color: Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: Colors.green.shade200),
+                                border:
+                                    Border.all(color: Colors.green.shade200),
                               ),
                               child: Row(
                                 children: const [
-                                  Icon(Icons.check_circle_outline, size: 18, color: Colors.green),
+                                  Icon(Icons.check_circle_outline,
+                                      size: 18, color: Colors.green),
                                   SizedBox(width: 6),
                                   Text(
                                     'Keine Kollisionen oder Duplikate im Katalog gefunden.',
-                                    style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                        color: Colors.green,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
@@ -502,8 +555,13 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                           // Defect details
                           Row(
                             children: [
-                              Expanded(child: Text('Vorgeschlagener Code: ${item.code}', style: const TextStyle(fontWeight: FontWeight.bold))),
-                              Expanded(child: Text('Schweregrad: ${item.severity}')),
+                              Expanded(
+                                  child: Text(
+                                      'Vorgeschlagener Code: ${item.code}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold))),
+                              Expanded(
+                                  child: Text('Schweregrad: ${item.severity}')),
                             ],
                           ),
                           if (item.recommendation.isNotEmpty) ...[
@@ -525,13 +583,17 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                             children: [
                               TextButton.icon(
                                 onPressed: () => _processApproval(item, false),
-                                icon: const Icon(Icons.archive, color: Colors.grey),
-                                label: const Text('Ablehnen', style: TextStyle(color: Colors.grey)),
+                                icon: const Icon(Icons.archive,
+                                    color: Colors.grey),
+                                label: const Text('Ablehnen',
+                                    style: TextStyle(color: Colors.grey)),
                               ),
                               OutlinedButton.icon(
                                 onPressed: () => _showMergeDialog(item),
-                                icon: const Icon(Icons.merge_type, color: Colors.teal),
-                                label: const Text('Mit Katalog verknüpfen', style: TextStyle(color: Colors.teal)),
+                                icon: const Icon(Icons.merge_type,
+                                    color: Colors.teal),
+                                label: const Text('Mit Katalog verknüpfen',
+                                    style: TextStyle(color: Colors.teal)),
                               ),
                               ElevatedButton.icon(
                                 onPressed: () => _showEditDialog(item),
@@ -540,11 +602,15 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               ),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: collision != null ? Colors.orange : Colors.green,
+                                  backgroundColor: collision != null
+                                      ? Colors.orange
+                                      : Colors.green,
                                   foregroundColor: Colors.white,
                                 ),
                                 onPressed: () => _processApproval(item, true),
-                                icon: Icon(collision != null ? Icons.warning : Icons.check_circle),
+                                icon: Icon(collision != null
+                                    ? Icons.warning
+                                    : Icons.check_circle),
                                 label: const Text('Direkt Genehmigen'),
                               ),
                             ],
@@ -567,11 +633,15 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
     final descController = TextEditingController(text: error.description);
     final catController = TextEditingController(text: error.category);
     final severityController = TextEditingController(text: error.severity);
-    final recommendationController = TextEditingController(text: error.recommendation);
-    final normReferenceController = TextEditingController(text: error.normReference);
+    final recommendationController =
+        TextEditingController(text: error.recommendation);
+    final normReferenceController =
+        TextEditingController(text: error.normReference);
 
-    bool isCustomCategory = !_categories.contains(error.category) && error.category.isNotEmpty;
-    final customCatController = TextEditingController(text: isCustomCategory ? error.category : '');
+    bool isCustomCategory =
+        !_categories.contains(error.category) && error.category.isNotEmpty;
+    final customCatController =
+        TextEditingController(text: isCustomCategory ? error.category : '');
     String selectedCategory = _categories.contains(error.category)
         ? error.category
         : (_categories.isNotEmpty ? _categories.first : 'Sonstiges');
@@ -618,7 +688,7 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     // Dynamic Category Selector
                     Card(
                       elevation: 0,
-                      color: Colors.blue.shade50.withOpacity(0.5),
+                      color: Colors.blue.shade50.withValues(alpha: 0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                         side: BorderSide(color: Colors.blue.shade200),
@@ -630,13 +700,17 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.category, size: 18, color: Colors.blue),
+                                const Icon(Icons.category,
+                                    size: 18, color: Colors.blue),
                                 const SizedBox(width: 6),
                                 const Text(
                                   'Kategorie:',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13),
                                 ),
-                                if (isCustomCategory && _categories.isNotEmpty) ...[
+                                if (isCustomCategory &&
+                                    _categories.isNotEmpty) ...[
                                   const Spacer(),
                                   TextButton.icon(
                                     onPressed: () {
@@ -647,32 +721,42 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                                       });
                                     },
                                     icon: const Icon(Icons.list, size: 14),
-                                    label: const Text('Aus Katalogliste wählen', style: TextStyle(fontSize: 12)),
+                                    label: const Text('Aus Katalogliste wählen',
+                                        style: TextStyle(fontSize: 12)),
                                   ),
                                 ],
                               ],
                             ),
                             const SizedBox(height: 8),
-                            if (!isCustomCategory && _categories.isNotEmpty) ...[
+                            if (!isCustomCategory &&
+                                _categories.isNotEmpty) ...[
                               DropdownButtonFormField<String>(
-                                value: _categories.contains(selectedCategory) ? selectedCategory : _categories.first,
+                                initialValue:
+                                    _categories.contains(selectedCategory)
+                                        ? selectedCategory
+                                        : _categories.first,
                                 decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
                                   border: OutlineInputBorder(),
                                   filled: true,
                                   fillColor: Colors.white,
                                 ),
                                 items: [
-                                  ..._categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                                  ..._categories.map((c) => DropdownMenuItem(
+                                      value: c, child: Text(c))),
                                   const DropdownMenuItem(
                                     value: '__NEW_CATEGORY__',
                                     child: Row(
                                       children: [
-                                        Icon(Icons.add_circle_outline, size: 16, color: Colors.blue),
+                                        Icon(Icons.add_circle_outline,
+                                            size: 16, color: Colors.blue),
                                         SizedBox(width: 6),
                                         Text(
                                           '+ Neue Kategorie erstellen...',
-                                          style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                                          style: TextStyle(
+                                              color: Colors.blue,
+                                              fontWeight: FontWeight.bold),
                                         ),
                                       ],
                                     ),
@@ -696,7 +780,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               TextField(
                                 controller: customCatController,
                                 decoration: InputDecoration(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
                                   labelText: 'Neue Kategorie Bezeichnung *',
                                   border: const OutlineInputBorder(),
                                   filled: true,
@@ -707,8 +792,10 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                                           onPressed: () {
                                             dialogSetState(() {
                                               isCustomCategory = false;
-                                              selectedCategory = _categories.first;
-                                              catController.text = _categories.first;
+                                              selectedCategory =
+                                                  _categories.first;
+                                              catController.text =
+                                                  _categories.first;
                                             });
                                           },
                                         )
@@ -738,12 +825,16 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               border: const OutlineInputBorder(),
                               suffixIcon: IconButton(
                                 tooltip: 'Nächsten freien Code berechnen',
-                                icon: const Icon(Icons.auto_awesome, color: Colors.blue),
+                                icon: const Icon(Icons.auto_awesome,
+                                    color: Colors.blue),
                                 onPressed: () {
-                                  final cat = catController.text.trim().isNotEmpty
-                                      ? catController.text.trim()
-                                      : selectedCategory;
-                                  final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, _officialCatalog);
+                                  final cat =
+                                      catController.text.trim().isNotEmpty
+                                          ? catController.text.trim()
+                                          : selectedCategory;
+                                  final nextCode = CatalogIntegrityService
+                                      .proposeNextCodeForCategory(
+                                          cat, _officialCatalog);
                                   codeController.text = nextCode;
                                   dialogSetState(() {});
                                 },
@@ -755,18 +846,22 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                         const SizedBox(width: 8),
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 14),
                           ),
                           onPressed: () {
                             final cat = catController.text.trim().isNotEmpty
                                 ? catController.text.trim()
                                 : selectedCategory;
-                            final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, _officialCatalog);
+                            final nextCode = CatalogIntegrityService
+                                .proposeNextCodeForCategory(
+                                    cat, _officialCatalog);
                             codeController.text = nextCode;
                             dialogSetState(() {});
                           },
                           icon: const Icon(Icons.tag, size: 16),
-                          label: const Text('Code vorschlagen', style: TextStyle(fontSize: 12)),
+                          label: const Text('Code vorschlagen',
+                              style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
@@ -783,12 +878,16 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline, size: 18, color: Colors.red),
+                            const Icon(Icons.error_outline,
+                                size: 18, color: Colors.red),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 'Achtung: Code "$currentCode" ist bereits vergeben für "${collision.description}"!',
-                                style: TextStyle(color: Colors.red.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    color: Colors.red.shade900,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ),
                             TextButton(
@@ -796,10 +895,13 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                                 final cat = catController.text.trim().isNotEmpty
                                     ? catController.text.trim()
                                     : selectedCategory;
-                                codeController.text = CatalogIntegrityService.proposeNextCodeForCategory(cat, _officialCatalog);
+                                codeController.text = CatalogIntegrityService
+                                    .proposeNextCodeForCategory(
+                                        cat, _officialCatalog);
                                 dialogSetState(() {});
                               },
-                              child: const Text('Freien Code wählen', style: TextStyle(fontSize: 12)),
+                              child: const Text('Freien Code wählen',
+                                  style: TextStyle(fontSize: 12)),
                             ),
                           ],
                         ),
@@ -811,7 +913,9 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     TextField(
                       controller: descController,
                       maxLines: 3,
-                      decoration: const InputDecoration(labelText: 'Beschreibung *', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Beschreibung *',
+                          border: OutlineInputBorder()),
                       onChanged: (_) => dialogSetState(() {}),
                     ),
 
@@ -827,12 +931,16 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.lightbulb_outline, size: 18, color: Colors.orange),
+                            const Icon(Icons.lightbulb_outline,
+                                size: 18, color: Colors.orange),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 'Ähnlicher Fehler im Katalog: [${similar.existing.code}] ${similar.existing.description} (${similar.similarityPercentage}%)',
-                                style: TextStyle(color: Colors.orange.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                style: TextStyle(
+                                    color: Colors.orange.shade900,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold),
                               ),
                             ),
                             TextButton.icon(
@@ -841,7 +949,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                                 _mergeWithExisting(error, similar.existing);
                               },
                               icon: const Icon(Icons.merge_type, size: 14),
-                              label: const Text('Zusammenführen', style: TextStyle(fontSize: 12)),
+                              label: const Text('Zusammenführen',
+                                  style: TextStyle(fontSize: 12)),
                             ),
                           ],
                         ),
@@ -851,12 +960,17 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
 
                     // Severity
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Schweregrad', border: OutlineInputBorder()),
-                      value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())
+                      decoration: const InputDecoration(
+                          labelText: 'Schweregrad',
+                          border: OutlineInputBorder()),
+                      initialValue: const ['low', 'medium', 'high', 'critical']
+                              .contains(severityController.text.toLowerCase())
                           ? severityController.text.toLowerCase()
                           : 'medium',
-                      items: const ['low', 'medium', 'high', 'critical'].map((s) {
-                        return DropdownMenuItem(value: s, child: Text(s.toUpperCase()));
+                      items:
+                          const ['low', 'medium', 'high', 'critical'].map((s) {
+                        return DropdownMenuItem(
+                            value: s, child: Text(s.toUpperCase()));
                       }).toList(),
                       onChanged: (val) {
                         if (val != null) severityController.text = val;
@@ -867,14 +981,18 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                     // Recommendation
                     TextField(
                       controller: recommendationController,
-                      decoration: const InputDecoration(labelText: 'Empfehlung', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Empfehlung',
+                          border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
 
                     // Norm Reference
                     TextField(
                       controller: normReferenceController,
-                      decoration: const InputDecoration(labelText: 'Normreferenz', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Normreferenz',
+                          border: OutlineInputBorder()),
                     ),
                   ],
                 ),
@@ -891,17 +1009,22 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   _showMergeDialog(error);
                 },
                 icon: const Icon(Icons.merge_type, color: Colors.teal),
-                label: const Text('Mit Katalog verknüpfen', style: TextStyle(color: Colors.teal)),
+                label: const Text('Mit Katalog verknüpfen',
+                    style: TextStyle(color: Colors.teal)),
               ),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: collision != null ? Colors.red : Colors.green,
+                  backgroundColor:
+                      collision != null ? Colors.red : Colors.green,
                   foregroundColor: Colors.white,
                 ),
                 onPressed: () {
-                  if (codeController.text.trim().isEmpty || descController.text.trim().isEmpty) {
+                  if (codeController.text.trim().isEmpty ||
+                      descController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Code und Beschreibung dürfen nicht leer sein.')),
+                      const SnackBar(
+                          content: Text(
+                              'Code und Beschreibung dürfen nicht leer sein.')),
                     );
                     return;
                   }
@@ -909,7 +1032,8 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   if (collision != null) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Code "${codeController.text.trim()}" ist bereits vergeben. Bitte Code ändern.'),
+                        content: Text(
+                            'Code "${codeController.text.trim()}" ist bereits vergeben. Bitte Code ändern.'),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -919,7 +1043,9 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                   final updated = error.copyWith(
                     code: codeController.text.trim(),
                     description: descController.text.trim(),
-                    category: catController.text.trim().isNotEmpty ? catController.text.trim() : 'Sonstiges',
+                    category: catController.text.trim().isNotEmpty
+                        ? catController.text.trim()
+                        : 'Sonstiges',
                     severity: severityController.text.trim(),
                     recommendation: recommendationController.text.trim(),
                     normReference: normReferenceController.text.trim(),

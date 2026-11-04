@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/local_database_service.dart';
@@ -15,6 +14,7 @@ class ErrorManagementPage extends StatefulWidget {
   final int doorId;
   final String doorNumber;
   final int inspectionId;
+
   /// When true, reads/writes use DatabaseService (Master DB) instead of LocalDatabaseService (working.db).
   final bool isManagerMode;
   final bool isReadOnly;
@@ -51,21 +51,27 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   /// If [syncWithMain] is true, it attempts to refresh the local catalog from the main DB first.
   Future<void> _loadData({bool syncWithMain = false}) async {
     setState(() => isLoading = true);
-    
+
     try {
       if (widget.isManagerMode) {
         // Manager mode: read from Master DB (DatabaseService)
-        final junctions = await DatabaseService.getInspectionDoorsByInspectionId(widget.inspectionId);
-        final junction = junctions.where((j) => j['doorId'] == widget.doorId).firstOrNull;
+        final junctions =
+            await DatabaseService.getInspectionDoorsByInspectionId(
+                widget.inspectionId);
+        final junction =
+            junctions.where((j) => j['doorId'] == widget.doorId).firstOrNull;
         _inspectionDoorId = junction?['id'] as int?;
 
-        final catalogSuggestions = await DatabaseService.getAllErrorCatalog(status: 'Approved');
+        final catalogSuggestions =
+            await DatabaseService.getAllErrorCatalog(status: 'Approved');
         final inspectionErrors = _inspectionDoorId != null
-            ? await DatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
+            ? await DatabaseService.getErrorsForInspectionDoor(
+                _inspectionDoorId!)
             : <InspectionDoorError>[];
 
         print('[Manager] Loaded ${catalogSuggestions.length} catalog errors');
-        print('[Manager] Loaded ${inspectionErrors.length} inspection errors for door ${widget.doorId}');
+        print(
+            '[Manager] Loaded ${inspectionErrors.length} inspection errors for door ${widget.doorId}');
 
         setState(() {
           availableErrors = catalogSuggestions;
@@ -74,20 +80,24 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         });
       } else {
         // Inspector mode: read from local working.db (LocalDatabaseService)
-        final junction = await LocalDatabaseService.getInspectionDoor(widget.inspectionId, widget.doorId);
+        final junction = await LocalDatabaseService.getInspectionDoor(
+            widget.inspectionId, widget.doorId);
         _inspectionDoorId = junction?['id'];
 
         if (syncWithMain) {
           try {
             await LocalDatabaseService.refreshLocalCatalogFromMain();
           } catch (e) {
-            print('Haupt-Datenbank nicht erreichbar. Fahre mit lokalem Katalog fort: $e');
+            print(
+                'Haupt-Datenbank nicht erreichbar. Fahre mit lokalem Katalog fort: $e');
           }
         }
 
-        final catalogSuggestions = await LocalDatabaseService.getAllErrorCatalog();
+        final catalogSuggestions =
+            await LocalDatabaseService.getAllErrorCatalog();
         final inspectionErrors = _inspectionDoorId != null
-            ? await LocalDatabaseService.getErrorsForInspectionDoor(_inspectionDoorId!)
+            ? await LocalDatabaseService.getErrorsForInspectionDoor(
+                _inspectionDoorId!)
             : <InspectionDoorError>[];
 
         print('Loaded ${catalogSuggestions.length} catalog errors');
@@ -120,8 +130,6 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  
-
   Future<String?> _pickImageAsBase64(ImageSource source) async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -141,7 +149,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Das Bild ist zu groß. Maximale Größe ist 60 MB (Aktuell: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB).'),
+              content: Text(
+                  'Das Bild ist zu groß. Maximale Größe ist 60 MB (Aktuell: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(1)} MB).'),
               backgroundColor: Colors.red,
             ),
           );
@@ -175,7 +184,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           ],
         ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width > 600 ? 550 : MediaQuery.of(context).size.width * 0.9,
+          width: MediaQuery.of(context).size.width > 600
+              ? 550
+              : MediaQuery.of(context).size.width * 0.9,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +202,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 maxLines: 8,
                 minLines: 4,
                 decoration: const InputDecoration(
-                  hintText: 'Detaillierte Fehlerbeschreibung, Fundort, Ursache, Bemerkungen...',
+                  hintText:
+                      'Detaillierte Fehlerbeschreibung, Fundort, Ursache, Bemerkungen...',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -244,7 +256,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     border: Border.all(color: Colors.grey.shade300),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 3,
                         offset: const Offset(0, 1),
                       ),
@@ -296,11 +308,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  Future<void> _addCatalogError(ErrorCatalog error, String notes, {List<String> photos = const []}) async {
+  Future<void> _addCatalogError(ErrorCatalog error, String notes,
+      {List<String> photos = const []}) async {
     if (_inspectionDoorId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fehler: Keine aktive Inspektions-Sitzung für diese Tür gefunden.')),
+          const SnackBar(
+              content: Text(
+                  'Fehler: Keine aktive Inspektions-Sitzung für diese Tür gefunden.')),
         );
       }
       return;
@@ -365,7 +380,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     final List<String> categories = categorySet.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    String? selectedProvisionalCategory = categories.isNotEmpty ? categories.first : null;
+    String? selectedProvisionalCategory =
+        categories.isNotEmpty ? categories.first : null;
     bool isCustomProvisionalCategory = categories.isEmpty;
     final customCategoryController = TextEditingController();
     if (selectedProvisionalCategory != null) {
@@ -401,9 +417,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           return AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.report_problem, color: isProvisional ? Colors.orange : Colors.blue.shade700),
+                Icon(Icons.report_problem,
+                    color:
+                        isProvisional ? Colors.orange : Colors.blue.shade700),
                 const SizedBox(width: 8),
-                Text(isProvisional ? 'Provisorischen Fehler erstellen' : 'Fehler hinzufügen'),
+                Text(isProvisional
+                    ? 'Provisorischen Fehler erstellen'
+                    : 'Fehler hinzufügen'),
               ],
             ),
             content: SizedBox(
@@ -425,7 +445,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         children: [
                           Expanded(
                             child: ChoiceChip(
-                              label: const Center(child: Text('Aus Katalog wählen')),
+                              label: const Center(
+                                  child: Text('Aus Katalog wählen')),
                               selected: !isProvisional,
                               onSelected: (selected) {
                                 if (selected) {
@@ -437,7 +458,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: ChoiceChip(
-                              label: const Center(child: Text('Provisorischer Fehler')),
+                              label: const Center(
+                                  child: Text('Provisorischer Fehler')),
                               selected: isProvisional,
                               onSelected: (selected) {
                                 if (selected) {
@@ -456,7 +478,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         // Category Selection & Search Bar
                         Card(
                           elevation: 0,
-                          color: Colors.blue.shade50.withOpacity(0.5),
+                          color: Colors.blue.shade50.withValues(alpha: 0.5),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: BorderSide(color: Colors.blue.shade200),
@@ -468,48 +490,62 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.category, size: 18, color: Colors.blue),
+                                    const Icon(Icons.category,
+                                        size: 18, color: Colors.blue),
                                     const SizedBox(width: 6),
                                     const Text(
                                       '1. Fehlerkategorie wählen:',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13),
                                     ),
-                                    if (selectedCategory != null && selectedCategory!.isNotEmpty) ...[
+                                    if (selectedCategory != null &&
+                                        selectedCategory!.isNotEmpty) ...[
                                       const Spacer(),
                                       TextButton(
-                                        onPressed: () => dialogSetState(() => selectedCategory = null),
+                                        onPressed: () => dialogSetState(
+                                            () => selectedCategory = null),
                                         style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8),
                                           minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
                                         ),
-                                        child: const Text('Kategorie zurücksetzen', style: TextStyle(fontSize: 12)),
+                                        child: const Text(
+                                            'Kategorie zurücksetzen',
+                                            style: TextStyle(fontSize: 12)),
                                       ),
                                     ],
                                   ],
                                 ),
                                 const SizedBox(height: 6),
                                 DropdownButtonFormField<String?>(
-                                  value: selectedCategory,
+                                  initialValue: selectedCategory,
                                   isExpanded: true,
                                   decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
                                     border: const OutlineInputBorder(),
                                     filled: true,
                                     fillColor: Colors.white,
-                                    hintText: 'Alle Kategorien (${availableErrors.length} Fehler)',
+                                    hintText:
+                                        'Alle Kategorien (${availableErrors.length} Fehler)',
                                   ),
                                   items: [
                                     DropdownMenuItem<String?>(
                                       value: null,
                                       child: Text(
                                         'Alle Kategorien (${availableErrors.length} Fehler)',
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                     ...categories.map((cat) {
                                       final count = availableErrors
-                                          .where((e) => e.category.toLowerCase() == cat.toLowerCase())
+                                          .where((e) =>
+                                              e.category.toLowerCase() ==
+                                              cat.toLowerCase())
                                           .length;
                                       return DropdownMenuItem<String?>(
                                         value: cat,
@@ -526,11 +562,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 const SizedBox(height: 10),
                                 Row(
                                   children: [
-                                    const Icon(Icons.search, size: 18, color: Colors.blue),
+                                    const Icon(Icons.search,
+                                        size: 18, color: Colors.blue),
                                     const SizedBox(width: 6),
                                     const Text(
                                       '2. Suche (nach Kategorie, Code oder Beschreibung):',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13),
                                     ),
                                   ],
                                 ),
@@ -538,9 +577,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 TextField(
                                   controller: searchController,
                                   decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
                                     labelText: 'Suchbegriff eingeben...',
-                                    hintText: 'z.B. Türschließer, 1.1.1, Schloss, Dichtung...',
+                                    hintText:
+                                        'z.B. Türschließer, 1.1.1, Schloss, Dichtung...',
                                     border: const OutlineInputBorder(),
                                     filled: true,
                                     fillColor: Colors.white,
@@ -574,7 +615,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 fontSize: 13,
                               ),
                             ),
-                            if (selectedCategory != null && selectedCategory!.isNotEmpty)
+                            if (selectedCategory != null &&
+                                selectedCategory!.isNotEmpty)
                               Text(
                                 ' in "$selectedCategory"',
                                 style: TextStyle(
@@ -600,16 +642,23 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
+                                      Icon(Icons.search_off,
+                                          size: 48,
+                                          color: Colors.grey.shade400),
                                       const SizedBox(height: 8),
                                       const Text(
                                         'Keine passenden Fehler gefunden',
-                                        style: TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
+                                        style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         'Wählen Sie eine andere Kategorie oder ändern Sie den Suchbegriff.',
-                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                                        style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 12),
                                       ),
                                     ],
                                   ),
@@ -617,7 +666,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               : ListView.separated(
                                   padding: const EdgeInsets.all(6),
                                   itemCount: filteredErrors.length,
-                                  separatorBuilder: (context, index) => const SizedBox(height: 4),
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(height: 4),
                                   itemBuilder: (context, index) {
                                     final err = filteredErrors[index];
                                     return Card(
@@ -625,21 +675,28 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                       elevation: 1,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(6),
-                                        side: BorderSide(color: Colors.grey.shade200),
+                                        side: BorderSide(
+                                            color: Colors.grey.shade200),
                                       ),
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(6),
-                                        onTap: () => dialogSetState(() => selectedError = err),
+                                        onTap: () => dialogSetState(
+                                            () => selectedError = err),
                                         child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 8),
                                           child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               CircleAvatar(
                                                 radius: 16,
-                                                backgroundColor: Colors.blue.shade100,
+                                                backgroundColor:
+                                                    Colors.blue.shade100,
                                                 child: Text(
-                                                  err.code.isNotEmpty ? err.code.split('.')[0] : '!',
+                                                  err.code.isNotEmpty
+                                                      ? err.code.split('.')[0]
+                                                      : '!',
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
@@ -650,66 +707,131 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                               const SizedBox(width: 10),
                                               Expanded(
                                                 child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
                                                   children: [
                                                     Row(
                                                       children: [
                                                         Text(
                                                           err.code,
-                                                          style: const TextStyle(
-                                                            fontWeight: FontWeight.bold,
+                                                          style:
+                                                              const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.bold,
                                                             fontSize: 13,
                                                           ),
                                                         ),
-                                                        const SizedBox(width: 8),
+                                                        const SizedBox(
+                                                            width: 8),
                                                         if (err.isNotice) ...[
                                                           Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.amber.shade100,
-                                                              borderRadius: BorderRadius.circular(4),
-                                                              border: Border.all(color: Colors.amber.shade400),
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical:
+                                                                        1),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: Colors
+                                                                  .amber
+                                                                  .shade100,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          4),
+                                                              border: Border.all(
+                                                                  color: Colors
+                                                                      .amber
+                                                                      .shade400),
                                                             ),
                                                             child: Text(
                                                               'Hinweis',
                                                               style: TextStyle(
                                                                 fontSize: 10,
-                                                                color: Colors.amber.shade900,
-                                                                fontWeight: FontWeight.bold,
+                                                                color: Colors
+                                                                    .amber
+                                                                    .shade900,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
                                                               ),
                                                             ),
                                                           ),
-                                                          const SizedBox(width: 6),
+                                                          const SizedBox(
+                                                              width: 6),
                                                         ],
                                                         Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                          decoration: BoxDecoration(
-                                                            color: err.isNotice ? Colors.amber.shade50 : Colors.blue.shade50,
-                                                            borderRadius: BorderRadius.circular(4),
-                                                            border: Border.all(color: err.isNotice ? Colors.amber.shade200 : Colors.blue.shade200),
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 1),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: err.isNotice
+                                                                ? Colors.amber
+                                                                    .shade50
+                                                                : Colors.blue
+                                                                    .shade50,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            border: Border.all(
+                                                                color: err
+                                                                        .isNotice
+                                                                    ? Colors
+                                                                        .amber
+                                                                        .shade200
+                                                                    : Colors
+                                                                        .blue
+                                                                        .shade200),
                                                           ),
                                                           child: Text(
                                                             err.category,
                                                             style: TextStyle(
                                                               fontSize: 11,
-                                                              color: Colors.blue.shade800,
-                                                              fontWeight: FontWeight.w500,
+                                                              color: Colors.blue
+                                                                  .shade800,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
                                                             ),
                                                           ),
                                                         ),
-                                                        const SizedBox(width: 6),
+                                                        const SizedBox(
+                                                            width: 6),
                                                         Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                                          decoration: BoxDecoration(
-                                                            color: _getSeverityColor(err.severity).withOpacity(0.15),
-                                                            borderRadius: BorderRadius.circular(4),
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 1),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: _getSeverityColor(
+                                                                    err
+                                                                        .severity)
+                                                                .withValues(
+                                                                    alpha:
+                                                                        0.15),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
                                                           ),
                                                           child: Text(
-                                                            _getSeverityDisplay(err.severity),
+                                                            _getSeverityDisplay(
+                                                                err.severity),
                                                             style: TextStyle(
                                                               fontSize: 10,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: _getSeverityColor(err.severity),
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color: _getSeverityColor(
+                                                                  err.severity),
                                                             ),
                                                           ),
                                                         ),
@@ -718,20 +840,37 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                                     const SizedBox(height: 4),
                                                     Text(
                                                       err.description,
-                                                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color:
+                                                              Colors.black87),
                                                       maxLines: 2,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
-                                                    if (err.recommendation.isNotEmpty || err.normReference.isNotEmpty) ...[
+                                                    if (err.recommendation
+                                                            .isNotEmpty ||
+                                                        err.normReference
+                                                            .isNotEmpty) ...[
                                                       const SizedBox(height: 2),
                                                       Text(
                                                         [
-                                                          if (err.normReference.isNotEmpty) 'Norm: ${err.normReference}',
-                                                          if (err.recommendation.isNotEmpty) 'Empfehlung: ${err.recommendation}',
+                                                          if (err.normReference
+                                                              .isNotEmpty)
+                                                            'Norm: ${err.normReference}',
+                                                          if (err.recommendation
+                                                              .isNotEmpty)
+                                                            'Empfehlung: ${err.recommendation}',
                                                         ].join(' | '),
-                                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                                                        style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: Colors
+                                                                .grey.shade700,
+                                                            fontStyle: FontStyle
+                                                                .italic),
                                                         maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ],
                                                   ],
@@ -739,12 +878,19 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                               ),
                                               const SizedBox(width: 8),
                                               ElevatedButton(
-                                                onPressed: () => dialogSetState(() => selectedError = err),
+                                                onPressed: () => dialogSetState(
+                                                    () => selectedError = err),
                                                 style: ElevatedButton.styleFrom(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 6),
                                                   minimumSize: Size.zero,
-                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                  textStyle: const TextStyle(fontSize: 11),
+                                                  tapTargetSize:
+                                                      MaterialTapTargetSize
+                                                          .shrinkWrap,
+                                                  textStyle: const TextStyle(
+                                                      fontSize: 11),
                                                 ),
                                                 child: const Text('Auswählen'),
                                               ),
@@ -762,7 +908,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.green.shade50,
-                            border: Border.all(color: Colors.green.shade300, width: 1.5),
+                            border: Border.all(
+                                color: Colors.green.shade300, width: 1.5),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(
@@ -770,7 +917,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                                  const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 22),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Ausgewählter Fehler:',
@@ -782,13 +930,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                   ),
                                   const Spacer(),
                                   OutlinedButton.icon(
-                                    onPressed: () => dialogSetState(() => selectedError = null),
-                                    icon: const Icon(Icons.swap_horiz, size: 16),
+                                    onPressed: () => dialogSetState(
+                                        () => selectedError = null),
+                                    icon:
+                                        const Icon(Icons.swap_horiz, size: 16),
                                     label: const Text('Anderen Fehler wählen'),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
                                       minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
                                     ),
                                   ),
                                 ],
@@ -798,47 +950,64 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 children: [
                                   Text(
                                     selectedError!.code,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
                                       color: Colors.blue.shade100,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
                                       selectedError!.category,
-                                      style: TextStyle(fontSize: 12, color: Colors.blue.shade900, fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue.shade900,
+                                          fontWeight: FontWeight.w600),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: _getSeverityColor(selectedError!.severity).withOpacity(0.2),
+                                      color: _getSeverityColor(
+                                              selectedError!.severity)
+                                          .withValues(alpha: 0.2),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      _getSeverityDisplay(selectedError!.severity),
+                                      _getSeverityDisplay(
+                                          selectedError!.severity),
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: _getSeverityColor(selectedError!.severity),
+                                        color: _getSeverityColor(
+                                            selectedError!.severity),
                                       ),
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              Text(selectedError!.description, style: const TextStyle(fontSize: 13)),
+                              Text(selectedError!.description,
+                                  style: const TextStyle(fontSize: 13)),
                               if (selectedError!.recommendation.isNotEmpty) ...[
                                 const SizedBox(height: 4),
-                                Text('Empfehlung: ${selectedError!.recommendation}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                Text(
+                                    'Empfehlung: ${selectedError!.recommendation}',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.black54)),
                               ],
                               if (selectedError!.normReference.isNotEmpty) ...[
                                 const SizedBox(height: 2),
-                                Text('Norm: ${selectedError!.normReference}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                Text('Norm: ${selectedError!.normReference}',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.black54)),
                               ],
                             ],
                           ),
@@ -851,7 +1020,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           children: [
                             const Text(
                               'Notizen zum Fehler:',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                             TextButton.icon(
                               onPressed: () async {
@@ -859,9 +1029,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 dialogSetState(() {});
                               },
                               icon: const Icon(Icons.fullscreen, size: 18),
-                              label: const Text('In separatem Fenster bearbeiten'),
+                              label:
+                                  const Text('In separatem Fenster bearbeiten'),
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
@@ -873,7 +1045,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           controller: notesController,
                           decoration: InputDecoration(
                             labelText: 'Notizen',
-                            hintText: 'Detaillierte Beobachtungen, Fundort, Bemerkungen...',
+                            hintText:
+                                'Detaillierte Beobachtungen, Fundort, Bemerkungen...',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                               icon: const Icon(Icons.open_in_new),
@@ -895,39 +1068,49 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           children: [
                             Text(
                               'Fotonachweis (${dialogPhotos.length} Fotos):',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                             Row(
                               children: [
                                 OutlinedButton.icon(
                                   onPressed: () async {
-                                    final photo = await _pickImageAsBase64(ImageSource.camera);
+                                    final photo = await _pickImageAsBase64(
+                                        ImageSource.camera);
                                     if (photo != null) {
-                                      dialogSetState(() => dialogPhotos.add(photo));
+                                      dialogSetState(
+                                          () => dialogPhotos.add(photo));
                                     }
                                   },
                                   icon: const Icon(Icons.camera_alt, size: 16),
                                   label: const Text('Kamera'),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 OutlinedButton.icon(
                                   onPressed: () async {
-                                    final photo = await _pickImageAsBase64(ImageSource.gallery);
+                                    final photo = await _pickImageAsBase64(
+                                        ImageSource.gallery);
                                     if (photo != null) {
-                                      dialogSetState(() => dialogPhotos.add(photo));
+                                      dialogSetState(
+                                          () => dialogPhotos.add(photo));
                                     }
                                   },
-                                  icon: const Icon(Icons.photo_library, size: 16),
+                                  icon:
+                                      const Icon(Icons.photo_library, size: 16),
                                   label: const Text('Galerie'),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
                                     minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
                                 ),
                               ],
@@ -936,7 +1119,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         ),
                         _buildDialogPhotoThumbnails(
                           dialogPhotos,
-                          (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
+                          (idx) =>
+                              dialogSetState(() => dialogPhotos.removeAt(idx)),
                           (idx) => _viewPhotoFullScreen(
                             dialogPhotos,
                             idx,
@@ -948,7 +1132,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       // Dynamic Category Picker for Provisional Error
                       Card(
                         elevation: 0,
-                        color: Colors.orange.shade50.withOpacity(0.5),
+                        color: Colors.orange.shade50.withValues(alpha: 0.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(color: Colors.orange.shade200),
@@ -960,52 +1144,67 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.category, size: 18, color: Colors.deepOrange),
+                                  const Icon(Icons.category,
+                                      size: 18, color: Colors.deepOrange),
                                   const SizedBox(width: 6),
                                   const Text(
                                     'Kategorie auswählen oder neu erstellen:',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13),
                                   ),
-                                  if (isCustomProvisionalCategory && categories.isNotEmpty) ...[
+                                  if (isCustomProvisionalCategory &&
+                                      categories.isNotEmpty) ...[
                                     const Spacer(),
                                     TextButton.icon(
                                       onPressed: () {
                                         dialogSetState(() {
                                           isCustomProvisionalCategory = false;
-                                          selectedProvisionalCategory = categories.first;
-                                          categoryController.text = categories.first;
+                                          selectedProvisionalCategory =
+                                              categories.first;
+                                          categoryController.text =
+                                              categories.first;
                                         });
                                       },
                                       icon: const Icon(Icons.list, size: 14),
-                                      label: const Text('Aus Liste wählen', style: TextStyle(fontSize: 12)),
+                                      label: const Text('Aus Liste wählen',
+                                          style: TextStyle(fontSize: 12)),
                                     ),
                                   ],
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              if (!isCustomProvisionalCategory && categories.isNotEmpty) ...[
+                              if (!isCustomProvisionalCategory &&
+                                  categories.isNotEmpty) ...[
                                 DropdownButtonFormField<String>(
-                                  value: categories.contains(selectedProvisionalCategory)
+                                  initialValue: categories
+                                          .contains(selectedProvisionalCategory)
                                       ? selectedProvisionalCategory
                                       : categories.first,
                                   decoration: const InputDecoration(
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
                                     border: OutlineInputBorder(),
                                     filled: true,
                                     fillColor: Colors.white,
                                     labelText: 'Bestehende Kategorie',
                                   ),
                                   items: [
-                                    ...categories.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                                    ...categories.map((c) => DropdownMenuItem(
+                                        value: c, child: Text(c))),
                                     const DropdownMenuItem(
                                       value: '__NEW_CATEGORY__',
                                       child: Row(
                                         children: [
-                                          Icon(Icons.add_circle_outline, size: 16, color: Colors.deepOrange),
+                                          Icon(Icons.add_circle_outline,
+                                              size: 16,
+                                              color: Colors.deepOrange),
                                           SizedBox(width: 6),
                                           Text(
                                             '+ Neue Kategorie erstellen...',
-                                            style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold),
+                                            style: TextStyle(
+                                                color: Colors.deepOrange,
+                                                fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
@@ -1022,7 +1221,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                         selectedProvisionalCategory = val;
                                         categoryController.text = val;
                                         if (codeController.text.isEmpty) {
-                                          codeController.text = CatalogIntegrityService.proposeNextCodeForCategory(val, availableErrors);
+                                          codeController.text =
+                                              CatalogIntegrityService
+                                                  .proposeNextCodeForCategory(
+                                                      val, availableErrors);
                                         }
                                       });
                                     }
@@ -1032,22 +1234,29 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 TextField(
                                   controller: customCategoryController,
                                   decoration: InputDecoration(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
                                     labelText: 'Neue Kategorie Bezeichnung *',
-                                    hintText: 'z.B. Zarge & Türblatt, Feststellanlage...',
+                                    hintText:
+                                        'z.B. Zarge & Türblatt, Feststellanlage...',
                                     border: const OutlineInputBorder(),
                                     filled: true,
                                     fillColor: Colors.white,
-                                    prefixIcon: const Icon(Icons.create_new_folder, color: Colors.deepOrange),
+                                    prefixIcon: const Icon(
+                                        Icons.create_new_folder,
+                                        color: Colors.deepOrange),
                                     suffixIcon: categories.isNotEmpty
                                         ? IconButton(
                                             tooltip: 'Zurück zur Auswahlliste',
                                             icon: const Icon(Icons.close),
                                             onPressed: () {
                                               dialogSetState(() {
-                                                isCustomProvisionalCategory = false;
-                                                selectedProvisionalCategory = categories.first;
-                                                categoryController.text = categories.first;
+                                                isCustomProvisionalCategory =
+                                                    false;
+                                                selectedProvisionalCategory =
+                                                    categories.first;
+                                                categoryController.text =
+                                                    categories.first;
                                               });
                                             },
                                           )
@@ -1078,12 +1287,18 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 hintText: 'z.B. 1.1, 11.20, etc.',
                                 suffixIcon: IconButton(
                                   tooltip: 'Nächsten freien Code berechnen',
-                                  icon: const Icon(Icons.auto_awesome, color: Colors.blue),
+                                  icon: const Icon(Icons.auto_awesome,
+                                      color: Colors.blue),
                                   onPressed: () {
-                                    final cat = categoryController.text.trim().isNotEmpty
+                                    final cat = categoryController.text
+                                            .trim()
+                                            .isNotEmpty
                                         ? categoryController.text.trim()
-                                        : (selectedProvisionalCategory ?? 'Allgemein');
-                                    final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                                        : (selectedProvisionalCategory ??
+                                            'Allgemein');
+                                    final nextCode = CatalogIntegrityService
+                                        .proposeNextCodeForCategory(
+                                            cat, availableErrors);
                                     codeController.text = nextCode;
                                     dialogSetState(() {});
                                   },
@@ -1095,18 +1310,24 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 14),
                             ),
                             onPressed: () {
-                              final cat = categoryController.text.trim().isNotEmpty
-                                  ? categoryController.text.trim()
-                                  : (selectedProvisionalCategory ?? 'Allgemein');
-                              final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                              final cat =
+                                  categoryController.text.trim().isNotEmpty
+                                      ? categoryController.text.trim()
+                                      : (selectedProvisionalCategory ??
+                                          'Allgemein');
+                              final nextCode = CatalogIntegrityService
+                                  .proposeNextCodeForCategory(
+                                      cat, availableErrors);
                               codeController.text = nextCode;
                               dialogSetState(() {});
                             },
                             icon: const Icon(Icons.tag, size: 16),
-                            label: const Text('Code vorschlagen', style: TextStyle(fontSize: 12)),
+                            label: const Text('Code vorschlagen',
+                                style: TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
@@ -1114,7 +1335,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       // Live Code Collision Warning
                       Builder(builder: (context) {
                         final code = codeController.text.trim();
-                        final collision = CatalogIntegrityService.findCodeCollision(code, availableErrors);
+                        final collision =
+                            CatalogIntegrityService.findCodeCollision(
+                                code, availableErrors);
                         if (collision != null) {
                           return Container(
                             margin: const EdgeInsets.only(top: 6),
@@ -1126,23 +1349,34 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.error_outline, size: 18, color: Colors.red),
+                                const Icon(Icons.error_outline,
+                                    size: 18, color: Colors.red),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
                                     'Code "$code" ist bereits an "${collision.description}" vergeben!',
-                                    style: TextStyle(color: Colors.red.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                        color: Colors.red.shade900,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                 ),
                                 TextButton(
                                   onPressed: () {
-                                    final cat = categoryController.text.trim().isNotEmpty
+                                    final cat = categoryController.text
+                                            .trim()
+                                            .isNotEmpty
                                         ? categoryController.text.trim()
-                                        : (selectedProvisionalCategory ?? 'Allgemein');
-                                    codeController.text = CatalogIntegrityService.proposeNextCodeForCategory(cat, availableErrors);
+                                        : (selectedProvisionalCategory ??
+                                            'Allgemein');
+                                    codeController.text =
+                                        CatalogIntegrityService
+                                            .proposeNextCodeForCategory(
+                                                cat, availableErrors);
                                     dialogSetState(() {});
                                   },
-                                  child: const Text('Freien Code wählen', style: TextStyle(fontSize: 12)),
+                                  child: const Text('Freien Code wählen',
+                                      style: TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
@@ -1167,7 +1401,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       // Live Description Similarity / Duplicate Warning
                       Builder(builder: (context) {
                         final desc = descriptionController.text.trim();
-                        final simMatch = CatalogIntegrityService.findSimilarDescription(desc, availableErrors, threshold: 0.65);
+                        final simMatch =
+                            CatalogIntegrityService.findSimilarDescription(
+                                desc, availableErrors,
+                                threshold: 0.65);
                         if (simMatch != null) {
                           return Container(
                             margin: const EdgeInsets.only(top: 6),
@@ -1182,12 +1419,16 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.lightbulb_outline, size: 18, color: Colors.orange),
+                                    const Icon(Icons.lightbulb_outline,
+                                        size: 18, color: Colors.orange),
                                     const SizedBox(width: 6),
                                     Expanded(
                                       child: Text(
                                         'Ähnlicher Fehler existiert bereits (${simMatch.similarityPercentage}% Ähnlichkeit):',
-                                        style: TextStyle(color: Colors.orange.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                        style: TextStyle(
+                                            color: Colors.orange.shade900,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                   ],
@@ -1195,7 +1436,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '${simMatch.existing.code} - ${simMatch.existing.description}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
                                 ),
                                 Align(
                                   alignment: Alignment.centerRight,
@@ -1207,7 +1450,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                       });
                                     },
                                     icon: const Icon(Icons.check, size: 14),
-                                    label: const Text('Diesen Katalog-Fehler wählen', style: TextStyle(fontSize: 12)),
+                                    label: const Text(
+                                        'Diesen Katalog-Fehler wählen',
+                                        style: TextStyle(fontSize: 12)),
                                   ),
                                 ),
                               ],
@@ -1219,11 +1464,18 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       const SizedBox(height: 8),
 
                       DropdownButtonFormField<String>(
-                        decoration: const InputDecoration(labelText: 'Schweregrad'),
-                        value: const ['low', 'medium', 'high', 'critical'].contains(severityController.text.toLowerCase())
+                        decoration:
+                            const InputDecoration(labelText: 'Schweregrad'),
+                        initialValue: const [
+                          'low',
+                          'medium',
+                          'high',
+                          'critical'
+                        ].contains(severityController.text.toLowerCase())
                             ? severityController.text.toLowerCase()
                             : 'medium',
-                        items: const ['low', 'medium', 'high', 'critical'].map((severity) {
+                        items: const ['low', 'medium', 'high', 'critical']
+                            .map((severity) {
                           return DropdownMenuItem<String>(
                             value: severity,
                             child: Text(_getSeverityDisplay(severity)),
@@ -1231,7 +1483,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         }).toList(),
                         onChanged: (value) {
                           if (value != null) {
-                            dialogSetState(() => severityController.text = value);
+                            dialogSetState(
+                                () => severityController.text = value);
                           }
                         },
                       ),
@@ -1261,7 +1514,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         children: [
                           const Text(
                             'Notizen zum Fehler:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           TextButton.icon(
                             onPressed: () async {
@@ -1269,9 +1523,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                               dialogSetState(() {});
                             },
                             icon: const Icon(Icons.fullscreen, size: 18),
-                            label: const Text('In separatem Fenster bearbeiten'),
+                            label:
+                                const Text('In separatem Fenster bearbeiten'),
                             style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
@@ -1303,39 +1559,48 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         children: [
                           Text(
                             'Fotonachweis (${dialogPhotos.length} Fotos):',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                           Row(
                             children: [
                               OutlinedButton.icon(
                                 onPressed: () async {
-                                  final photo = await _pickImageAsBase64(ImageSource.camera);
+                                  final photo = await _pickImageAsBase64(
+                                      ImageSource.camera);
                                   if (photo != null) {
-                                    dialogSetState(() => dialogPhotos.add(photo));
+                                    dialogSetState(
+                                        () => dialogPhotos.add(photo));
                                   }
                                 },
                                 icon: const Icon(Icons.camera_alt, size: 16),
                                 label: const Text('Kamera'),
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
                                   minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               OutlinedButton.icon(
                                 onPressed: () async {
-                                  final photo = await _pickImageAsBase64(ImageSource.gallery);
+                                  final photo = await _pickImageAsBase64(
+                                      ImageSource.gallery);
                                   if (photo != null) {
-                                    dialogSetState(() => dialogPhotos.add(photo));
+                                    dialogSetState(
+                                        () => dialogPhotos.add(photo));
                                   }
                                 },
                                 icon: const Icon(Icons.photo_library, size: 16),
                                 label: const Text('Galerie'),
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
                                   minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
                               ),
                             ],
@@ -1344,11 +1609,14 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       ),
                       _buildDialogPhotoThumbnails(
                         dialogPhotos,
-                        (idx) => dialogSetState(() => dialogPhotos.removeAt(idx)),
+                        (idx) =>
+                            dialogSetState(() => dialogPhotos.removeAt(idx)),
                         (idx) => _viewPhotoFullScreen(
                           dialogPhotos,
                           idx,
-                          errorCode: codeController.text.trim().isNotEmpty ? codeController.text.trim() : 'Fehler',
+                          errorCode: codeController.text.trim().isNotEmpty
+                              ? codeController.text.trim()
+                              : 'Fehler',
                         ),
                       ),
                     ],
@@ -1365,7 +1633,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    _addCatalogError(selectedError!, notesController.text, photos: dialogPhotos);
+                    _addCatalogError(selectedError!, notesController.text,
+                        photos: dialogPhotos);
                   },
                   icon: const Icon(Icons.add),
                   label: const Text('Fehler hinzufügen'),
@@ -1378,10 +1647,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 ElevatedButton.icon(
                   onPressed: () async {
                     // Add provisional error
-                    if (codeController.text.trim().isEmpty || descriptionController.text.trim().isEmpty) {
+                    if (codeController.text.trim().isEmpty ||
+                        descriptionController.text.trim().isEmpty) {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fehlercode und Beschreibung sind erforderlich')),
+                          const SnackBar(
+                              content: Text(
+                                  'Fehlercode und Beschreibung sind erforderlich')),
                         );
                       }
                       return;
@@ -1390,7 +1662,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     final provisionalError = ErrorCatalog(
                       code: codeController.text.trim(),
                       description: descriptionController.text.trim(),
-                      category: categoryController.text.trim().isNotEmpty ? categoryController.text.trim() : 'provisional',
+                      category: categoryController.text.trim().isNotEmpty
+                          ? categoryController.text.trim()
+                          : 'provisional',
                       severity: severityController.text,
                       recommendation: recommendationController.text.trim(),
                       normReference: normReferenceController.text.trim(),
@@ -1400,15 +1674,20 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     try {
                       ErrorCatalog insertedError;
                       if (widget.isManagerMode) {
-                        await DatabaseService.insertErrorCatalog(provisionalError);
-                        final errors = await DatabaseService.searchErrorCatalog(provisionalError.code);
+                        await DatabaseService.insertErrorCatalog(
+                            provisionalError);
+                        final errors = await DatabaseService.searchErrorCatalog(
+                            provisionalError.code);
                         insertedError = errors.firstWhere(
                           (e) => e.code == provisionalError.code,
                           orElse: () => provisionalError,
                         );
                       } else {
-                        await LocalDatabaseService.insertErrorCatalogItems([provisionalError]);
-                        final errors = await LocalDatabaseService.searchErrorCatalog(provisionalError.code);
+                        await LocalDatabaseService.insertErrorCatalogItems(
+                            [provisionalError]);
+                        final errors =
+                            await LocalDatabaseService.searchErrorCatalog(
+                                provisionalError.code);
                         insertedError = errors.firstWhere(
                           (e) => e.code == provisionalError.code,
                           orElse: () => provisionalError,
@@ -1426,13 +1705,16 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         notes: notesController.text,
                         quantity: 1,
                         severity: insertedError.severity,
-                        attachments: dialogPhotos.where((p) => p.isNotEmpty).join(','),
+                        attachments:
+                            dialogPhotos.where((p) => p.isNotEmpty).join(','),
                       );
 
                       if (widget.isManagerMode) {
-                        await DatabaseService.insertInspectionDoorError(inspectionError);
+                        await DatabaseService.insertInspectionDoorError(
+                            inspectionError);
                       } else {
-                        await LocalDatabaseService.insertInspectionDoorError(inspectionError);
+                        await LocalDatabaseService.insertInspectionDoorError(
+                            inspectionError);
                       }
 
                       if (mounted) {
@@ -1441,7 +1723,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Provisorischer Fehler wurde hinzugefügt und zur Genehmigung eingereicht'),
+                            content: Text(
+                                'Provisorischer Fehler wurde hinzugefügt und zur Genehmigung eingereicht'),
                             backgroundColor: Colors.orange,
                           ),
                         );
@@ -1470,40 +1753,54 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
   void _showErrorDetails(InspectionDoorError error) async {
     // 1. Try finding from already loaded catalog items in memory
-    ErrorCatalog? currentCatalog = availableErrors.where(
-      (e) => (error.errorId != null && error.errorId! > 0 && e.errorId == error.errorId) ||
-             (error.errorCode.isNotEmpty && e.code == error.errorCode),
-    ).firstOrNull;
+    ErrorCatalog? currentCatalog = availableErrors
+        .where(
+          (e) =>
+              (error.errorId != null &&
+                  error.errorId! > 0 &&
+                  e.errorId == error.errorId) ||
+              (error.errorCode.isNotEmpty && e.code == error.errorCode),
+        )
+        .firstOrNull;
 
     // 2. If not found in memory, query the appropriate database
     if (currentCatalog == null) {
       if (widget.isManagerMode) {
         if (error.errorId != null && error.errorId! > 0) {
-          currentCatalog = await DatabaseService.getErrorCatalogItemById(error.errorId!);
+          currentCatalog =
+              await DatabaseService.getErrorCatalogItemById(error.errorId!);
         }
         if (currentCatalog == null && error.errorCode.isNotEmpty) {
-          final results = await DatabaseService.searchErrorCatalog(error.errorCode);
-          currentCatalog = results.where((e) => e.code == error.errorCode).firstOrNull ?? results.firstOrNull;
+          final results =
+              await DatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog =
+              results.where((e) => e.code == error.errorCode).firstOrNull ??
+                  results.firstOrNull;
         }
       } else {
         if (error.errorId != null && error.errorId! > 0) {
-          currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(error.errorId!);
+          currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(
+              error.errorId!);
         }
         if (currentCatalog == null && error.errorCode.isNotEmpty) {
-          final results = await LocalDatabaseService.searchErrorCatalog(error.errorCode);
-          currentCatalog = results.where((e) => e.code == error.errorCode).firstOrNull ?? results.firstOrNull;
+          final results =
+              await LocalDatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog =
+              results.where((e) => e.code == error.errorCode).firstOrNull ??
+                  results.firstOrNull;
         }
       }
     }
 
-    final ErrorCatalog catalogDetails = currentCatalog ?? ErrorCatalog(
-      code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
-      description: 'Fehler nicht im Katalog gefunden',
-      category: 'Unbekannt',
-    );
+    final ErrorCatalog catalogDetails = currentCatalog ??
+        ErrorCatalog(
+          code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
+          description: 'Fehler nicht im Katalog gefunden',
+          category: 'Unbekannt',
+        );
 
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1514,13 +1811,15 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Code: ${catalogDetails.code}', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text('Code: ${catalogDetails.code}',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 8),
               Text('Beschreibung: ${catalogDetails.description}'),
               SizedBox(height: 8),
               Text('Kategorie: ${catalogDetails.category}'),
               SizedBox(height: 8),
-              Text('Schweregrad: ${_getSeverityDisplay(catalogDetails.severity)}'),
+              Text(
+                  'Schweregrad: ${_getSeverityDisplay(catalogDetails.severity)}'),
               if (catalogDetails.recommendation.isNotEmpty) ...[
                 SizedBox(height: 8),
                 Text('Empfehlung: ${catalogDetails.recommendation}'),
@@ -1538,11 +1837,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           if (error.resolutionStatus != 'resolved') ...[
             TextButton(
               onPressed: () async {
-                final updatedError = error.copyWith(resolutionStatus: 'resolved');
+                final updatedError =
+                    error.copyWith(resolutionStatus: 'resolved');
                 if (widget.isManagerMode) {
                   await DatabaseService.insertInspectionDoorError(updatedError);
                 } else {
-                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await LocalDatabaseService.insertInspectionDoorError(
+                      updatedError);
                   await _markDoorAsInspectedIfInspector();
                 }
                 if (mounted) {
@@ -1665,14 +1966,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         Expanded(
                           child: Text(
                             'Vorjahres-Auftrag: Im Lesemodus. Fehler können von Inspektoren nicht hinzugefügt, bearbeitet oder gelöscht werden.',
-                            style: TextStyle(fontSize: 13, color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.orange.shade900,
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
                     ),
                   ),
                 SizedBox(height: 16),
-                
+
                 // Error list
                 Expanded(
                   child: doorErrors.isEmpty
@@ -1680,11 +1984,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                              Icon(Icons.error_outline,
+                                  size: 64, color: Colors.grey),
                               SizedBox(height: 16),
                               Text(
                                 'Keine Fehler für diese Tür',
-                                style: TextStyle(fontSize: 18, color: Colors.grey),
+                                style:
+                                    TextStyle(fontSize: 18, color: Colors.grey),
                               ),
                               SizedBox(height: 16),
                               if (!widget.isReadOnly)
@@ -1701,46 +2007,63 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                           itemBuilder: (context, index) {
                             final error = doorErrors[index];
                             final errorCatalog = availableErrors.firstWhere(
-                              (e) => e.errorId == error.errorId || (error.errorCode.isNotEmpty && e.code == error.errorCode),
+                              (e) =>
+                                  e.errorId == error.errorId ||
+                                  (error.errorCode.isNotEmpty &&
+                                      e.code == error.errorCode),
                               orElse: () => ErrorCatalog(
-                                code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
+                                code: error.errorCode.isNotEmpty
+                                    ? error.errorCode
+                                    : 'Unbekannt',
                                 description: 'Fehler nicht im Katalog gefunden',
                                 category: 'Unbekannt',
                               ),
                             );
 
                             return Card(
-                              margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              margin: EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: errorCatalog.isNotice
-                                      ? (error.resolutionStatus.toLowerCase() == 'resolved' ? Colors.green : Colors.amber.shade700)
+                                      ? (error.resolutionStatus.toLowerCase() ==
+                                              'resolved'
+                                          ? Colors.green
+                                          : Colors.amber.shade700)
                                       : _getStatusColor(error.resolutionStatus),
                                   child: Icon(
                                     errorCatalog.isNotice
-                                        ? (error.resolutionStatus.toLowerCase() == 'resolved' ? Icons.check_circle : Icons.info_outline)
-                                        : _getStatusIcon(error.resolutionStatus),
+                                        ? (error.resolutionStatus
+                                                    .toLowerCase() ==
+                                                'resolved'
+                                            ? Icons.check_circle
+                                            : Icons.info_outline)
+                                        : _getStatusIcon(
+                                            error.resolutionStatus),
                                     color: Colors.white,
                                   ),
                                 ),
                                 title: Text(
-                              errorCatalog.code,
+                                  errorCatalog.code,
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text(errorCatalog.description),
+                                    Text(errorCatalog.description),
                                     SizedBox(height: 4),
                                     Row(
                                       children: [
                                         if (errorCatalog.isNotice) ...[
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 2),
                                             decoration: BoxDecoration(
                                               color: Colors.amber.shade50,
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: Colors.amber.shade400),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
+                                                  color: Colors.amber.shade400),
                                             ),
                                             child: Text(
                                               'Hinweis',
@@ -1754,46 +2077,62 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                                           const SizedBox(width: 8),
                                         ],
                                         Container(
-                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: errorCatalog.isNotice ? Colors.amber.shade50 : Colors.grey.shade200,
-                                            borderRadius: BorderRadius.circular(12),
+                                            color: errorCatalog.isNotice
+                                                ? Colors.amber.shade50
+                                                : Colors.grey.shade200,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
-                                        errorCatalog.category,
-                                            style: TextStyle(fontSize: 12, color: errorCatalog.isNotice ? Colors.amber.shade900 : null),
+                                            errorCatalog.category,
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: errorCatalog.isNotice
+                                                    ? Colors.amber.shade900
+                                                    : null),
                                           ),
                                         ),
                                         SizedBox(width: 8),
                                         Container(
-                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                        color: _getSeverityColor(error.severity).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(12),
+                                            color: _getSeverityColor(
+                                                    error.severity)
+                                                .withValues(alpha: 0.2),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
-                                        _getSeverityDisplay(error.severity),
+                                            _getSeverityDisplay(error.severity),
                                             style: TextStyle(
                                               fontSize: 12,
-                                          color: _getSeverityColor(error.severity),
+                                              color: _getSeverityColor(
+                                                  error.severity),
                                             ),
                                           ),
                                         ),
                                       ],
                                     ),
-                                      if (error.notes.isNotEmpty) ...[
-                                        SizedBox(height: 4),
-                                    Text('Notizen: ${error.notes}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
-                                      ],
-                                      _buildPhotoGallery(error),
+                                    if (error.notes.isNotEmpty) ...[
+                                      SizedBox(height: 4),
+                                      Text('Notizen: ${error.notes}',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              fontStyle: FontStyle.italic)),
                                     ],
-                                  ),
+                                    _buildPhotoGallery(error),
+                                  ],
+                                ),
                                 trailing: PopupMenuButton<String>(
                                   onSelected: (value) {
                                     if (value == 'edit') {
-                                  _showEditDialog(error);
+                                      _showEditDialog(error);
                                     } else if (value == 'delete') {
-                                  _deleteError(error);
+                                      _deleteError(error);
                                     }
                                   },
                                   itemBuilder: (context) => [
@@ -1839,7 +2178,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   void _showEditDialog(InspectionDoorError error) {
     // Find the error catalog entry
     final errorCatalog = availableErrors.firstWhere(
-      (e) => e.errorId == error.errorId || (error.errorCode.isNotEmpty && e.code == error.errorCode),
+      (e) =>
+          e.errorId == error.errorId ||
+          (error.errorCode.isNotEmpty && e.code == error.errorCode),
       orElse: () => ErrorCatalog(
         code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
         description: 'Fehler nicht im Katalog gefunden',
@@ -1854,7 +2195,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         : 'open';
 
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -1867,14 +2208,17 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Fehlercode: ${errorCatalog.code}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Fehlercode: ${errorCatalog.code}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  const Text('Beschreibung:', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Text('Beschreibung:',
+                      style: TextStyle(fontWeight: FontWeight.w500)),
                   Text(errorCatalog.description),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder()),
-                    value: status,
+                    decoration: const InputDecoration(
+                        labelText: 'Status', border: OutlineInputBorder()),
+                    initialValue: status,
                     items: validStatuses.map((s) {
                       return DropdownMenuItem<String>(
                         value: s,
@@ -1891,7 +2235,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Notizen:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text('Notizen:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13)),
                       TextButton.icon(
                         onPressed: () async {
                           await _openNotesInputDialog(notesController);
@@ -1900,7 +2246,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                         icon: const Icon(Icons.fullscreen, size: 16),
                         label: const Text('Im Großfenster bearbeiten'),
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -1935,11 +2282,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final updatedError = error.copyWith(resolutionStatus: status, notes: notesController.text);
+                final updatedError = error.copyWith(
+                    resolutionStatus: status, notes: notesController.text);
                 if (widget.isManagerMode) {
                   await DatabaseService.insertInspectionDoorError(updatedError);
                 } else {
-                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await LocalDatabaseService.insertInspectionDoorError(
+                      updatedError);
                   await _markDoorAsInspectedIfInspector();
                 }
                 if (mounted) {
@@ -1957,7 +2306,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
 
   void _deleteError(InspectionDoorError error) {
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1997,11 +2346,13 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
           if (error.resolutionStatus != 'resolved')
             ElevatedButton.icon(
               onPressed: () async {
-                final updatedError = error.copyWith(resolutionStatus: 'resolved');
+                final updatedError =
+                    error.copyWith(resolutionStatus: 'resolved');
                 if (widget.isManagerMode) {
                   await DatabaseService.insertInspectionDoorError(updatedError);
                 } else {
-                  await LocalDatabaseService.insertInspectionDoorError(updatedError);
+                  await LocalDatabaseService.insertInspectionDoorError(
+                      updatedError);
                   await _markDoorAsInspectedIfInspector();
                 }
                 if (mounted) {
@@ -2021,13 +2372,15 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     );
   }
 
-  Future<void> _addPhotoToError(InspectionDoorError error, ImageSource source) async {
+  Future<void> _addPhotoToError(
+      InspectionDoorError error, ImageSource source) async {
     try {
       final base64Str = await _pickImageAsBase64(source);
       if (base64Str == null) return;
 
       // Append base64 string to attachments (comma-separated)
-      List<String> currentPhotos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+      List<String> currentPhotos =
+          error.attachments.split(',').where((s) => s.isNotEmpty).toList();
       currentPhotos.add(base64Str);
       final newAttachments = currentPhotos.join(',');
 
@@ -2038,9 +2391,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await LocalDatabaseService.insertInspectionDoorError(updatedError);
         await _markDoorAsInspectedIfInspector();
       }
-      
+
       _loadData();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2059,9 +2412,11 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  Future<void> _deletePhotoFromError(InspectionDoorError error, int photoIndex) async {
+  Future<void> _deletePhotoFromError(
+      InspectionDoorError error, int photoIndex) async {
     try {
-      List<String> currentPhotos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+      List<String> currentPhotos =
+          error.attachments.split(',').where((s) => s.isNotEmpty).toList();
       if (photoIndex >= 0 && photoIndex < currentPhotos.length) {
         currentPhotos.removeAt(photoIndex);
       }
@@ -2074,7 +2429,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         await LocalDatabaseService.insertInspectionDoorError(updatedError);
         await _markDoorAsInspectedIfInspector();
       }
-      
+
       _loadData();
 
       if (mounted) {
@@ -2090,7 +2445,8 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
     }
   }
 
-  void _viewPhotoFullScreen(List<String> photos, int initialIndex, {String errorCode = ''}) {
+  void _viewPhotoFullScreen(List<String> photos, int initialIndex,
+      {String errorCode = ''}) {
     if (photos.isEmpty) return;
     final photoNames = PhotoNameHelper.formatPhotoNames(
       doorAlias: _doorAlias.isNotEmpty ? _doorAlias : widget.doorNumber,
@@ -2136,8 +2492,9 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
   }
 
   Widget _buildPhotoGallery(InspectionDoorError error) {
-    final photos = error.attachments.split(',').where((s) => s.isNotEmpty).toList();
-    
+    final photos =
+        error.attachments.split(',').where((s) => s.isNotEmpty).toList();
+
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
       child: Column(
@@ -2145,7 +2502,10 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
         children: [
           const Text(
             'Fotonachweis:',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87),
           ),
           const SizedBox(height: 4),
           SizedBox(
@@ -2163,18 +2523,22 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                       height: 60,
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                        border: Border.all(
+                            color: Colors.grey.shade400,
+                            style: BorderStyle.solid),
                         borderRadius: BorderRadius.circular(8),
                         color: Colors.grey.shade50,
                       ),
-                      child: Icon(Icons.add_a_photo, color: Colors.grey.shade600, size: 24),
+                      child: Icon(Icons.add_a_photo,
+                          color: Colors.grey.shade600, size: 24),
                     ),
                   );
                 }
 
                 final photoBase64 = photos[index];
                 final photoName = PhotoNameHelper.formatPhotoName(
-                  doorAlias: _doorAlias.isNotEmpty ? _doorAlias : widget.doorNumber,
+                  doorAlias:
+                      _doorAlias.isNotEmpty ? _doorAlias : widget.doorNumber,
                   errorCode: error.errorCode,
                   photoIndex: index + 1,
                 );
@@ -2184,16 +2548,18 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
                     Tooltip(
                       message: photoName,
                       child: GestureDetector(
-                        onTap: () => _viewPhotoFullScreen(photos, index, errorCode: error.errorCode),
+                        onTap: () => _viewPhotoFullScreen(photos, index,
+                            errorCode: error.errorCode),
                         child: Container(
                           width: 60,
                           height: 60,
-                          margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
+                          margin: const EdgeInsets.only(
+                              right: 8, top: 4, bottom: 4),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 2,
                                 offset: const Offset(0, 1),
                               )

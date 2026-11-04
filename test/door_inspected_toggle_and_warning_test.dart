@@ -5,7 +5,6 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:wartungstool/models/models.dart';
-import 'package:wartungstool/models/import_report.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/utils/file_export_helper.dart';
@@ -33,7 +32,9 @@ void main() {
   });
 
   group('Door "Geprüft" Toggle & Unprocessed Warning Tests', () {
-    test('Setting and undoing inspection status in LocalDatabaseService and DatabaseService', () async {
+    test(
+        'Setting and undoing inspection status in LocalDatabaseService and DatabaseService',
+        () async {
       final db = await LocalDatabaseService.getDb();
       await db.delete('inspection_doors');
       await db.delete('doors');
@@ -58,7 +59,8 @@ void main() {
         doorId: doorId,
         status: 'Pending',
       );
-      var statuses = await LocalDatabaseService.getDoorInspectionStatuses(inspId);
+      var statuses =
+          await LocalDatabaseService.getDoorInspectionStatuses(inspId);
       expect(statuses[doorId], 'Pending');
 
       // 2. Set to Inspected ("Geprüft")
@@ -114,7 +116,8 @@ void main() {
       expect(mStatuses[mDoorId], 'Pending');
     });
 
-    test('DoorChangeItem and ImportReport properly identify unprocessed doors', () {
+    test('DoorChangeItem and ImportReport properly identify unprocessed doors',
+        () {
       final item1 = DoorChangeItem(
         doorAlias: 'D-001',
         doorNumber: 'T-101',
@@ -159,10 +162,13 @@ void main() {
 
       expect(report.hasUnprocessedDoors, isTrue);
       expect(report.unprocessedDoors.length, 2);
-      expect(report.unprocessedDoors.map((d) => d.doorNumber).toList(), containsAll(['T-102', 'T-103']));
+      expect(report.unprocessedDoors.map((d) => d.doorNumber).toList(),
+          containsAll(['T-102', 'T-103']));
     });
 
-    testWidgets('FileExportHelper.confirmUnprocessedDoors returns true if all doors inspected', (tester) async {
+    testWidgets(
+        'FileExportHelper.confirmUnprocessedDoors returns true if all doors inspected',
+        (tester) async {
       late BuildContext testContext;
       await tester.pumpWidget(
         MaterialApp(
@@ -178,8 +184,20 @@ void main() {
       );
 
       final doors = [
-        Door.fromMap({'id': 1, 'pos': 1, 'doorNumber': 'T-01', 'floor': 'EG', 'roomDesignation': 'Raum 1'}),
-        Door.fromMap({'id': 2, 'pos': 2, 'doorNumber': 'T-02', 'floor': 'EG', 'roomDesignation': 'Raum 2'}),
+        Door.fromMap({
+          'id': 1,
+          'pos': 1,
+          'doorNumber': 'T-01',
+          'floor': 'EG',
+          'roomDesignation': 'Raum 1'
+        }),
+        Door.fromMap({
+          'id': 2,
+          'pos': 2,
+          'doorNumber': 'T-02',
+          'floor': 'EG',
+          'roomDesignation': 'Raum 2'
+        }),
       ];
       final statuses = {
         1: 'Inspected',
@@ -195,7 +213,9 @@ void main() {
       expect(result, isTrue);
     });
 
-    testWidgets('FileExportHelper.confirmUnprocessedDoors shows warning dialog when doors are unprocessed', (tester) async {
+    testWidgets(
+        'FileExportHelper.confirmUnprocessedDoors shows warning dialog when doors are unprocessed',
+        (tester) async {
       bool? dialogResult;
       await tester.pumpWidget(
         MaterialApp(
@@ -205,14 +225,27 @@ void main() {
                 return ElevatedButton(
                   onPressed: () async {
                     final doors = [
-                      Door.fromMap({'id': 1, 'pos': 1, 'doorNumber': 'T-01', 'floor': 'EG', 'roomDesignation': 'Büro 1'}),
-                      Door.fromMap({'id': 2, 'pos': 2, 'doorNumber': 'T-02', 'floor': '1.OG', 'roomDesignation': 'Labor'}),
+                      Door.fromMap({
+                        'id': 1,
+                        'pos': 1,
+                        'doorNumber': 'T-01',
+                        'floor': 'EG',
+                        'roomDesignation': 'Büro 1'
+                      }),
+                      Door.fromMap({
+                        'id': 2,
+                        'pos': 2,
+                        'doorNumber': 'T-02',
+                        'floor': '1.OG',
+                        'roomDesignation': 'Labor'
+                      }),
                     ];
                     final statuses = {
                       1: 'Inspected',
                       2: 'Pending',
                     };
-                    dialogResult = await FileExportHelper.confirmUnprocessedDoors(
+                    dialogResult =
+                        await FileExportHelper.confirmUnprocessedDoors(
                       context: ctx,
                       doors: doors,
                       statuses: statuses,
@@ -243,7 +276,9 @@ void main() {
       expect(dialogResult, isTrue);
     });
 
-    testWidgets('ImportReportDialog displays prominent unprocessed doors warning banner', (tester) async {
+    testWidgets(
+        'ImportReportDialog displays prominent unprocessed doors warning banner',
+        (tester) async {
       await tester.binding.setSurfaceSize(const Size(1000, 800));
       addTearDown(() async => await tester.binding.setSurfaceSize(null));
 
@@ -287,8 +322,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Warning banner presence
-      expect(find.textContaining('1 unbearbeitete / nicht geprüfte Tür(en) im Paket!'), findsOneWidget);
-      expect(find.textContaining('Tür T-102 (2.OG | Schaltzentrale)'), findsOneWidget);
+      expect(
+          find.textContaining(
+              '1 unbearbeitete / nicht geprüfte Tür(en) im Paket!'),
+          findsOneWidget);
+      expect(find.textContaining('Tür T-102 (2.OG | Schaltzentrale)'),
+          findsOneWidget);
 
       // In the doors list
       expect(find.text('Geprüft'), findsOneWidget);

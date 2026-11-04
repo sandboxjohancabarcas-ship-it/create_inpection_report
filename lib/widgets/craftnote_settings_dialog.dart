@@ -15,7 +15,8 @@ class CraftnoteSettingsDialog extends StatefulWidget {
   }
 
   @override
-  State<CraftnoteSettingsDialog> createState() => _CraftnoteSettingsDialogState();
+  State<CraftnoteSettingsDialog> createState() =>
+      _CraftnoteSettingsDialogState();
 }
 
 class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
@@ -27,6 +28,7 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
   late TextEditingController _folderController;
 
   bool _isMockMode = false;
+  bool _isTestMode = true;
   bool _obscureApiKey = true;
   bool _isTesting = false;
   bool _isSaving = false;
@@ -36,11 +38,16 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
   @override
   void initState() {
     super.initState();
-    _apiKeyController = TextEditingController(text: CraftnoteCredentialsService.apiKey);
-    _clientIdController = TextEditingController(text: CraftnoteCredentialsService.clientId);
-    _baseUrlController = TextEditingController(text: CraftnoteCredentialsService.baseUrl);
-    _folderController = TextEditingController(text: CraftnoteCredentialsService.folder);
+    _apiKeyController =
+        TextEditingController(text: CraftnoteCredentialsService.apiKey);
+    _clientIdController =
+        TextEditingController(text: CraftnoteCredentialsService.clientId);
+    _baseUrlController =
+        TextEditingController(text: CraftnoteCredentialsService.baseUrl);
+    _folderController =
+        TextEditingController(text: CraftnoteCredentialsService.folder);
     _isMockMode = CraftnoteCredentialsService.isMockMode;
+    _isTestMode = CraftnoteCredentialsService.isTestMode;
   }
 
   @override
@@ -68,7 +75,8 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
       final member = await tempService.getMe();
       setState(() {
         _testSuccess = true;
-        _testStatusMessage = 'Verbindung erfolgreich!\nAngemeldet als: ${member.displayName} (${member.email})';
+        _testStatusMessage =
+            'Verbindung erfolgreich!\nAngemeldet als: ${member.displayName} (${member.email})';
       });
     } catch (e) {
       setState(() {
@@ -91,6 +99,7 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
         folder: _folderController.text.trim(),
         baseUrl: _baseUrlController.text.trim(),
         mockMode: _isMockMode,
+        isTestMode: _isTestMode,
       );
 
       if (mounted) {
@@ -150,12 +159,14 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.info_outline, color: Colors.amber.shade800, size: 22),
+                        Icon(Icons.info_outline,
+                            color: Colors.amber.shade800, size: 22),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Aktuell sind Platzhalter-Zugangsdaten aktiv. Sobald Gottsberg die echten API-Schlüssel bereitstellt, können diese hier ohne Code-Anpassung hinterlegt werden.',
-                            style: TextStyle(fontSize: 13, color: Colors.amber.shade900),
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.amber.shade900),
                           ),
                         ),
                       ],
@@ -165,22 +176,26 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                 // Mock Mode Switch
                 Card(
                   elevation: 0,
-                  color: _isMockMode ? Colors.blue.shade50 : Colors.grey.shade100,
+                  color:
+                      _isMockMode ? Colors.blue.shade50 : Colors.grey.shade100,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                     side: BorderSide(
-                      color: _isMockMode ? Colors.blue.shade300 : Colors.grey.shade300,
+                      color: _isMockMode
+                          ? Colors.blue.shade300
+                          : Colors.grey.shade300,
                     ),
                   ),
                   child: SwitchListTile(
                     title: const Text('Mock-Adapter aktivieren (Offline-Demo)',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
                     subtitle: const Text(
                       'Simuliert Antworten der Craftnote API (Projekte, Dokumente & Uploads) ohne Netzwerkzugriff.',
                       style: TextStyle(fontSize: 12),
                     ),
                     value: _isMockMode,
-                    activeColor: Colors.blue.shade700,
+                    activeThumbColor: Colors.blue.shade700,
                     onChanged: (val) {
                       setState(() => _isMockMode = val);
                     },
@@ -198,7 +213,9 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureApiKey ? Icons.visibility : Icons.visibility_off,
+                        _obscureApiKey
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() => _obscureApiKey = !_obscureApiKey);
@@ -237,7 +254,8 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                     if (val == null || val.trim().isEmpty) {
                       return 'Bitte geben Sie die API Base-URL ein.';
                     }
-                    if (!val.startsWith('http://') && !val.startsWith('https://')) {
+                    if (!val.startsWith('http://') &&
+                        !val.startsWith('https://')) {
                       return 'URL muss mit http:// oder https:// beginnen.';
                     }
                     return null;
@@ -254,6 +272,46 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                     border: OutlineInputBorder(),
                   ),
                 ),
+                const SizedBox(height: 14),
+
+                // Test Environment Mode Safety Switch
+                Material(
+                  color: _isTestMode ? Colors.blue.shade50 : Colors.red.shade50,
+                  clipBehavior: Clip.antiAlias,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(
+                        color: _isTestMode
+                            ? Colors.blue.shade300
+                            : Colors.red.shade300),
+                  ),
+                  child: SwitchListTile(
+                    title: Text(
+                      _isTestMode
+                          ? 'Test-Modus (Sandbox-Schutz aktiv)'
+                          : 'Produktiv-Modus (Live-Upload)',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: _isTestMode
+                              ? Colors.blue.shade900
+                              : Colors.red.shade900),
+                    ),
+                    subtitle: Text(
+                      _isTestMode
+                          ? 'Schreibzugriffe (POST) werden sicher auf das Sandbox-Testprojekt 26-00251-AN umgeleitet, um Produktivdaten zu schützen.'
+                          : 'ACHTUNG: Dateien und Fotos werden direkt in die echten Produktivprojekte hochgeladen!',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: _isTestMode
+                              ? Colors.blue.shade800
+                              : Colors.red.shade800),
+                    ),
+                    value: _isTestMode,
+                    activeThumbColor: Colors.blue.shade700,
+                    onChanged: (val) => setState(() => _isTestMode = val),
+                  ),
+                ),
                 const SizedBox(height: 16),
 
                 // Connection Test Feedback Banner
@@ -262,18 +320,26 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: _testSuccess ? Colors.green.shade50 : Colors.red.shade50,
+                      color: _testSuccess
+                          ? Colors.green.shade50
+                          : Colors.red.shade50,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: _testSuccess ? Colors.green.shade400 : Colors.red.shade400,
+                        color: _testSuccess
+                            ? Colors.green.shade400
+                            : Colors.red.shade400,
                       ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          _testSuccess ? Icons.check_circle : Icons.error_outline,
-                          color: _testSuccess ? Colors.green.shade700 : Colors.red.shade700,
+                          _testSuccess
+                              ? Icons.check_circle
+                              : Icons.error_outline,
+                          color: _testSuccess
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
                           size: 22,
                         ),
                         const SizedBox(width: 10),
@@ -282,7 +348,9 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                             _testStatusMessage!,
                             style: TextStyle(
                               fontSize: 13,
-                              color: _testSuccess ? Colors.green.shade900 : Colors.red.shade900,
+                              color: _testSuccess
+                                  ? Colors.green.shade900
+                                  : Colors.red.shade900,
                             ),
                           ),
                         ),
@@ -300,7 +368,9 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.network_check),
-                  label: Text(_isTesting ? 'Verbindung wird geprüft...' : 'Verbindung testen'),
+                  label: Text(_isTesting
+                      ? 'Verbindung wird geprüft...'
+                      : 'Verbindung testen'),
                 ),
               ],
             ),
@@ -318,7 +388,8 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
               : const Icon(Icons.save),
           label: const Text('Speichern'),

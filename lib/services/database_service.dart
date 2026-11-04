@@ -27,7 +27,8 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version: 28, // v28: Added Craftnote cloud integration columns (craftnoteProjectId, craftnoteFileId, craftnoteSyncStatus, craftnoteLastSyncTime)
+      version:
+          28, // v28: Added Craftnote cloud integration columns (craftnoteProjectId, craftnoteFileId, craftnoteSyncStatus, craftnoteLastSyncTime)
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -76,8 +77,10 @@ class DatabaseService {
           );
         ''');
         await db.execute('CREATE INDEX idx_doors_number ON doors (doorNumber)');
-        await db.execute('CREATE UNIQUE INDEX idx_doors_alias ON doors (doorAlias)');
-        await db.execute('CREATE INDEX idx_doors_provisional_alias ON doors (provisionalAlias)');
+        await db.execute(
+            'CREATE UNIQUE INDEX idx_doors_alias ON doors (doorAlias)');
+        await db.execute(
+            'CREATE INDEX idx_doors_provisional_alias ON doors (provisionalAlias)');
 
         // Inspections table
         await db.execute('''
@@ -99,10 +102,13 @@ class DatabaseService {
             craftnoteLastSyncTime TEXT
           );
         ''');
-        await db.execute('CREATE INDEX idx_insp_client ON inspections (clientName)');
-        await db.execute('CREATE INDEX idx_insp_job ON inspections (jobNumber)');
+        await db.execute(
+            'CREATE INDEX idx_insp_client ON inspections (clientName)');
+        await db
+            .execute('CREATE INDEX idx_insp_job ON inspections (jobNumber)');
         await db.execute('CREATE INDEX idx_insp_date ON inspections (date)');
-        await db.execute('CREATE INDEX idx_insp_craftnote ON inspections (craftnoteProjectId)');
+        await db.execute(
+            'CREATE INDEX idx_insp_craftnote ON inspections (craftnoteProjectId)');
 
         // InspectionDoors table
         await db.execute('''
@@ -158,15 +164,23 @@ class DatabaseService {
         // Reordered to chronological sequence for data integrity
         if (oldVersion < 7) {
           try {
-            await db.execute('ALTER TABLE error_catalog ADD COLUMN severity TEXT DEFAULT \'medium\'');
-            await db.execute('ALTER TABLE error_catalog ADD COLUMN recommendation TEXT DEFAULT \'\'');
-            await db.execute('ALTER TABLE error_catalog ADD COLUMN normReference TEXT DEFAULT \'\'');
-            await db.execute("ALTER TABLE error_catalog ADD COLUMN status TEXT NOT NULL DEFAULT 'Approved'");
-            await db.execute("ALTER TABLE error_catalog ADD COLUMN requestedBy TEXT");
-            await db.execute("ALTER TABLE error_catalog ADD COLUMN requestDate TEXT");
-            await db.execute("ALTER TABLE error_catalog ADD COLUMN sourceInspectionDoorId INTEGER");
-          } catch (e) { print('Catalog migration warning: $e'); }
-          
+            await db.execute(
+                'ALTER TABLE error_catalog ADD COLUMN severity TEXT DEFAULT \'medium\'');
+            await db.execute(
+                'ALTER TABLE error_catalog ADD COLUMN recommendation TEXT DEFAULT \'\'');
+            await db.execute(
+                'ALTER TABLE error_catalog ADD COLUMN normReference TEXT DEFAULT \'\'');
+            await db.execute(
+                "ALTER TABLE error_catalog ADD COLUMN status TEXT NOT NULL DEFAULT 'Approved'");
+            await db.execute(
+                "ALTER TABLE error_catalog ADD COLUMN requestedBy TEXT");
+            await db.execute(
+                "ALTER TABLE error_catalog ADD COLUMN requestDate TEXT");
+            await db.execute(
+                "ALTER TABLE error_catalog ADD COLUMN sourceInspectionDoorId INTEGER");
+          } catch (e) {
+            print('Catalog migration warning: $e');
+          }
         }
 
         if (oldVersion < 8) {
@@ -175,47 +189,69 @@ class DatabaseService {
 
         if (oldVersion < 9) {
           // Metadata removal from doors table - now handled in inspections table
-          final cols = ['customerName', 'customerAddress', 'contactPerson', 'jobNumber', 'inspectionDate', 'inspectorName'];
+          final cols = [
+            'customerName',
+            'customerAddress',
+            'contactPerson',
+            'jobNumber',
+            'inspectionDate',
+            'inspectorName'
+          ];
           for (var col in cols) {
-            try { await db.execute('ALTER TABLE doors DROP COLUMN $col'); } catch (_) {}
+            try {
+              await db.execute('ALTER TABLE doors DROP COLUMN $col');
+            } catch (_) {}
           }
         }
 
         if (oldVersion < 10) {
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_doors_number ON doors (doorNumber)');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_client ON inspections (clientName)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_doors_number ON doors (doorNumber)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_insp_client ON inspections (clientName)');
           // Handle the transition from German to English column naming in migrations
           try {
-            await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (jobNumber)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (jobNumber)');
           } catch (_) {
-            await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (auftragsnummer)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_job ON inspections (auftragsnummer)');
           }
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_insp_date ON inspections (date)');
         }
 
         if (oldVersion < 11) {
           try {
             await db.execute('ALTER TABLE doors ADD COLUMN doorAlias TEXT');
-            await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
+            await db.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_doors_alias ON doors (doorAlias)');
           } catch (_) {}
         }
 
         if (oldVersion < 12) {
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
-          await db.execute("UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
+          await db.execute(
+              "UPDATE doors SET dinConfiguration = 'DIN L' WHERE dinConfiguration = 'L'");
+          await db.execute(
+              "UPDATE doors SET dinConfiguration = 'DIN R' WHERE dinConfiguration = 'R'");
         }
 
         if (oldVersion < 16) {
           // Normalization of technical keys to match UI dropdowns exactly
-          await db.execute("UPDATE doors SET closerType = 'TS93' WHERE closerType IN ('TS 5000', 'TS93 G') OR closerType IS NULL");
-          await db.execute("UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
-          await db.execute("UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
+          await db.execute(
+              "UPDATE doors SET closerType = 'TS93' WHERE closerType IN ('TS 5000', 'TS93 G') OR closerType IS NULL");
+          await db.execute(
+              "UPDATE doors SET manufacturer = 'Dorma' WHERE manufacturer = 'HÖRMANN' OR manufacturer IS NULL");
+          await db.execute(
+              "UPDATE doors SET fittingType = 'Drücker' WHERE fittingType = 'Drücker/Drücker' OR fittingType IS NULL");
         }
 
         if (oldVersion < 17) {
           try {
-            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN attachments TEXT DEFAULT ''");
-            print('[DatabaseService] Main DB upgraded to v17: attachments column added.');
+            await db.execute(
+                "ALTER TABLE inspection_door_errors ADD COLUMN attachments TEXT DEFAULT ''");
+            print(
+                '[DatabaseService] Main DB upgraded to v17: attachments column added.');
           } catch (e) {
             print('Main DB migration warning (attachments): \$e');
           }
@@ -223,7 +259,8 @@ class DatabaseService {
 
         if (oldVersion < 18) {
           try {
-            await db.execute("ALTER TABLE inspection_door_errors ADD COLUMN errorCode TEXT NOT NULL DEFAULT ''");
+            await db.execute(
+                "ALTER TABLE inspection_door_errors ADD COLUMN errorCode TEXT NOT NULL DEFAULT ''");
             // Backfill errorCode from error_catalog for existing rows
             await db.execute('''
               UPDATE inspection_door_errors
@@ -233,7 +270,8 @@ class DatabaseService {
               )
               WHERE errorCode IS NULL OR errorCode = ''
             ''');
-            print('[DatabaseService] Main DB upgraded to v18: errorCode column added and backfilled.');
+            print(
+                '[DatabaseService] Main DB upgraded to v18: errorCode column added and backfilled.');
           } catch (e) {
             print('Main DB migration warning (errorCode): \$e');
           }
@@ -241,8 +279,10 @@ class DatabaseService {
 
         if (oldVersion < 19) {
           try {
-            await db.execute('ALTER TABLE inspections ADD COLUMN projectNumber TEXT');
-            print('[DatabaseService] Main DB upgraded to v19: projectNumber column added.');
+            await db.execute(
+                'ALTER TABLE inspections ADD COLUMN projectNumber TEXT');
+            print(
+                '[DatabaseService] Main DB upgraded to v19: projectNumber column added.');
           } catch (e) {
             print('Main DB migration warning (projectNumber): $e');
           }
@@ -250,13 +290,20 @@ class DatabaseService {
 
         if (oldVersion < 20) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN approvalNumber TEXT DEFAULT '?'");
-            await db.execute("ALTER TABLE doors ADD COLUMN manufacturerNumber TEXT DEFAULT '?'");
-            await db.execute("ALTER TABLE doors ADD COLUMN dopNumber TEXT DEFAULT '?'");
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOver1m INTEGER DEFAULT 0");
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightValue INTEGER");
-            await db.execute("ALTER TABLE doors ADD COLUMN manufactureYear TEXT DEFAULT '?'");
-            print('[DatabaseService] Main DB upgraded to v20: new door properties added.');
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN approvalNumber TEXT DEFAULT '?'");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN manufacturerNumber TEXT DEFAULT '?'");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN dopNumber TEXT DEFAULT '?'");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightOver1m INTEGER DEFAULT 0");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightValue INTEGER");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN manufactureYear TEXT DEFAULT '?'");
+            print(
+                '[DatabaseService] Main DB upgraded to v20: new door properties added.');
           } catch (e) {
             print('Main DB migration warning (v20 columns): $e');
           }
@@ -264,8 +311,10 @@ class DatabaseService {
 
         if (oldVersion < 21) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN fsaDriveAcceptanceDate TEXT");
-            print('[DatabaseService] Main DB upgraded to v21: fsaDriveAcceptanceDate column added.');
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN fsaDriveAcceptanceDate TEXT");
+            print(
+                '[DatabaseService] Main DB upgraded to v21: fsaDriveAcceptanceDate column added.');
           } catch (e) {
             print('Main DB migration warning (v21 column): $e');
           }
@@ -273,12 +322,16 @@ class DatabaseService {
 
         if (oldVersion < 22) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightInsideOver1m INTEGER DEFAULT 0");
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOutsideOver1m INTEGER DEFAULT 0");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightInsideOver1m INTEGER DEFAULT 0");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightOutsideOver1m INTEGER DEFAULT 0");
             try {
-              await db.execute("UPDATE doors SET lintelHeightOutsideOver1m = lintelHeightOver1m WHERE lintelHeightOver1m = 1");
+              await db.execute(
+                  "UPDATE doors SET lintelHeightOutsideOver1m = lintelHeightOver1m WHERE lintelHeightOver1m = 1");
             } catch (_) {}
-            print('[DatabaseService] Main DB upgraded to v22: lintel height properties updated.');
+            print(
+                '[DatabaseService] Main DB upgraded to v22: lintel height properties updated.');
           } catch (e) {
             print('Main DB migration warning (v22 columns): $e');
           }
@@ -286,13 +339,18 @@ class DatabaseService {
 
         if (oldVersion < 23) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightInsideValue TEXT");
-            await db.execute("ALTER TABLE doors ADD COLUMN lintelHeightOutsideValue TEXT");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightInsideValue TEXT");
+            await db.execute(
+                "ALTER TABLE doors ADD COLUMN lintelHeightOutsideValue TEXT");
             try {
-              await db.execute("UPDATE doors SET lintelHeightInsideValue = lintelHeightValue WHERE lintelHeightInsideOver1m = 1 AND (lintelHeightInsideValue IS NULL OR lintelHeightInsideValue = '')");
-              await db.execute("UPDATE doors SET lintelHeightOutsideValue = lintelHeightValue WHERE lintelHeightOutsideOver1m = 1 AND (lintelHeightOutsideValue IS NULL OR lintelHeightOutsideValue = '')");
+              await db.execute(
+                  "UPDATE doors SET lintelHeightInsideValue = lintelHeightValue WHERE lintelHeightInsideOver1m = 1 AND (lintelHeightInsideValue IS NULL OR lintelHeightInsideValue = '')");
+              await db.execute(
+                  "UPDATE doors SET lintelHeightOutsideValue = lintelHeightValue WHERE lintelHeightOutsideOver1m = 1 AND (lintelHeightOutsideValue IS NULL OR lintelHeightOutsideValue = '')");
             } catch (_) {}
-            print('[DatabaseService] Main DB upgraded to v23: lintelHeightInsideValue and lintelHeightOutsideValue added.');
+            print(
+                '[DatabaseService] Main DB upgraded to v23: lintelHeightInsideValue and lintelHeightOutsideValue added.');
           } catch (e) {
             print('Main DB migration warning (v23 columns): $e');
           }
@@ -300,10 +358,14 @@ class DatabaseService {
 
         if (oldVersion < 24) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN provisionalAlias TEXT");
-            await db.execute("UPDATE doors SET provisionalAlias = doorAlias WHERE provisionalAlias IS NULL OR provisionalAlias = ''");
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_doors_provisional_alias ON doors (provisionalAlias)");
-            print('[DatabaseService] Main DB upgraded to v24: provisionalAlias column added and backfilled.');
+            await db
+                .execute("ALTER TABLE doors ADD COLUMN provisionalAlias TEXT");
+            await db.execute(
+                "UPDATE doors SET provisionalAlias = doorAlias WHERE provisionalAlias IS NULL OR provisionalAlias = ''");
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_doors_provisional_alias ON doors (provisionalAlias)");
+            print(
+                '[DatabaseService] Main DB upgraded to v24: provisionalAlias column added and backfilled.');
           } catch (e) {
             print('Main DB migration warning (v24 column): $e');
           }
@@ -311,8 +373,10 @@ class DatabaseService {
 
         if (oldVersion < 25) {
           try {
-            await db.execute("ALTER TABLE doors ADD COLUMN notes TEXT DEFAULT ''");
-            print('[DatabaseService] Main DB upgraded to v25: notes column added to doors table.');
+            await db
+                .execute("ALTER TABLE doors ADD COLUMN notes TEXT DEFAULT ''");
+            print(
+                '[DatabaseService] Main DB upgraded to v25: notes column added to doors table.');
           } catch (e) {
             print('Main DB migration warning (v25 column): $e');
           }
@@ -320,8 +384,10 @@ class DatabaseService {
 
         if (oldVersion < 26) {
           try {
-            await db.execute("ALTER TABLE inspections ADD COLUMN isLocked INTEGER DEFAULT 0");
-            print('[DatabaseService] Main DB upgraded to v26: isLocked column added to inspections table.');
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN isLocked INTEGER DEFAULT 0");
+            print(
+                '[DatabaseService] Main DB upgraded to v26: isLocked column added to inspections table.');
           } catch (e) {
             print('Main DB migration warning (v26 column): $e');
           }
@@ -329,9 +395,12 @@ class DatabaseService {
 
         if (oldVersion < 27) {
           try {
-            await db.execute("ALTER TABLE inspections ADD COLUMN orderType TEXT DEFAULT 'Wartung'");
-            await db.execute("ALTER TABLE inspections ADD COLUMN repairDate TEXT");
-            print('[DatabaseService] Main DB upgraded to v27: orderType and repairDate columns added to inspections table.');
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN orderType TEXT DEFAULT 'Wartung'");
+            await db
+                .execute("ALTER TABLE inspections ADD COLUMN repairDate TEXT");
+            print(
+                '[DatabaseService] Main DB upgraded to v27: orderType and repairDate columns added to inspections table.');
           } catch (e) {
             print('Main DB migration warning (v27 columns): $e');
           }
@@ -339,12 +408,18 @@ class DatabaseService {
 
         if (oldVersion < 28) {
           try {
-            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteProjectId TEXT");
-            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteFileId TEXT");
-            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteSyncStatus TEXT DEFAULT 'none'");
-            await db.execute("ALTER TABLE inspections ADD COLUMN craftnoteLastSyncTime TEXT");
-            await db.execute("CREATE INDEX IF NOT EXISTS idx_insp_craftnote ON inspections (craftnoteProjectId)");
-            print('[DatabaseService] Main DB upgraded to v28: Craftnote cloud integration columns added.');
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN craftnoteProjectId TEXT");
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN craftnoteFileId TEXT");
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN craftnoteSyncStatus TEXT DEFAULT 'none'");
+            await db.execute(
+                "ALTER TABLE inspections ADD COLUMN craftnoteLastSyncTime TEXT");
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_insp_craftnote ON inspections (craftnoteProjectId)");
+            print(
+                '[DatabaseService] Main DB upgraded to v28: Craftnote cloud integration columns added.');
           } catch (e) {
             print('Main DB migration warning (v28 columns): $e');
           }
@@ -370,7 +445,8 @@ class DatabaseService {
     if (projectId != null) values['craftnoteProjectId'] = projectId;
     if (fileId != null) values['craftnoteFileId'] = fileId;
     if (syncStatus != null) values['craftnoteSyncStatus'] = syncStatus;
-    values['craftnoteLastSyncTime'] = lastSyncTime ?? DateTime.now().toIso8601String();
+    values['craftnoteLastSyncTime'] =
+        lastSyncTime ?? DateTime.now().toIso8601String();
 
     await db.update(
       'inspections',
@@ -381,7 +457,8 @@ class DatabaseService {
   }
 
   /// Sets or updates the lock status for a given inspection ID in Master DB.
-  static Future<void> setInspectionLockStatus(int inspectionId, bool isLocked) async {
+  static Future<void> setInspectionLockStatus(
+      int inspectionId, bool isLocked) async {
     final db = await getDb();
     await db.update(
       'inspections',
@@ -391,7 +468,8 @@ class DatabaseService {
     );
   }
 
-  static Future<void> populateMissingAliases(Database db, {bool isLocal = false}) async {
+  static Future<void> populateMissingAliases(Database db,
+      {bool isLocal = false}) async {
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
       SELECT d.id, d.doorNumber, d.floor, d.pos, i.projectNumber
       FROM doors d
@@ -399,23 +477,28 @@ class DatabaseService {
       LEFT JOIN inspections i ON id.inspectionId = i.inspectionId
       WHERE d.doorAlias IS NULL
     ''');
-    
+
     if (rows.isEmpty) return;
-    
-    print('[DatabaseService] Populating missing aliases for ${rows.length} doors (isLocal: $isLocal)...');
-    
+
+    print(
+        '[DatabaseService] Populating missing aliases for ${rows.length} doors (isLocal: $isLocal)...');
+
     for (final row in rows) {
       final id = row['id'] as int;
       final doorNumber = row['doorNumber'] as String? ?? '0';
       final floor = row['floor'] as String? ?? '';
       final projectNumber = row['projectNumber'] as String? ?? '';
       final pos = row['pos'] ?? 0;
-      
-      String generated = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
+
+      String generated = Door.generateAlias(
+          projectNumber: projectNumber,
+          pos: pos,
+          floor: floor,
+          doorNumber: doorNumber);
       if (generated.isEmpty) {
         generated = 'DOOR-$id';
       }
-      
+
       // Ensure uniqueness
       String uniqueAlias = generated;
       int suffix = 1;
@@ -432,11 +515,13 @@ class DatabaseService {
         // If it exists, append suffix, ensuring max 12 chars
         final suffixStr = '-$suffix';
         final maxBaseLen = 12 - suffixStr.length;
-        final base = generated.length > maxBaseLen ? generated.substring(0, maxBaseLen) : generated;
+        final base = generated.length > maxBaseLen
+            ? generated.substring(0, maxBaseLen)
+            : generated;
         uniqueAlias = '$base$suffixStr';
         suffix++;
       }
-      
+
       await db.update(
         'doors',
         {'doorAlias': uniqueAlias},
@@ -485,7 +570,8 @@ class DatabaseService {
     final sourcePath = join(dbPath, 'door_inspection.db');
     final sourceFile = File(sourcePath);
     if (!await sourceFile.exists()) {
-      throw Exception('Export fehlgeschlagen: Master-Datenbank existiert nicht.');
+      throw Exception(
+          'Export fehlgeschlagen: Master-Datenbank existiert nicht.');
     }
     await sourceFile.copy(destinationPath);
     print('[DatabaseService] Master DB exported to: $destinationPath');
@@ -498,15 +584,19 @@ class DatabaseService {
       throw Exception('Import fehlgeschlagen: Quelldatei nicht gefunden.');
     }
     if (!sourcePath.toLowerCase().endsWith('.db')) {
-      throw Exception('Import fehlgeschlagen: Ungültiges Dateiformat. Bitte wählen Sie eine .db Datei.');
+      throw Exception(
+          'Import fehlgeschlagen: Ungültiges Dateiformat. Bitte wählen Sie eine .db Datei.');
     }
 
     final tempDb = await openDatabase(sourcePath, readOnly: true);
     try {
-      final tables = await tempDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tables = await tempDb
+          .rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
       final tableNames = tables.map((t) => t['name'] as String).toSet();
-      if (!tableNames.contains('doors') || !tableNames.contains('inspections')) {
-        throw Exception('Die ausgewählte Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
+      if (!tableNames.contains('doors') ||
+          !tableNames.contains('inspections')) {
+        throw Exception(
+            'Die ausgewählte Datei enthält keine gültigen Prüfungsdaten (Tabellen fehlen).');
       }
     } finally {
       await tempDb.close();
@@ -555,16 +645,16 @@ class DatabaseService {
 
   /// Finds an existing door matching the given barcode (doorAlias or provisionalAlias),
   /// optionally excluding a specific door ID.
-  static Future<Door?> findDoorByBarcode(String barcode, {int? excludeDoorId}) async {
+  static Future<Door?> findDoorByBarcode(String barcode,
+      {int? excludeDoorId}) async {
     final clean = barcode.trim();
     if (clean.isEmpty) return null;
     final db = await getDb();
     final String whereClause = excludeDoorId != null
         ? '(doorAlias = ? OR provisionalAlias = ?) AND id != ?'
         : 'doorAlias = ? OR provisionalAlias = ?';
-    final List<dynamic> whereArgs = excludeDoorId != null
-        ? [clean, clean, excludeDoorId]
-        : [clean, clean];
+    final List<dynamic> whereArgs =
+        excludeDoorId != null ? [clean, clean, excludeDoorId] : [clean, clean];
 
     final maps = await db.query(
       'doors',
@@ -580,10 +670,12 @@ class DatabaseService {
   static Future<int> updateDoorAlias(int doorId, String newAlias) async {
     final db = await getDb();
     final cleanAlias = newAlias.trim();
-    final maps = await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
+    final maps =
+        await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
     if (maps.isNotEmpty) {
       final currentDoor = Door.fromMap(maps.first);
-      final provisional = (currentDoor.provisionalAlias != null && currentDoor.provisionalAlias!.isNotEmpty)
+      final provisional = (currentDoor.provisionalAlias != null &&
+              currentDoor.provisionalAlias!.isNotEmpty)
           ? currentDoor.provisionalAlias
           : (currentDoor.doorAlias ?? cleanAlias);
       return await db.update(
@@ -617,7 +709,8 @@ class DatabaseService {
          OR doorId NOT IN (SELECT id FROM doors)
     ''');
     if (orphanedJunctions > 0) {
-      logs.add('Entfernt: $orphanedJunctions verwaiste Zuordnungen in inspection_doors.');
+      logs.add(
+          'Entfernt: $orphanedJunctions verwaiste Zuordnungen in inspection_doors.');
     }
 
     // 2. Remove orphaned inspection_door_errors
@@ -626,7 +719,8 @@ class DatabaseService {
       WHERE inspectionDoorId NOT IN (SELECT id FROM inspection_doors)
     ''');
     if (orphanedErrors > 0) {
-      logs.add('Entfernt: $orphanedErrors verwaiste Fehlereinträge in inspection_door_errors.');
+      logs.add(
+          'Entfernt: $orphanedErrors verwaiste Fehlereinträge in inspection_door_errors.');
     }
 
     // 3. Repair missing door aliases
@@ -649,32 +743,50 @@ class DatabaseService {
           LIMIT 1
         ''', [id]);
 
-        final projectNumber = linkedInfo.isNotEmpty ? (linkedInfo.first['projectNumber'] as String? ?? '') : '';
+        final projectNumber = linkedInfo.isNotEmpty
+            ? (linkedInfo.first['projectNumber'] as String? ?? '')
+            : '';
         final pos = row['pos'] ?? 0;
 
-        String generated = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
+        String generated = Door.generateAlias(
+            projectNumber: projectNumber,
+            pos: pos,
+            floor: floor,
+            doorNumber: doorNumber);
         if (generated.isEmpty) generated = 'DOOR-$id';
 
         String uniqueAlias = generated;
         int suffix = 1;
         while (true) {
-          final existing = await db.query('doors', columns: ['id'], where: 'doorAlias = ?', whereArgs: [uniqueAlias]);
+          final existing = await db.query('doors',
+              columns: ['id'],
+              where: 'doorAlias = ?',
+              whereArgs: [uniqueAlias]);
           if (existing.isEmpty) break;
           final suffixStr = '-$suffix';
           final maxBaseLen = 12 - suffixStr.length;
-          final base = generated.length > maxBaseLen ? generated.substring(0, maxBaseLen) : generated;
+          final base = generated.length > maxBaseLen
+              ? generated.substring(0, maxBaseLen)
+              : generated;
           uniqueAlias = '$base$suffixStr';
           suffix++;
         }
 
-        await db.update('doors', {'doorAlias': uniqueAlias}, where: 'id = ?', whereArgs: [id]);
+        await db.update('doors', {'doorAlias': uniqueAlias},
+            where: 'id = ?', whereArgs: [id]);
         repairedAliasesCount++;
       }
-      logs.add('Repariert: $repairedAliasesCount fehlende Tür-Aliase neu generiert.');
+      logs.add(
+          'Repariert: $repairedAliasesCount fehlende Tür-Aliase neu generiert.');
     }
 
     // 4. Reconcile mismatched door aliases and merge duplicate doors caused by historical customer misspellings
-    final allInspections = await db.query('inspections', columns: ['inspectionId', 'clientName', 'objectAddress', 'projectNumber']);
+    final allInspections = await db.query('inspections', columns: [
+      'inspectionId',
+      'clientName',
+      'objectAddress',
+      'projectNumber'
+    ]);
     int mergedDoorsCount = 0;
     int updatedAliasesCount = 0;
 
@@ -696,7 +808,11 @@ class DatabaseService {
         final pos = doorRow['pos'] ?? 0;
         final oldAlias = doorRow['doorAlias'] as String? ?? '';
 
-        final newAlias = Door.generateAlias(projectNumber: projectNumber, pos: pos, floor: floor, doorNumber: doorNumber);
+        final newAlias = Door.generateAlias(
+            projectNumber: projectNumber,
+            pos: pos,
+            floor: floor,
+            doorNumber: doorNumber);
         if (newAlias.isEmpty || newAlias == oldAlias) continue;
 
         // Check for collision with another door
@@ -710,30 +826,43 @@ class DatabaseService {
 
         if (collision.isNotEmpty) {
           final targetId = collision.first['id'] as int;
-          await mergeDuplicateDoors(targetDoorId: targetId, duplicateDoorId: doorId);
+          await mergeDuplicateDoors(
+              targetDoorId: targetId, duplicateDoorId: doorId);
           mergedDoorsCount++;
         } else {
-          await db.update('doors', {'doorAlias': newAlias}, where: 'id = ?', whereArgs: [doorId]);
+          await db.update('doors', {'doorAlias': newAlias},
+              where: 'id = ?', whereArgs: [doorId]);
           updatedAliasesCount++;
         }
       }
     }
 
     if (mergedDoorsCount > 0) {
-      logs.add('Zusammengeführt: $mergedDoorsCount doppelte Türen durch Kundenkorrektur bereinigt.');
+      logs.add(
+          'Zusammengeführt: $mergedDoorsCount doppelte Türen durch Kundenkorrektur bereinigt.');
     }
     if (updatedAliasesCount > 0) {
-      logs.add('Aktualisiert: $updatedAliasesCount Tür-Aliase an neue Kundendaten angepasst.');
+      logs.add(
+          'Aktualisiert: $updatedAliasesCount Tür-Aliase an neue Kundendaten angepasst.');
     }
 
     // Counts
-    final totalInspections = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspections')) ?? 0;
-    final totalDoors = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM doors')) ?? 0;
-    final totalJunctions = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ?? 0;
-    final totalErrors = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ?? 0;
+    final totalInspections = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM inspections')) ??
+        0;
+    final totalDoors = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM doors')) ??
+        0;
+    final totalJunctions = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM inspection_doors')) ??
+        0;
+    final totalErrors = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM inspection_door_errors')) ??
+        0;
 
     if (logs.isEmpty) {
-      logs.add('Datenbank ist zu 100% konsistent und gesund. Keine Fehler gefunden.');
+      logs.add(
+          'Datenbank ist zu 100% konsistent und gesund. Keine Fehler gefunden.');
     }
 
     return IntegrityReport(
@@ -762,7 +891,8 @@ class DatabaseService {
     return str;
   }
 
-  static Future<int> insertInspection(Map<String, dynamic> inspectionData) async {
+  static Future<int> insertInspection(
+      Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final data = Map<String, dynamic>.from(inspectionData);
     data.remove('doorCount');
@@ -780,11 +910,13 @@ class DatabaseService {
   }
 
   /// Checks if an inspection matching jobNumber or (clientName, objectAddress, date) already exists
-  static Future<int?> findExistingInspectionId(Map<String, dynamic> inspectionData) async {
+  static Future<int?> findExistingInspectionId(
+      Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final jobNumber = (inspectionData['jobNumber'] ?? '').toString().trim();
     final clientName = (inspectionData['clientName'] ?? '').toString().trim();
-    final objectAddress = (inspectionData['objectAddress'] ?? '').toString().trim();
+    final objectAddress =
+        (inspectionData['objectAddress'] ?? '').toString().trim();
     final date = (inspectionData['date'] ?? '').toString().trim();
 
     List<Map<String, dynamic>> existing = [];
@@ -797,11 +929,15 @@ class DatabaseService {
         limit: 1,
       );
     }
-    if (existing.isEmpty && clientName.isNotEmpty && objectAddress.isNotEmpty && date.isNotEmpty) {
+    if (existing.isEmpty &&
+        clientName.isNotEmpty &&
+        objectAddress.isNotEmpty &&
+        date.isNotEmpty) {
       existing = await db.query(
         'inspections',
         columns: ['inspectionId'],
-        where: 'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
+        where:
+            'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
         whereArgs: [clientName, objectAddress, date],
         limit: 1,
       );
@@ -815,11 +951,13 @@ class DatabaseService {
 
   /// Fetches an existing inspection by jobNumber or (clientName, objectAddress, date),
   /// or inserts a new one if none exists to prevent duplicate inspection creation.
-  static Future<int> getOrInsertInspection(Map<String, dynamic> inspectionData) async {
+  static Future<int> getOrInsertInspection(
+      Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final jobNumber = (inspectionData['jobNumber'] ?? '').toString().trim();
     final clientName = (inspectionData['clientName'] ?? '').toString().trim();
-    final objectAddress = (inspectionData['objectAddress'] ?? '').toString().trim();
+    final objectAddress =
+        (inspectionData['objectAddress'] ?? '').toString().trim();
     final date = (inspectionData['date'] ?? '').toString().trim();
 
     List<Map<String, dynamic>> existing = [];
@@ -832,11 +970,15 @@ class DatabaseService {
         limit: 1,
       );
     }
-    if (existing.isEmpty && clientName.isNotEmpty && objectAddress.isNotEmpty && date.isNotEmpty) {
+    if (existing.isEmpty &&
+        clientName.isNotEmpty &&
+        objectAddress.isNotEmpty &&
+        date.isNotEmpty) {
       existing = await db.query(
         'inspections',
         columns: ['inspectionId'],
-        where: 'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
+        where:
+            'LOWER(clientName) = LOWER(?) AND LOWER(objectAddress) = LOWER(?) AND date = ?',
         whereArgs: [clientName, objectAddress, date],
         limit: 1,
       );
@@ -881,13 +1023,13 @@ class DatabaseService {
   }
 
   /// Creates a new Auftrag ("Wartung" or "Reparatur") based on a previous event.
-  /// 
+  ///
   /// - The new event must have a new, unique job number (cannot already exist in DB).
   /// - The date of the new event cannot be earlier than the previous event's date.
   /// - Door technical specifications are passed over.
   /// - Open errors ("Offen" / "Open") are passed to the new event with their notes preserved.
   /// - Solved errors ("gelöst" / "Resolved") are NOT passed to the new event, and their notes are cleared.
-  /// 
+  ///
   /// If no previous event exists, creates a blank Auftrag template.
   static Future<int> createAuftragFromLatestInspection({
     required String projectNumber,
@@ -920,7 +1062,8 @@ class DatabaseService {
       limit: 1,
     );
     if (existingJobs.isNotEmpty) {
-      throw ArgumentError('Ein Auftrag mit der Auftragsnummer "$cleanJob" existiert bereits. Bitte eine neue, eindeutige Nummer vergeben.');
+      throw ArgumentError(
+          'Ein Auftrag mit der Auftragsnummer "$cleanJob" existiert bereits. Bitte eine neue, eindeutige Nummer vergeben.');
     }
 
     // 2. Locate the base previous inspection/event for this project or address
@@ -956,20 +1099,25 @@ class DatabaseService {
     }
 
     // 3. Validate Date Sequencing (subsequent event cannot be earlier than previous event)
-    final DateTime newEffectiveDate = (orderType == 'Reparatur' && repairDate != null) ? repairDate : date;
+    final DateTime newEffectiveDate =
+        (orderType == 'Reparatur' && repairDate != null) ? repairDate : date;
     if (baseInspection != null) {
-      final String? prevDateStr = baseInspection['repairDate']?.toString().trim().isNotEmpty == true
-          ? baseInspection['repairDate']?.toString()
-          : baseInspection['date']?.toString();
+      final String? prevDateStr =
+          baseInspection['repairDate']?.toString().trim().isNotEmpty == true
+              ? baseInspection['repairDate']?.toString()
+              : baseInspection['date']?.toString();
       if (prevDateStr != null && prevDateStr.isNotEmpty) {
         try {
           final prevDate = DateTime.parse(prevDateStr);
-          final newDatePure = DateTime(newEffectiveDate.year, newEffectiveDate.month, newEffectiveDate.day);
-          final prevDatePure = DateTime(prevDate.year, prevDate.month, prevDate.day);
+          final newDatePure = DateTime(newEffectiveDate.year,
+              newEffectiveDate.month, newEffectiveDate.day);
+          final prevDatePure =
+              DateTime(prevDate.year, prevDate.month, prevDate.day);
           if (newDatePure.isBefore(prevDatePure)) {
             final fNew = DateFormat('dd.MM.yyyy').format(newEffectiveDate);
             final fPrev = DateFormat('dd.MM.yyyy').format(prevDate);
-            throw ArgumentError('Das Datum des Folge-Auftrags ($fNew) darf nicht vor dem Datum des vorherigen Auftrags ($fPrev) liegen.');
+            throw ArgumentError(
+                'Das Datum des Folge-Auftrags ($fNew) darf nicht vor dem Datum des vorherigen Auftrags ($fPrev) liegen.');
           }
         } catch (e) {
           if (e is ArgumentError) rethrow;
@@ -979,13 +1127,19 @@ class DatabaseService {
 
     final resolvedProj = cleanProj.isNotEmpty
         ? cleanProj
-        : (baseInspection != null ? (baseInspection['projectNumber']?.toString() ?? '') : '');
+        : (baseInspection != null
+            ? (baseInspection['projectNumber']?.toString() ?? '')
+            : '');
     final resolvedAddr = cleanAddr.isNotEmpty
         ? cleanAddr
-        : (baseInspection != null ? (baseInspection['objectAddress']?.toString() ?? '') : '');
+        : (baseInspection != null
+            ? (baseInspection['objectAddress']?.toString() ?? '')
+            : '');
     final resolvedClient = cleanClient.isNotEmpty
         ? cleanClient
-        : (baseInspection != null ? (baseInspection['clientName']?.toString() ?? '') : '');
+        : (baseInspection != null
+            ? (baseInspection['clientName']?.toString() ?? '')
+            : '');
 
     // 4. Create the new inspection record
     final inspectionData = {
@@ -996,12 +1150,18 @@ class DatabaseService {
       'date': _normalizeDate(date),
       'contactPerson': contactPerson.trim().isNotEmpty
           ? contactPerson.trim()
-          : (baseInspection != null ? (baseInspection['contactPerson']?.toString() ?? '') : ''),
+          : (baseInspection != null
+              ? (baseInspection['contactPerson']?.toString() ?? '')
+              : ''),
       'inspectorName': inspectorName.trim().isNotEmpty
           ? inspectorName.trim()
-          : (baseInspection != null ? (baseInspection['inspectorName']?.toString() ?? '') : ''),
+          : (baseInspection != null
+              ? (baseInspection['inspectorName']?.toString() ?? '')
+              : ''),
       'orderType': orderType,
-      'repairDate': orderType == 'Reparatur' && repairDate != null ? _normalizeDate(repairDate) : null,
+      'repairDate': orderType == 'Reparatur' && repairDate != null
+          ? _normalizeDate(repairDate)
+          : null,
       'isLocked': 0,
     };
 
@@ -1015,14 +1175,20 @@ class DatabaseService {
       final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
 
       bool isResolved(Map<String, dynamic> e) {
-        final res = (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
-        return res == 'resolved' || res == 'gelöst' || res == 'geloest' || res == 'beholfen';
+        final res =
+            (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
+        return res == 'resolved' ||
+            res == 'gelöst' ||
+            res == 'geloest' ||
+            res == 'beholfen';
       }
 
       for (final j in prevJunctions) {
         final doorId = j['doorId'] as int;
         final prevJunctionId = j['id'] as int;
-        final doorErrors = prevErrors.where((e) => e['inspectionDoorId'] == prevJunctionId).toList();
+        final doorErrors = prevErrors
+            .where((e) => e['inspectionDoorId'] == prevJunctionId)
+            .toList();
 
         final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
 
@@ -1084,7 +1250,8 @@ class DatabaseService {
         'inspections',
         where: whereClause,
         whereArgs: whereArgs,
-        orderBy: "CASE WHEN orderType = 'Reparatur' THEN 1 WHEN orderType = 'Wartung' THEN 2 ELSE 3 END ASC, date DESC",
+        orderBy:
+            "CASE WHEN orderType = 'Reparatur' THEN 1 WHEN orderType = 'Wartung' THEN 2 ELSE 3 END ASC, date DESC",
       );
 
       if (inspections.isEmpty) return null;
@@ -1118,7 +1285,8 @@ class DatabaseService {
 
       final bool hadReparatur = inspections.any((i) =>
           i['orderType'] == 'Reparatur' ||
-          (i['repairDate'] != null && i['repairDate'].toString().trim().isNotEmpty));
+          (i['repairDate'] != null &&
+              i['repairDate'].toString().trim().isNotEmpty));
       if (!hadReparatur) {
         bestRepairDate = null;
       }
@@ -1169,7 +1337,8 @@ class DatabaseService {
               where: 'inspectionDoorId = ?',
               whereArgs: [cJuncId],
             );
-            await dbExec.delete('inspection_doors', where: 'id = ?', whereArgs: [cJuncId]);
+            await dbExec.delete('inspection_doors',
+                where: 'id = ?', whereArgs: [cJuncId]);
           } else {
             // Move junction to primary if door only existed in companion inspection
             await dbExec.update(
@@ -1182,7 +1351,8 @@ class DatabaseService {
         }
 
         // Delete companion inspection row
-        await dbExec.delete('inspections', where: 'inspectionId = ?', whereArgs: [companionId]);
+        await dbExec.delete('inspections',
+            where: 'inspectionId = ?', whereArgs: [companionId]);
       }
 
       // Ensure primaryId has no duplicate junctions for the same doorId
@@ -1198,8 +1368,10 @@ class DatabaseService {
         final pDoorId = pJunc['doorId'] as int;
         if (seenDoorIds.contains(pDoorId)) {
           // Duplicate junction on primary, delete extra junction and its errors
-          await dbExec.delete('inspection_door_errors', where: 'inspectionDoorId = ?', whereArgs: [pJuncId]);
-          await dbExec.delete('inspection_doors', where: 'id = ?', whereArgs: [pJuncId]);
+          await dbExec.delete('inspection_door_errors',
+              where: 'inspectionDoorId = ?', whereArgs: [pJuncId]);
+          await dbExec.delete('inspection_doors',
+              where: 'id = ?', whereArgs: [pJuncId]);
         } else {
           seenDoorIds.add(pDoorId);
         }
@@ -1216,7 +1388,8 @@ class DatabaseService {
     }
   }
 
-  static Future<Map<String, dynamic>?> getInspectionById(int inspectionId) async {
+  static Future<Map<String, dynamic>?> getInspectionById(
+      int inspectionId) async {
     final db = await getDb();
     final maps = await db.query(
       'inspections',
@@ -1228,7 +1401,8 @@ class DatabaseService {
     return maps.first;
   }
 
-  static Future<void> updateInspection(Map<String, dynamic> inspectionData) async {
+  static Future<void> updateInspection(
+      Map<String, dynamic> inspectionData) async {
     final db = await getDb();
     final id = inspectionData['inspectionId'];
     if (id == null) return;
@@ -1242,8 +1416,12 @@ class DatabaseService {
       limit: 1,
     );
 
-    final String oldClient = existingRows.isNotEmpty ? (existingRows.first['clientName'] as String? ?? '') : '';
-    final String oldAddress = existingRows.isNotEmpty ? (existingRows.first['objectAddress'] as String? ?? '') : '';
+    final String oldClient = existingRows.isNotEmpty
+        ? (existingRows.first['clientName'] as String? ?? '')
+        : '';
+    final String oldAddress = existingRows.isNotEmpty
+        ? (existingRows.first['objectAddress'] as String? ?? '')
+        : '';
 
     final data = Map<String, dynamic>.from(inspectionData);
     if (data.containsKey('date') && data['date'] != null) {
@@ -1260,8 +1438,10 @@ class DatabaseService {
       whereArgs: [id],
     );
 
-    final String newClient = inspectionData['clientName']?.toString().trim() ?? oldClient;
-    final String newAddress = inspectionData['objectAddress']?.toString().trim() ?? oldAddress;
+    final String newClient =
+        inspectionData['clientName']?.toString().trim() ?? oldClient;
+    final String newAddress =
+        inspectionData['objectAddress']?.toString().trim() ?? oldAddress;
 
     // If customer name or object address changed, update doorAliases and merge duplicate doors
     if (newClient != oldClient || newAddress != oldAddress) {
@@ -1289,7 +1469,8 @@ class DatabaseService {
       return 0;
     }
 
-    final String searchProj = cleanCurrentProj.isNotEmpty ? cleanCurrentProj : cleanNewProj;
+    final String searchProj =
+        cleanCurrentProj.isNotEmpty ? cleanCurrentProj : cleanNewProj;
     final targetInspections = await db.query(
       'inspections',
       columns: ['inspectionId', 'clientName'],
@@ -1331,10 +1512,12 @@ class DatabaseService {
          OR (objectAddress IS NOT NULL AND TRIM(objectAddress) != '')
       ORDER BY projectNumber ASC, objectAddress ASC
     ''');
-    return rows.map((r) => {
-      'projectNumber': (r['projectNumber'] as String? ?? '').trim(),
-      'objectAddress': (r['objectAddress'] as String? ?? '').trim(),
-    }).toList();
+    return rows
+        .map((r) => {
+              'projectNumber': (r['projectNumber'] as String? ?? '').trim(),
+              'objectAddress': (r['objectAddress'] as String? ?? '').trim(),
+            })
+        .toList();
   }
 
   /// Updates doorAliases for all doors linked to an inspection when customer or address changes.
@@ -1346,8 +1529,13 @@ class DatabaseService {
   }) async {
     final db = await getDb();
 
-    final inspRows = await db.query('inspections', columns: ['projectNumber'], where: 'inspectionId = ?', whereArgs: [inspectionId]);
-    final projectNumber = inspRows.isNotEmpty ? (inspRows.first['projectNumber'] as String? ?? '') : '';
+    final inspRows = await db.query('inspections',
+        columns: ['projectNumber'],
+        where: 'inspectionId = ?',
+        whereArgs: [inspectionId]);
+    final projectNumber = inspRows.isNotEmpty
+        ? (inspRows.first['projectNumber'] as String? ?? '')
+        : '';
 
     final List<Map<String, dynamic>> linkedDoors = await db.rawQuery('''
       SELECT d.* 
@@ -1385,7 +1573,8 @@ class DatabaseService {
       if (existingWithAlias.isNotEmpty) {
         // ALIAS COLLISION -> Merge duplicate doorId into targetExistingDoorId
         final int targetExistingDoorId = existingWithAlias.first['id'] as int;
-        await mergeDuplicateDoors(targetDoorId: targetExistingDoorId, duplicateDoorId: doorId);
+        await mergeDuplicateDoors(
+            targetDoorId: targetExistingDoorId, duplicateDoorId: doorId);
       } else {
         // Simple alias update
         await db.update(
@@ -1491,8 +1680,16 @@ class DatabaseService {
         OR d.floor LIKE ?
       )''';
       whereArgs.addAll([
-        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
-        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm
       ]);
     }
 
@@ -1546,7 +1743,8 @@ class DatabaseService {
 
   /// Returns all doors associated with a list of inspection IDs.
   /// Supports optional query to search by door number, room description, room designation, error description/code/notes.
-  static Future<List<Door>> getDoorsByInspectionIds(List<int> inspectionIds, {String query = ''}) async {
+  static Future<List<Door>> getDoorsByInspectionIds(List<int> inspectionIds,
+      {String query = ''}) async {
     if (inspectionIds.isEmpty) return [];
     final db = await getDb();
     final String idString = inspectionIds.join(',');
@@ -1586,15 +1784,25 @@ class DatabaseService {
         )
       ORDER BY d.pos ASC, d.doorNumber ASC
     ''', [
-      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
-      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm
     ]);
 
     return maps.map((map) => Door.fromMap(map)).toList();
   }
 
   /// Returns a map of doorId -> DoorErrorSummary for a given inspection ID.
-  static Future<Map<int, DoorErrorSummary>> getDoorErrorSummariesForInspection(int inspectionId) async {
+  static Future<Map<int, DoorErrorSummary>> getDoorErrorSummariesForInspection(
+      int inspectionId) async {
     final db = await getDb();
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
       SELECT 
@@ -1688,15 +1896,18 @@ class DatabaseService {
 
   /// Retrieves the complete historical timeline for a door ("Tür-Akte").
   /// Identified by either doorId or doorAlias.
-  static Future<Map<String, dynamic>?> getDoorHistoryData({int? doorId, String? doorAlias}) async {
+  static Future<Map<String, dynamic>?> getDoorHistoryData(
+      {int? doorId, String? doorAlias}) async {
     final db = await getDb();
 
     // 1. Fetch Master Door
     List<Map<String, dynamic>> doorRows = [];
     if (doorId != null) {
-      doorRows = await db.query('doors', where: 'id = ?', whereArgs: [doorId], limit: 1);
+      doorRows = await db.query('doors',
+          where: 'id = ?', whereArgs: [doorId], limit: 1);
     } else if (doorAlias != null && doorAlias.isNotEmpty) {
-      doorRows = await db.query('doors', where: 'doorAlias = ?', whereArgs: [doorAlias], limit: 1);
+      doorRows = await db.query('doors',
+          where: 'doorAlias = ?', whereArgs: [doorAlias], limit: 1);
     }
 
     if (doorRows.isEmpty) return null;
@@ -1760,8 +1971,12 @@ class DatabaseService {
       totalLifetimeErrors += rowErrorCount;
 
       for (var e in errors) {
-        final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-        if (status == 'resolved' || status == 'behoben' || status == 'beholfen' || status == 'gelöst') {
+        final status =
+            (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+        if (status == 'resolved' ||
+            status == 'behoben' ||
+            status == 'beholfen' ||
+            status == 'gelöst') {
           resolvedErrors++;
         } else {
           currentOpenErrors++;
@@ -1785,9 +2000,17 @@ class DatabaseService {
         final errors = item['errors'] as List<Map<String, dynamic>>;
         return errors.any((e) {
           final sev = (e['severity']?.toString() ?? 'medium').toLowerCase();
-          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-          final isResolved = (status == 'resolved' || status == 'behoben' || status == 'beholfen' || status == 'gelöst');
-          return (sev == 'high' || sev == 'critical' || sev == 'hoch' || sev == 'kritisch') && !isResolved;
+          final status =
+              (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          final isResolved = (status == 'resolved' ||
+              status == 'behoben' ||
+              status == 'beholfen' ||
+              status == 'gelöst');
+          return (sev == 'high' ||
+                  sev == 'critical' ||
+                  sev == 'hoch' ||
+                  sev == 'kritisch') &&
+              !isResolved;
         });
       });
       healthStatus = hasHighSeverity ? 'red' : 'yellow';
@@ -1839,7 +2062,8 @@ class DatabaseService {
   }
 
   /// Fetches all junction records for a specific inspection from Main DB
-  static Future<List<Map<String, dynamic>>> getInspectionDoorsByInspectionId(int inspectionId) async {
+  static Future<List<Map<String, dynamic>>> getInspectionDoorsByInspectionId(
+      int inspectionId) async {
     final db = await getDb();
     return await db.query(
       'inspection_doors',
@@ -1887,15 +2111,17 @@ class DatabaseService {
     required int doorId,
     required String status,
     String? notes,
-  }) => updateInspectionDoorStatus(
-    inspectionId: inspectionId,
-    doorId: doorId,
-    status: status,
-    notes: notes,
-  );
+  }) =>
+      updateInspectionDoorStatus(
+        inspectionId: inspectionId,
+        doorId: doorId,
+        status: status,
+        notes: notes,
+      );
 
   /// Returns a map of doorId -> status for all doors in an inspection.
-  static Future<Map<int, String>> getDoorInspectionStatuses(int inspectionId) async {
+  static Future<Map<int, String>> getDoorInspectionStatuses(
+      int inspectionId) async {
     final db = await getDb();
     final rows = await db.query(
       'inspection_doors',
@@ -1913,9 +2139,11 @@ class DatabaseService {
     return map;
   }
 
-  static Future<Set<String>> _getInspectionDoorErrorsColumns(DatabaseExecutor db) async {
+  static Future<Set<String>> _getInspectionDoorErrorsColumns(
+      DatabaseExecutor db) async {
     try {
-      final List<Map<String, dynamic>> tableInfo = await db.rawQuery('PRAGMA table_info(inspection_door_errors)');
+      final List<Map<String, dynamic>> tableInfo =
+          await db.rawQuery('PRAGMA table_info(inspection_door_errors)');
       return tableInfo.map((row) => row['name'] as String).toSet();
     } catch (e) {
       print('Error getting table info for inspection_door_errors: $e');
@@ -1923,11 +2151,13 @@ class DatabaseService {
     }
   }
 
-  static Future<String> _fetchLargeAttachments(DatabaseExecutor db, int errorId) async {
+  static Future<String> _fetchLargeAttachments(
+      DatabaseExecutor db, int errorId) async {
     final StringBuffer sb = StringBuffer();
     int offset = 1; // SQLite SUBSTR is 1-indexed
-    const int chunkSize = 1000 * 1024; // 1MB chunks (approx 1,000,000 characters)
-    
+    const int chunkSize =
+        1000 * 1024; // 1MB chunks (approx 1,000,000 characters)
+
     while (true) {
       try {
         final chunkQuery = await db.rawQuery('''
@@ -1935,18 +2165,19 @@ class DatabaseService {
           FROM inspection_door_errors
           WHERE id = ?
         ''', [offset, chunkSize, errorId]);
-        
+
         if (chunkQuery.isEmpty) break;
         final String chunk = chunkQuery.first['chunk'] as String? ?? '';
         if (chunk.isEmpty) break;
-        
+
         sb.write(chunk);
         if (chunk.length < chunkSize) {
           break;
         }
         offset += chunk.length;
       } catch (e) {
-        print('Error reading chunk for error ID $errorId at offset $offset: $e');
+        print(
+            'Error reading chunk for error ID $errorId at offset $offset: $e');
         break;
       }
     }
@@ -1954,14 +2185,25 @@ class DatabaseService {
   }
 
   /// Fetches all errors for a set of inspection door IDs from Main DB
-  static Future<List<Map<String, dynamic>>> getErrorsForInspectionDoorIds(List<int> ids) async {
+  static Future<List<Map<String, dynamic>>> getErrorsForInspectionDoorIds(
+      List<int> ids) async {
     if (ids.isEmpty) return [];
     final db = await getDb();
     final String idString = ids.join(',');
-    
-    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+
+    final Set<String> existingColumns =
+        await _getInspectionDoorErrorsColumns(db);
     final List<String> selectCols = [];
-    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    final List<String> possibleCols = [
+      'id',
+      'inspectionDoorId',
+      'errorId',
+      'errorCode',
+      'quantity',
+      'severity',
+      'notes',
+      'resolutionStatus'
+    ];
     for (final col in possibleCols) {
       if (existingColumns.contains(col)) {
         selectCols.add('ide.$col');
@@ -1994,7 +2236,8 @@ class DatabaseService {
             attachments = attachmentQuery.first['attachments'] as String? ?? '';
           }
         } catch (e) {
-          print('Error loading attachments for error ID $errorId (might be too big for CursorWindow): $e');
+          print(
+              'Error loading attachments for error ID $errorId (might be too big for CursorWindow): $e');
           attachments = await _fetchLargeAttachments(db, errorId);
         }
       }
@@ -2078,8 +2321,15 @@ class DatabaseService {
         )
       ''';
       whereArgs.addAll([
-        searchTerm, searchTerm, searchTerm, searchTerm,
-        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
       ]);
     }
 
@@ -2117,39 +2367,46 @@ class DatabaseService {
   }
 
   /// Exports an inspection package (.db) from Master DB to the specified or default destination folder
-  static Future<String> exportJobPackage(List<int> inspectionIds, {String? destinationPath}) async {
+  static Future<String> exportJobPackage(List<int> inspectionIds,
+      {String? destinationPath}) async {
     String exportPath = destinationPath ?? '';
     if (exportPath.isEmpty) {
       final Directory docDir = await getApplicationDocumentsDirectory();
-      final String downloadPath = (await getDownloadsDirectory())?.path ?? docDir.path;
+      final String downloadPath =
+          (await getDownloadsDirectory())?.path ?? docDir.path;
       Map<String, dynamic>? inspData;
       if (inspectionIds.isNotEmpty) {
         inspData = await getInspectionById(inspectionIds.first);
       }
       final defaultFileName = FileExportHelper.buildPackageFileName(
-        jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
+        jobNumber: inspData?['jobNumber']?.toString() ??
+            inspData?['auftragsnummer']?.toString(),
         projectNumber: inspData?['projectNumber']?.toString(),
-        objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
+        objectAddress: inspData?['objectAddress']?.toString() ??
+            inspData?['clientName']?.toString(),
         packageType: 'inspektion_paket',
       );
       exportPath = join(downloadPath, defaultFileName);
     }
-    
+
     await LocalDatabaseService.downloadJobPackage(inspectionIds: inspectionIds);
     await LocalDatabaseService.exportWorkingDb(exportPath);
     return exportPath;
   }
 
   /// Exports an inspection package (.db) for specific selected door IDs
-  static Future<String> exportDoorsPackage(List<int> doorIds, {String? destinationPath}) async {
+  static Future<String> exportDoorsPackage(List<int> doorIds,
+      {String? destinationPath}) async {
     final db = await getDb();
     final idList = doorIds.join(',');
-    final rows = await db.rawQuery('SELECT DISTINCT inspectionId FROM inspection_doors WHERE doorId IN ($idList)');
+    final rows = await db.rawQuery(
+        'SELECT DISTINCT inspectionId FROM inspection_doors WHERE doorId IN ($idList)');
     final inspectionIds = rows.map((r) => r['inspectionId'] as int).toList();
     if (inspectionIds.isEmpty) {
       throw Exception('Keine zugeordneten Aufträge für diese Türen gefunden.');
     }
-    return await exportJobPackage(inspectionIds, destinationPath: destinationPath);
+    return await exportJobPackage(inspectionIds,
+        destinationPath: destinationPath);
   }
 
   static Future<void> updateDoor(Door door) async {
@@ -2182,7 +2439,8 @@ class DatabaseService {
   }
 
   /// Return all entries for a specific category.
-  static Future<List<ErrorCatalog>> getErrorCatalogByCategory(String category) async {
+  static Future<List<ErrorCatalog>> getErrorCatalogByCategory(
+      String category) async {
     final db = await getDb();
     final maps = await db.query(
       'error_catalog',
@@ -2280,10 +2538,20 @@ class DatabaseService {
   static Future<List<InspectionDoorError>> getErrorsForInspectionDoor(
       int inspectionDoorId) async {
     final db = await getDb();
-    
-    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+
+    final Set<String> existingColumns =
+        await _getInspectionDoorErrorsColumns(db);
     final List<String> selectCols = [];
-    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    final List<String> possibleCols = [
+      'id',
+      'inspectionDoorId',
+      'errorId',
+      'errorCode',
+      'quantity',
+      'severity',
+      'notes',
+      'resolutionStatus'
+    ];
     for (final col in possibleCols) {
       if (existingColumns.contains(col)) {
         selectCols.add(col);
@@ -2296,7 +2564,7 @@ class DatabaseService {
       where: 'inspectionDoorId = ?',
       whereArgs: [inspectionDoorId],
     );
-    
+
     final List<InspectionDoorError> errors = [];
     for (final map in maps) {
       final int? errorId = map['id'] as int?;
@@ -2317,7 +2585,7 @@ class DatabaseService {
           attachments = await _fetchLargeAttachments(db, errorId);
         }
       }
-      
+
       final Map<String, dynamic> fullMap = Map<String, dynamic>.from(map);
       fullMap['attachments'] = attachments;
       errors.add(InspectionDoorError.fromMap(fullMap));
@@ -2326,12 +2594,23 @@ class DatabaseService {
   }
 
   /// Fetches detailed errors joined with error_catalog info for a single inspection door from Main DB.
-  static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(int inspectionDoorId) async {
+  static Future<List<Map<String, dynamic>>> getDetailedErrorsForInspectionDoor(
+      int inspectionDoorId) async {
     final db = await getDb();
-    
-    final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(db);
+
+    final Set<String> existingColumns =
+        await _getInspectionDoorErrorsColumns(db);
     final List<String> selectCols = [];
-    final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+    final List<String> possibleCols = [
+      'id',
+      'inspectionDoorId',
+      'errorId',
+      'errorCode',
+      'quantity',
+      'severity',
+      'notes',
+      'resolutionStatus'
+    ];
     for (final col in possibleCols) {
       if (existingColumns.contains(col)) {
         selectCols.add('ide.$col');
@@ -2387,7 +2666,8 @@ class DatabaseService {
   }
 
   /// Search error catalog by code or description
-  static Future<List<ErrorCatalog>> searchErrorCatalog(String query, {int? limit}) async {
+  static Future<List<ErrorCatalog>> searchErrorCatalog(String query,
+      {int? limit}) async {
     final db = await getDb();
     if (query.trim().isEmpty) {
       return getAllErrorCatalog();
@@ -2436,24 +2716,31 @@ class DatabaseService {
       } catch (_) {}
       const int targetVersion = 27;
 
-      final Set<String> packageDoorCols = await _getTableColumns(packageDb, 'doors');
-      final Set<String> packageInspCols = await _getTableColumns(packageDb, 'inspections');
+      final Set<String> packageDoorCols =
+          await _getTableColumns(packageDb, 'doors');
+      final Set<String> packageInspCols =
+          await _getTableColumns(packageDb, 'inspections');
 
       final List<String> convertedProperties = [];
       if (packageDoorCols.contains('lintelHeightUnder1m')) {
-        convertedProperties.add('Altes Attribut "lintelHeightUnder1m" (unter 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+        convertedProperties.add(
+            'Altes Attribut "lintelHeightUnder1m" (unter 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
       }
       if (packageDoorCols.contains('lintelHeightOver1m')) {
-        convertedProperties.add('Altes Attribut "lintelHeightOver1m" (über 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
+        convertedProperties.add(
+            'Altes Attribut "lintelHeightOver1m" (über 1m) automatisch auf Schema-Standard "lintelHeightInsideOver1m" überführt');
       }
       if (packageDoorCols.contains('customerName')) {
-        convertedProperties.add('Metadatum "customerName" in Türzeilen erkannt und kompatibel überführt');
+        convertedProperties.add(
+            'Metadatum "customerName" in Türzeilen erkannt und kompatibel überführt');
       }
       if (!packageInspCols.contains('orderType')) {
-        convertedProperties.add('Fehlende Auftragsphase ("orderType") in Prüfungen automatisch mit "Wartung" initialisiert');
+        convertedProperties.add(
+            'Fehlende Auftragsphase ("orderType") in Prüfungen automatisch mit "Wartung" initialisiert');
       }
       if (!packageInspCols.contains('isLocked')) {
-        convertedProperties.add('Sperrstatus ("isLocked") für Altdaten automatisch mit entsperrt (0) initialisiert');
+        convertedProperties.add(
+            'Sperrstatus ("isLocked") für Altdaten automatisch mit entsperrt (0) initialisiert');
       }
 
       await masterDb.transaction((txn) async {
@@ -2461,11 +2748,21 @@ class DatabaseService {
         final pDoors = await packageDb.query('doors');
         final pInspections = await packageDb.query('inspections');
         final pJunctions = await packageDb.query('inspection_doors');
-        
+
         final List<Map<String, dynamic>> pErrors = [];
-        final Set<String> existingColumns = await _getInspectionDoorErrorsColumns(packageDb);
+        final Set<String> existingColumns =
+            await _getInspectionDoorErrorsColumns(packageDb);
         final List<String> selectCols = [];
-        final List<String> possibleCols = ['id', 'inspectionDoorId', 'errorId', 'errorCode', 'quantity', 'severity', 'notes', 'resolutionStatus'];
+        final List<String> possibleCols = [
+          'id',
+          'inspectionDoorId',
+          'errorId',
+          'errorCode',
+          'quantity',
+          'severity',
+          'notes',
+          'resolutionStatus'
+        ];
         for (final col in possibleCols) {
           if (existingColumns.contains(col)) {
             selectCols.add(col);
@@ -2488,10 +2785,12 @@ class DatabaseService {
                 whereArgs: [errorId],
               );
               if (attachmentQuery.isNotEmpty) {
-                attachments = attachmentQuery.first['attachments'] as String? ?? '';
+                attachments =
+                    attachmentQuery.first['attachments'] as String? ?? '';
               }
             } catch (e) {
-              print('Error loading attachments from package for error ID $errorId: $e');
+              print(
+                  'Error loading attachments from package for error ID $errorId: $e');
               attachments = await _fetchLargeAttachments(packageDb, errorId);
             }
           }
@@ -2507,7 +2806,8 @@ class DatabaseService {
         // Import ALL catalog entries (not just Pending) to enable errorId remapping
         final pCatalog = await packageDb.query('error_catalog');
         if (pCatalog.isNotEmpty) {
-          convertedProperties.add('ID-Remapping für ${pCatalog.length} Mängelkatalog-Einträge via Fehlercode durchgeführt (FK-Konsistenz)');
+          convertedProperties.add(
+              'ID-Remapping für ${pCatalog.length} Mängelkatalog-Einträge via Fehlercode durchgeführt (FK-Konsistenz)');
         }
 
         // Check for placeholder properties in doors
@@ -2520,7 +2820,8 @@ class DatabaseService {
         final List<String> placeholderSampleDoors = [];
 
         for (final row in pDoors) {
-          final doorNum = (row['doorNumber'] ?? row['doorAlias'] ?? '').toString().trim();
+          final doorNum =
+              (row['doorNumber'] ?? row['doorAlias'] ?? '').toString().trim();
           bool hasPlaceholder = false;
 
           final appNo = (row['approvalNumber'] ?? '').toString().trim();
@@ -2554,7 +2855,9 @@ class DatabaseService {
             hasPlaceholder = true;
           }
 
-          if (hasPlaceholder && placeholderSampleDoors.length < 8 && doorNum.isNotEmpty) {
+          if (hasPlaceholder &&
+              placeholderSampleDoors.length < 8 &&
+              doorNum.isNotEmpty) {
             if (!placeholderSampleDoors.contains(doorNum)) {
               placeholderSampleDoors.add(doorNum);
             }
@@ -2563,30 +2866,40 @@ class DatabaseService {
 
         final Map<String, int> placeholderDoorProperties = {};
         if (placeholderApprovalCount > 0) {
-          placeholderDoorProperties['Zulassungsnummer (approvalNumber)'] = placeholderApprovalCount;
+          placeholderDoorProperties['Zulassungsnummer (approvalNumber)'] =
+              placeholderApprovalCount;
         }
         if (placeholderManufacturerNumCount > 0) {
-          placeholderDoorProperties['Herstellernummer (manufacturerNumber)'] = placeholderManufacturerNumCount;
+          placeholderDoorProperties['Herstellernummer (manufacturerNumber)'] =
+              placeholderManufacturerNumCount;
         }
         if (placeholderDopCount > 0) {
-          placeholderDoorProperties['Leistungserklärung / DoP (dopNumber)'] = placeholderDopCount;
+          placeholderDoorProperties['Leistungserklärung / DoP (dopNumber)'] =
+              placeholderDopCount;
         }
         if (placeholderYearCount > 0) {
-          placeholderDoorProperties['Baujahr (manufactureYear)'] = placeholderYearCount;
+          placeholderDoorProperties['Baujahr (manufactureYear)'] =
+              placeholderYearCount;
         }
         if (placeholderFireProtCount > 0) {
-          placeholderDoorProperties['Brandschutzklasse (fireProtection)'] = placeholderFireProtCount;
+          placeholderDoorProperties['Brandschutzklasse (fireProtection)'] =
+              placeholderFireProtCount;
         }
         if (placeholderSmokeProtCount > 0) {
-          placeholderDoorProperties['Rauchschutzklasse (smokeProtection)'] = placeholderSmokeProtCount;
+          placeholderDoorProperties['Rauchschutzklasse (smokeProtection)'] =
+              placeholderSmokeProtCount;
         }
 
         final bool isLegacy = packageVersion < targetVersion ||
             convertedProperties.isNotEmpty ||
             placeholderDoorProperties.isNotEmpty;
         if (isLegacy) {
-          final firstInsp = pInspections.isNotEmpty ? pInspections.first : <String, dynamic>{};
-          final firstJobNum = (firstInsp['jobNumber'] ?? firstInsp['auftragsnummer'] ?? '').toString();
+          final firstInsp = pInspections.isNotEmpty
+              ? pInspections.first
+              : <String, dynamic>{};
+          final firstJobNum =
+              (firstInsp['jobNumber'] ?? firstInsp['auftragsnummer'] ?? '')
+                  .toString();
           final firstClient = (firstInsp['clientName'] ?? '').toString();
           final firstAddress = (firstInsp['objectAddress'] ?? '').toString();
           final firstRepairDate = firstInsp['repairDate']?.toString();
@@ -2620,7 +2933,8 @@ class DatabaseService {
 
         // 2. Merge ALL Catalog Entries and build catalogIdMap (packageId → masterId)
         //    Keyed by `code` so IDs are remapped correctly across different DBs.
-        final masterCatalogColumns = await _getTableColumns(txn, 'error_catalog');
+        final masterCatalogColumns =
+            await _getTableColumns(txn, 'error_catalog');
         final Map<int, int> catalogIdMap = {};
         for (var row in pCatalog) {
           final packageCatalogId = row['errorId'] as int;
@@ -2629,10 +2943,13 @@ class DatabaseService {
           final description = row['description'] as String? ?? '';
           final data = Map<String, dynamic>.from(row)..remove('errorId');
           data.removeWhere((key, _) => !masterCatalogColumns.contains(key));
-          
+
           int masterCatalogId;
           final existing = await txn.query('error_catalog',
-              columns: ['errorId'], where: 'code = ?', whereArgs: [code], limit: 1);
+              columns: ['errorId'],
+              where: 'code = ?',
+              whereArgs: [code],
+              limit: 1);
           if (existing.isNotEmpty) {
             masterCatalogId = existing.first['errorId'] as int;
             // Only overwrite if the incoming entry is Pending (a new proposal)
@@ -2642,8 +2959,7 @@ class DatabaseService {
                   whereArgs: [masterCatalogId]);
             }
           } else {
-            masterCatalogId = await txn.insert(
-                'error_catalog', data,
+            masterCatalogId = await txn.insert('error_catalog', data,
                 conflictAlgorithm: ConflictAlgorithm.ignore);
             if (status == 'Pending') {
               newCatalogProposals.add('$code: $description');
@@ -2672,16 +2988,20 @@ class DatabaseService {
           }
           final doorNumber = incomingDoor.doorNumber.trim();
           if (existing.isEmpty && doorNumber.isNotEmpty) {
-            existing = await txn.query('doors', where: 'doorNumber = ?', whereArgs: [doorNumber], limit: 1);
+            existing = await txn.query('doors',
+                where: 'doorNumber = ?', whereArgs: [doorNumber], limit: 1);
           }
-          final Door? existingDoor = existing.isNotEmpty ? Door.fromMap(existing.first) : null;
+          final Door? existingDoor =
+              existing.isNotEmpty ? Door.fromMap(existing.first) : null;
 
           // Detect new custom dropdown options introduced by Inspector
-          final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(incomingDoor, existing: existingDoor);
+          final dropdownConflicts = DoorValidator.detectDropdownOptionConflicts(
+              incomingDoor,
+              existing: existingDoor);
           if (dropdownConflicts.isNotEmpty) {
             packageDoorConflicts.addAll(dropdownConflicts);
           }
-          
+
           int masterId;
           // Sanitize door data through canonical Door model and target schema column whitelist
           final doorMap = incomingDoor.toMap()..remove('id');
@@ -2691,10 +3011,11 @@ class DatabaseService {
               data[entry.key] = entry.value;
             }
           }
-          
+
           if (existing.isNotEmpty) {
             masterId = existing.first['id'] as int;
-            await txn.update('doors', data, where: 'id = ?', whereArgs: [masterId]);
+            await txn
+                .update('doors', data, where: 'id = ?', whereArgs: [masterId]);
             updatedDoorsCount++;
           } else {
             masterId = await txn.insert('doors', data);
@@ -2704,20 +3025,24 @@ class DatabaseService {
         }
 
         // 4. Merge Inspections and create ID Mapping (Package ID -> Master ID)
-        final masterInspectionColumns = await _getTableColumns(txn, 'inspections');
+        final masterInspectionColumns =
+            await _getTableColumns(txn, 'inspections');
         Map<int, int> inspectionIdMap = {};
         final Set<String> reparaturJobsToConsolidate = {};
 
         for (var row in pInspections) {
-          final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
+          final jobNum =
+              (row['jobNumber'] ?? row['auftragsnummer'] ?? '') as String;
           final packageId = row['inspectionId'] as int;
-          var incomingOrderType = row['orderType']?.toString()?.trim();
+          var incomingOrderType = row['orderType']?.toString().trim();
           if (incomingOrderType == null || incomingOrderType.isEmpty) {
             incomingOrderType = 'Wartung';
           }
-          final incomingRepairDate = row['repairDate']?.toString()?.trim() ?? '';
+          final incomingRepairDate = row['repairDate']?.toString().trim() ?? '';
 
-          if (incomingOrderType == 'Reparatur' || incomingOrderType == 'Erledigt' || incomingRepairDate.isNotEmpty) {
+          if (incomingOrderType == 'Reparatur' ||
+              incomingOrderType == 'Erledigt' ||
+              incomingRepairDate.isNotEmpty) {
             if (jobNum.trim().isNotEmpty) {
               reparaturJobsToConsolidate.add(jobNum.trim());
             }
@@ -2733,9 +3058,10 @@ class DatabaseService {
             );
           }
           if (existing.isEmpty) {
-            existing = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
+            existing = await txn.query('inspections',
+                where: 'jobNumber = ?', whereArgs: [jobNum], limit: 1);
           }
-          
+
           int masterId;
           final data = Map<String, dynamic>.from(row)
             ..remove('inspectionId')
@@ -2745,7 +3071,8 @@ class DatabaseService {
 
           if (existing.isNotEmpty) {
             masterId = existing.first['inspectionId'] as int;
-            await txn.update('inspections', data, where: 'inspectionId = ?', whereArgs: [masterId]);
+            await txn.update('inspections', data,
+                where: 'inspectionId = ?', whereArgs: [masterId]);
             updatedInspectionsCount++;
           } else {
             masterId = await txn.insert('inspections', data);
@@ -2755,7 +3082,8 @@ class DatabaseService {
         }
 
         // 5. Merge Junctions (inspection_doors)
-        final masterJunctionColumns = await _getTableColumns(txn, 'inspection_doors');
+        final masterJunctionColumns =
+            await _getTableColumns(txn, 'inspection_doors');
         Map<int, int> junctionIdMap = {};
         for (var row in pJunctions) {
           final packageId = row['id'] as int;
@@ -2771,17 +3099,23 @@ class DatabaseService {
             ..remove('id');
           data.removeWhere((key, _) => !masterJunctionColumns.contains(key));
 
-          final isNewJunction = (await txn.query('inspection_doors', 
-              where: 'inspectionId = ? AND doorId = ?', whereArgs: [mInspId, mDoorId], limit: 1)).isEmpty;
+          final isNewJunction = (await txn.query('inspection_doors',
+                  where: 'inspectionId = ? AND doorId = ?',
+                  whereArgs: [mInspId, mDoorId],
+                  limit: 1))
+              .isEmpty;
 
           // Check if this door/job combo already has a junction
-          final existing = await txn.query('inspection_doors', 
-              where: 'inspectionId = ? AND doorId = ?', whereArgs: [mInspId, mDoorId], limit: 1);
+          final existing = await txn.query('inspection_doors',
+              where: 'inspectionId = ? AND doorId = ?',
+              whereArgs: [mInspId, mDoorId],
+              limit: 1);
 
           int masterId;
           if (existing.isNotEmpty) {
             masterId = existing.first['id'] as int;
-            await txn.update('inspection_doors', data, where: 'id = ?', whereArgs: [masterId]);
+            await txn.update('inspection_doors', data,
+                where: 'id = ?', whereArgs: [masterId]);
           } else {
             masterId = await txn.insert('inspection_doors', data);
           }
@@ -2789,7 +3123,8 @@ class DatabaseService {
 
           // Track door change detail for summary
           if (packageDoorId != null) {
-            final doorRow = pDoors.firstWhere((d) => d['id'] == packageDoorId, orElse: () => {});
+            final doorRow = pDoors.firstWhere((d) => d['id'] == packageDoorId,
+                orElse: () => {});
             final alias = doorRow['doorAlias'] as String? ?? '';
             final doorNum = doorRow['doorNumber'] as String? ?? '';
             final roomDesig = doorRow['roomDesignation'] as String? ?? '';
@@ -2798,7 +3133,8 @@ class DatabaseService {
             final status = row['status'] as String? ?? 'InProgress';
 
             // Count defects for this junction
-            final junctionErrorCount = pErrors.where((e) => e['inspectionDoorId'] == packageId).length;
+            final junctionErrorCount =
+                pErrors.where((e) => e['inspectionDoorId'] == packageId).length;
 
             doorChanges.add(DoorChangeItem(
               doorAlias: alias,
@@ -2819,34 +3155,41 @@ class DatabaseService {
           final masterCatId = entry.value;
           // Look up code for this master catalog entry
           final catRow = await txn.query('error_catalog',
-              columns: ['code'], where: 'errorId = ?', whereArgs: [masterCatId], limit: 1);
+              columns: ['code'],
+              where: 'errorId = ?',
+              whereArgs: [masterCatId],
+              limit: 1);
           if (catRow.isNotEmpty) {
             masterIdToCode[masterCatId] = catRow.first['code'] as String? ?? '';
           }
         }
 
         // 6. Merge Errors — remap errorId via catalogIdMap to prevent FK mismatch
-        final masterErrorColumns = await _getTableColumns(txn, 'inspection_door_errors');
+        final masterErrorColumns =
+            await _getTableColumns(txn, 'inspection_door_errors');
         for (var row in pErrors) {
           final mJunctionId = junctionIdMap[row['inspectionDoorId']];
           if (mJunctionId == null) continue;
 
           final packageErrorId = row['errorId'] as int?;
-          int? mappedErrorId = packageErrorId != null
-              ? catalogIdMap[packageErrorId]
-              : null;
+          int? mappedErrorId =
+              packageErrorId != null ? catalogIdMap[packageErrorId] : null;
 
           final String rawErrorCode = row['errorCode'] as String? ?? '';
           if (mappedErrorId == null && rawErrorCode.isNotEmpty) {
             final fallback = await txn.query('error_catalog',
-                columns: ['errorId'], where: 'code = ?', whereArgs: [rawErrorCode], limit: 1);
+                columns: ['errorId'],
+                where: 'code = ?',
+                whereArgs: [rawErrorCode],
+                limit: 1);
             if (fallback.isNotEmpty) {
               mappedErrorId = fallback.first['errorId'] as int;
             }
           }
 
-          final errorCode = (mappedErrorId != null ? masterIdToCode[mappedErrorId] : null)
-              ?? rawErrorCode;
+          final errorCode =
+              (mappedErrorId != null ? masterIdToCode[mappedErrorId] : null) ??
+                  rawErrorCode;
 
           final data = Map<String, dynamic>.from(row)
             ..['inspectionDoorId'] = mJunctionId
@@ -2893,24 +3236,36 @@ class DatabaseService {
         // Auto-consolidate multiple records of the same jobNumber if multiple phases exist
         final Set<String> allImportedJobs = {};
         for (final row in pInspections) {
-          final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '').toString().trim();
+          final jobNum = (row['jobNumber'] ?? row['auftragsnummer'] ?? '')
+              .toString()
+              .trim();
           if (jobNum.isNotEmpty) {
             allImportedJobs.add(jobNum);
           }
         }
         for (final jobNum in allImportedJobs) {
-          final existingInspections = await txn.query('inspections', where: 'jobNumber = ?', whereArgs: [jobNum]);
-          if (existingInspections.length > 1 || reparaturJobsToConsolidate.contains(jobNum)) {
+          final existingInspections = await txn.query('inspections',
+              where: 'jobNumber = ?', whereArgs: [jobNum]);
+          if (existingInspections.length > 1 ||
+              reparaturJobsToConsolidate.contains(jobNum)) {
             await consolidateJobToErledigt(jobNumber: jobNum, executor: txn);
           }
         }
 
         fileReports.add(InspectionFileReportItem(
           fileName: basename(packagePath),
-          clientName: pInspections.isNotEmpty ? (pInspections.first['clientName'] as String? ?? '') : '',
-          objectAddress: pInspections.isNotEmpty ? (pInspections.first['objectAddress'] as String? ?? '') : '',
-          jobNumber: pInspections.isNotEmpty ? (pInspections.first['jobNumber'] as String? ?? '') : '',
-          inspectionDate: pInspections.isNotEmpty ? (pInspections.first['date'] as String? ?? '') : '',
+          clientName: pInspections.isNotEmpty
+              ? (pInspections.first['clientName'] as String? ?? '')
+              : '',
+          objectAddress: pInspections.isNotEmpty
+              ? (pInspections.first['objectAddress'] as String? ?? '')
+              : '',
+          jobNumber: pInspections.isNotEmpty
+              ? (pInspections.first['jobNumber'] as String? ?? '')
+              : '',
+          inspectionDate: pInspections.isNotEmpty
+              ? (pInspections.first['date'] as String? ?? '')
+              : '',
           newDoorsCount: newDoorsCount,
           updatedDoorsCount: updatedDoorsCount,
           defectsRecordedCount: totalErrorsImported,
@@ -2940,7 +3295,8 @@ class DatabaseService {
     }
   }
 
-  static Future<Set<String>> _getTableColumns(DatabaseExecutor db, String tableName) async {
+  static Future<Set<String>> _getTableColumns(
+      DatabaseExecutor db, String tableName) async {
     try {
       final rows = await db.rawQuery('PRAGMA table_info($tableName)');
       return rows.map((r) => r['name'] as String).toSet();
@@ -2951,7 +3307,8 @@ class DatabaseService {
 
   static String _cleanCatalogDesc(String text) {
     return text
-        .replaceFirst(RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
+        .replaceFirst(
+            RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
         .replaceFirst(RegExp(r'^[xX]\s+'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
@@ -2963,7 +3320,7 @@ class DatabaseService {
     bool autoResolve = false,
   }) async {
     final db = await getDb();
-    
+
     return await db.transaction<ImportResult>((txn) async {
       final existingRows = await txn.query('error_catalog');
       final existingByCode = <String, ErrorCatalog>{};
@@ -2985,9 +3342,10 @@ class DatabaseService {
       for (final error in errors) {
         final cleanIncomingDesc = _cleanCatalogDesc(error.description);
         final existingForCode = existingByCode[error.code.toLowerCase()];
-        
+
         if (existingForCode != null) {
-          final cleanExistingDesc = _cleanCatalogDesc(existingForCode.description);
+          final cleanExistingDesc =
+              _cleanCatalogDesc(existingForCode.description);
           if (cleanExistingDesc == cleanIncomingDesc) {
             duplicateCount++;
             continue;
@@ -3011,14 +3369,18 @@ class DatabaseService {
             description: error.description,
             incoming: error,
             existing: existingForCode,
-            reason: 'Bestehender Eintrag mit Code "${error.code}" hat andere Beschreibung ("${existingForCode.description}")',
+            reason:
+                'Bestehender Eintrag mit Code "${error.code}" hat andere Beschreibung ("${existingForCode.description}")',
           ));
           continue;
         }
 
-        final existingForDescription = cleanIncomingDesc.isNotEmpty ? existingByDescription[cleanIncomingDesc] : null;
+        final existingForDescription = cleanIncomingDesc.isNotEmpty
+            ? existingByDescription[cleanIncomingDesc]
+            : null;
         if (existingForDescription != null &&
-            existingForDescription.code.toLowerCase() != error.code.toLowerCase() &&
+            existingForDescription.code.toLowerCase() !=
+                error.code.toLowerCase() &&
             cleanIncomingDesc.length > 5) {
           if (autoResolve) {
             await txn.insert(
@@ -3034,7 +3396,8 @@ class DatabaseService {
             description: error.description,
             incoming: error,
             existing: existingForDescription,
-            reason: 'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDescription.code})',
+            reason:
+                'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDescription.code})',
           ));
           continue;
         }
@@ -3059,7 +3422,8 @@ class DatabaseService {
     });
   }
 
-  static Future<void> applyConflictResolutions(List<ConflictResolution> resolutions) async {
+  static Future<void> applyConflictResolutions(
+      List<ConflictResolution> resolutions) async {
     final db = await getDb();
     await db.transaction((txn) async {
       for (final resolution in resolutions) {
@@ -3119,9 +3483,11 @@ class DatabaseService {
       final content = encoder.convert(map);
 
       if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
-        final tempFile = File(join(externalDir.path, 'temp_error_catalog.json'));
+        final tempFile =
+            File(join(externalDir.path, 'temp_error_catalog.json'));
         await tempFile.writeAsString(content);
-        print('[Catalog] (Debug) Saved dynamic error catalog to ${tempFile.path}');
+        print(
+            '[Catalog] (Debug) Saved dynamic error catalog to ${tempFile.path}');
       } else if (!kDebugMode) {
         final externalFile = File(join(externalDir.path, 'error_catalog.json'));
         await externalFile.writeAsString(content);
@@ -3135,10 +3501,11 @@ class DatabaseService {
   /// Retrieves or creates a legacy defect entry under category 'Altdaten'
   /// with continuous letter-prefixed numbering (ALT-001, ALT-002, ...)
   /// and status 'Historical' so it does not interfere with the official catalog.
-  static Future<ErrorCatalog> getOrCreateLegacyError(String rawDescription) async {
+  static Future<ErrorCatalog> getOrCreateLegacyError(
+      String rawDescription) async {
     final db = await getDb();
-    final cleanDesc = rawDescription.trim().isEmpty 
-        ? 'Sonstiger historischer Mangel / Altdaten' 
+    final cleanDesc = rawDescription.trim().isEmpty
+        ? 'Sonstiger historischer Mangel / Altdaten'
         : rawDescription.trim();
 
     // 1. Check if an entry with this exact description already exists under 'Altdaten'
@@ -3183,12 +3550,14 @@ class DatabaseService {
       status: 'Historical',
     );
 
-    final id = await db.insert('error_catalog', legacyError.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+    final id = await db.insert('error_catalog', legacyError.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.ignore);
     if (id > 0) {
       return legacyError.copyWith(errorId: id);
     }
 
-    final retry = await db.query('error_catalog', where: 'code = ?', whereArgs: [nextCode], limit: 1);
+    final retry = await db.query('error_catalog',
+        where: 'code = ?', whereArgs: [nextCode], limit: 1);
     if (retry.isNotEmpty) {
       return ErrorCatalog.fromMap(retry.first);
     }
@@ -3201,7 +3570,8 @@ class DatabaseService {
   }
 
   /// Records a successful API upload for later reference/deletion
-  static Future<void> recordApiUpload(String jobNumber, String fileName, int documentId) async {
+  static Future<void> recordApiUpload(
+      String jobNumber, String fileName, int documentId) async {
     final db = await getDb();
     await db.insert('api_uploads', {
       'jobNumber': jobNumber,
@@ -3225,7 +3595,8 @@ class DatabaseService {
       ''');
 
       // 2. Delete door-inspection junctions
-      await txn.delete('inspection_doors', where: 'inspectionId IN ($idString)');
+      await txn.delete('inspection_doors',
+          where: 'inspectionId IN ($idString)');
 
       // 3. Delete the job records themselves
       await txn.delete('inspections', where: 'inspectionId IN ($idString)');
@@ -3312,12 +3683,12 @@ class DatabaseService {
           'inspection_door_errors',
           {
             'errorCode': targetCode,
-            if (targetId != null) 'errorId': targetId,
+            'errorId': targetId,
           },
           where: 'errorCode = ? OR errorId = ?',
           whereArgs: [oldCode, oldErrorId ?? -1],
         );
-      } else if (oldErrorId != null && targetId != null && oldErrorId != targetId) {
+      } else if (oldErrorId != null && oldErrorId != targetId) {
         await txn.update(
           'inspection_door_errors',
           {'errorId': targetId},
@@ -3371,21 +3742,24 @@ class DatabaseService {
   // ─────────────────────────────────────────────────────────────
 
   /// Startup module to check and initialize the Error Catalog.
-  static Future<void> checkAndInitializeCatalog() async {
+  /// When [force] is true, ignores pre-existing DB counts and reloads/upserts entries from the JSON catalog.
+  static Future<void> checkAndInitializeCatalog({bool force = false}) async {
     final db = await getDb();
-    
-    final existingCount = await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
+
+    final existingCount =
+        await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
     final count = Sqflite.firstIntValue(existingCount) ?? 0;
-    
+
     // Check if the database has any seeded/non-placeholder entries.
     // Placeholders have description starting with 'Excel-Fehler' or are empty.
     final nonPlaceholderCountRows = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM error_catalog WHERE description NOT LIKE 'Excel-Fehler %' AND description != ''"
-    );
-    final nonPlaceholderCount = Sqflite.firstIntValue(nonPlaceholderCountRows) ?? 0;
+        "SELECT COUNT(*) as count FROM error_catalog WHERE description NOT LIKE 'Excel-Fehler %' AND description != ''");
+    final nonPlaceholderCount =
+        Sqflite.firstIntValue(nonPlaceholderCountRows) ?? 0;
 
-    if (count > 0 && nonPlaceholderCount > 0) {
-      print('[Catalog] Database has $count entries including seeded ones. Initialization skipped.');
+    if (!force && count > 0 && nonPlaceholderCount > 0) {
+      print(
+          '[Catalog] Database has $count entries including seeded ones. Initialization skipped.');
       return;
     }
 
@@ -3393,11 +3767,43 @@ class DatabaseService {
     final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
     List<ErrorCatalog> errors = [];
 
-    // In debug mode, check for dynamic temp error catalog first (outside of test environments)
-    if (kDebugMode && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    // 1. External error_catalog.json (production / external config directory)
+    final jsonFile = File(join(externalDir.path, 'error_catalog.json'));
+    if (await jsonFile.exists()) {
+      print('[Catalog] Found external JSON at ${jsonFile.path}. Importing...');
+      try {
+        final content = await jsonFile.readAsString();
+        errors = _parseJsonCatalog(content);
+      } catch (e) {
+        print('[Catalog] JSON Read/Parse Error: $e');
+      }
+    }
+
+    // 2. Project root error_catalog.json (root directory where user edits it)
+    if (errors.isEmpty) {
+      final projectFile =
+          File(join(Directory.current.path, 'error_catalog.json'));
+      if (await projectFile.exists()) {
+        print(
+            '[Catalog] Found project root JSON at ${projectFile.path}. Importing...');
+        try {
+          final content = await projectFile.readAsString();
+          errors = _parseJsonCatalog(content);
+        } catch (e) {
+          print('[Catalog] Project Root JSON Read/Parse Error: $e');
+        }
+      }
+    }
+
+    // 3. In debug mode, check for dynamic temp error catalog only if no authoritative file exists
+    if (errors.isEmpty &&
+        !force &&
+        kDebugMode &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
       final tempFile = File(join(externalDir.path, 'temp_error_catalog.json'));
       if (await tempFile.exists()) {
-        print('[Catalog] (Debug) Found dynamic temp JSON at ${tempFile.path}. Importing...');
+        print(
+            '[Catalog] (Debug) Found dynamic temp JSON at ${tempFile.path}. Importing...');
         try {
           final content = await tempFile.readAsString();
           errors = _parseJsonCatalog(content);
@@ -3407,21 +3813,10 @@ class DatabaseService {
       }
     }
 
+    // 4. Fallback to bundled asset
     if (errors.isEmpty) {
-      final jsonFile = File(join(externalDir.path, 'error_catalog.json'));
-      if (await jsonFile.exists()) {
-        print('[Catalog] Found JSON at ${jsonFile.path}. Importing...');
-        try {
-          final content = await jsonFile.readAsString();
-          errors = _parseJsonCatalog(content);
-        } catch (e) {
-          print('[Catalog] JSON Read/Parse Error: $e');
-        }
-      }
-    }
-
-    if (errors.isEmpty) {
-      print('[Catalog] No external file found. Loading from internal asset (error_catalog.json)...');
+      print(
+          '[Catalog] No external or project file found. Loading from internal asset (error_catalog.json)...');
       try {
         final content = await rootBundle.loadString('error_catalog.json');
         errors = _parseJsonCatalog(content);
@@ -3445,11 +3840,14 @@ class DatabaseService {
           if (existing.isNotEmpty) {
             final existingId = existing.first['errorId'] as int;
             final existingDesc = existing.first['description'] as String? ?? '';
-            final existingSeverity = existing.first['severity'] as String? ?? '';
-            // Update in-place if it is a placeholder or has invalid severity
-            if (existingDesc.startsWith('Excel-Fehler') ||
+            final existingSeverity =
+                existing.first['severity'] as String? ?? '';
+            // Update in-place if forced, or if it is a placeholder or has invalid severity
+            if (force ||
+                existingDesc.startsWith('Excel-Fehler') ||
                 existingDesc.isEmpty ||
-                !['low', 'medium', 'high', 'critical'].contains(existingSeverity.toLowerCase())) {
+                !['low', 'medium', 'high', 'critical']
+                    .contains(existingSeverity.toLowerCase())) {
               await txn.update(
                 'error_catalog',
                 error.toMap()..remove('errorId'),
@@ -3466,7 +3864,8 @@ class DatabaseService {
           }
         }
       });
-      print('[Catalog] Catalog check and initialize/update completed. ${errors.length} items parsed.');
+      print(
+          '[Catalog] Catalog check and initialize/update completed. ${errors.length} items parsed.');
     } catch (e) {
       print('[Catalog] Error during catalog initialization: $e');
     }
@@ -3529,7 +3928,8 @@ class DatabaseService {
   /// written directly and included in [DoorMergeResult.cleanDoors].
   /// Doors that differ from existing records produce [DoorConflict] entries
   /// and are NOT written — the Manager resolves them via [DoorConflictReviewPage].
-  static Future<List<Map<String, dynamic>>> _getPreviousInspectionsForDoor(int doorId) async {
+  static Future<List<Map<String, dynamic>>> _getPreviousInspectionsForDoor(
+      int doorId) async {
     final db = await getDb();
     return await db.rawQuery('''
       SELECT i.jobNumber, i.date, i.clientName, i.objectAddress, id.status, id.notes
@@ -3540,7 +3940,8 @@ class DatabaseService {
     ''', [doorId]);
   }
 
-  static Future<DateTime?> getMostRecentInspectionDateForDoor(int doorId) async {
+  static Future<DateTime?> getMostRecentInspectionDateForDoor(
+      int doorId) async {
     final db = await getDb();
     final result = await db.rawQuery('''
       SELECT MAX(i.date) as maxDate
@@ -3594,7 +3995,8 @@ class DatabaseService {
       }
 
       // Check for new dropdown options introduced in incoming data
-      final dropdownOptionConflicts = DoorValidator.detectDropdownOptionConflicts(
+      final dropdownOptionConflicts =
+          DoorValidator.detectDropdownOptionConflicts(
         incoming,
         existing: existingDoor,
         sourceContext: sourceContext,
@@ -3666,7 +4068,8 @@ class DatabaseService {
             type: DoorConflictType.identityCollision,
             fieldName: 'doorAlias',
             fieldLabel: 'Tür-Alias / Türnummer',
-            existingValue: collidingExisting.doorAlias ?? collidingExisting.doorNumber,
+            existingValue:
+                collidingExisting.doorAlias ?? collidingExisting.doorNumber,
             incomingValue: alias,
             ruleCode: 'IDENTITY',
             message:
@@ -3687,18 +4090,23 @@ class DatabaseService {
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
         cleanDoors.add(incoming.copyWith(id: id));
-        logs.add('[ERSTMALIGER IMPORT] Tür "$alias" aus $sourceContext erfolgreich im Stammdatenbestand angelegt.');
+        logs.add(
+            '[ERSTMALIGER IMPORT] Tür "$alias" aus $sourceContext erfolgreich im Stammdatenbestand angelegt.');
         continue;
       }
 
       // Step 3 — Record exists: compare field by field
-      final fieldConflicts = DoorValidator.detectConflicts(incoming, existingDoor!);
-      final DateTime? dbInspectionDate = await getMostRecentInspectionDateForDoor(existingDoor.id!);
-      final DateTime incomingDate = DateTime.tryParse(currentInspectionDate) ?? DateTime.now();
+      final fieldConflicts =
+          DoorValidator.detectConflicts(incoming, existingDoor);
+      final DateTime? dbInspectionDate =
+          await getMostRecentInspectionDateForDoor(existingDoor.id!);
+      final DateTime incomingDate =
+          DateTime.tryParse(currentInspectionDate) ?? DateTime.now();
 
       if (fieldConflicts.isEmpty) {
         // Only update master door record if incoming inspection is SAME OR NEWER than DB record
-        if (dbInspectionDate == null || !incomingDate.isBefore(dbInspectionDate)) {
+        if (dbInspectionDate == null ||
+            !incomingDate.isBefore(dbInspectionDate)) {
           await db.update(
             'doors',
             incoming.toMap()..remove('id'),
@@ -3708,7 +4116,6 @@ class DatabaseService {
         }
         cleanDoors.add(existingDoor);
       } else {
-
         if (dbInspectionDate == null) {
           // No previous inspection date in DB. Treat incoming as newest. Auto-update without conflicts.
           await db.update(
@@ -3718,15 +4125,19 @@ class DatabaseService {
             whereArgs: [alias],
           );
           cleanDoors.add(incoming.copyWith(id: existingDoor.id));
-          
+
           for (final conflict in fieldConflicts) {
-            logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Initial inspection date set).');
+            logs.add(
+                '[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Initial inspection date set).');
           }
         } else {
           final DateTime existingDate = dbInspectionDate;
-          final DateTime recentDate = incomingDate.isAfter(existingDate) ? incomingDate : existingDate;
-          final DateTime olderDate = incomingDate.isBefore(existingDate) ? incomingDate : existingDate;
-          final double diffYears = recentDate.difference(olderDate).inDays / 365.25;
+          final DateTime recentDate =
+              incomingDate.isAfter(existingDate) ? incomingDate : existingDate;
+          final DateTime olderDate =
+              incomingDate.isBefore(existingDate) ? incomingDate : existingDate;
+          final double diffYears =
+              recentDate.difference(olderDate).inDays / 365.25;
 
           if (incomingDate.isBefore(existingDate)) {
             // Existing DB inspection is newer than incoming sheet (historical import):
@@ -3736,7 +4147,8 @@ class DatabaseService {
             for (final conflict in fieldConflicts) {
               if (conflict.type == DoorConflictType.technicalMismatch ||
                   conflict.type == DoorConflictType.safetyFlagChange) {
-                logs.add('[SKIPPED STALE] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" ignored (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}"). DB inspection is newer by ${diffYears.toStringAsFixed(1)} years. Kept newer DB properties.');
+                logs.add(
+                    '[SKIPPED STALE] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" ignored (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}"). DB inspection is newer by ${diffYears.toStringAsFixed(1)} years. Kept newer DB properties.');
               }
             }
           } else if (diffYears > 3.0) {
@@ -3752,7 +4164,8 @@ class DatabaseService {
             for (final conflict in fieldConflicts) {
               if (conflict.type == DoorConflictType.technicalMismatch ||
                   conflict.type == DoorConflictType.safetyFlagChange) {
-                logs.add('[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Incoming inspection is newer by ${diffYears.toStringAsFixed(1)} years).');
+                logs.add(
+                    '[AUTO-UPDATE] Door Alias "$alias" ($sourceContext): Property "${conflict.fieldLabel}" auto-updated from "${conflict.existingValue}" to "${conflict.incomingValue}" (Incoming inspection is newer by ${diffYears.toStringAsFixed(1)} years).');
               }
             }
           } else {
@@ -3763,20 +4176,24 @@ class DatabaseService {
                   conflict.type == DoorConflictType.safetyFlagChange) {
                 propertyConflictCounter++;
                 final String ageDiffStr = diffYears.toStringAsFixed(1);
-                
-                logs.add('[CONFLICT QUEUED] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}") is within 3-year window (age diff: $ageDiffStr years). Queued for Manager.');
+
+                logs.add(
+                    '[CONFLICT QUEUED] Door Alias "$alias" ($sourceContext): Discrepancy in "${conflict.fieldLabel}" (Incoming: "${conflict.incomingValue}", DB: "${conflict.existingValue}") is within 3-year window (age diff: $ageDiffStr years). Queued for Manager.');
 
                 if (propertyConflictCounter >= 20) {
-                  final prevInspections = await _getPreviousInspectionsForDoor(existingDoor.id!);
-                  final String dbSources = prevInspections.map((i) =>
-                    'Job: ${i['jobNumber']} (Datum: ${i['date']}, Status: ${i['status']})'
-                  ).join(', ');
+                  final prevInspections =
+                      await _getPreviousInspectionsForDoor(existingDoor.id!);
+                  final String dbSources = prevInspections
+                      .map((i) =>
+                          'Job: ${i['jobNumber']} (Datum: ${i['date']}, Status: ${i['status']})')
+                      .join(', ');
 
-                  final String details = '\n[DIAGNOSE] Mismatch in Feld "${conflict.fieldLabel}" für Alias "${conflict.incomingDoor.doorAlias}":'
-                    '\n  - Originaler DB-Wert: "${conflict.existingValue}" stammt aus früheren Inspektionen: [$dbSources].'
-                    '\n  - Importierter Wert: "${conflict.incomingValue}" kommt aus aktuellem Import ($sourceContext, Job: $jobNumber).'
-                    '\n  - Gleicher Alias? Ja, beide verwenden den eindeutigen Alias "${conflict.incomingDoor.doorAlias}".'
-                    '\n  - HINWEIS: Dies deutet darauf hin, dass die Eigenschaften der Tür zwischen den Excel-Listen verschiedener Jahre/Inspektionen geändert wurden (schlechte Excel-Datenqualität!).';
+                  final String details =
+                      '\n[DIAGNOSE] Mismatch in Feld "${conflict.fieldLabel}" für Alias "${conflict.incomingDoor.doorAlias}":'
+                      '\n  - Originaler DB-Wert: "${conflict.existingValue}" stammt aus früheren Inspektionen: [$dbSources].'
+                      '\n  - Importierter Wert: "${conflict.incomingValue}" kommt aus aktuellem Import ($sourceContext, Job: $jobNumber).'
+                      '\n  - Gleicher Alias? Ja, beide verwenden den eindeutigen Alias "${conflict.incomingDoor.doorAlias}".'
+                      '\n  - HINWEIS: Dies deutet darauf hin, dass die Eigenschaften der Tür zwischen den Excel-Listen verschiedener Jahre/Inspektionen geändert wurden (schlechte Excel-Datenqualität!).';
 
                   print(details);
 
@@ -3846,14 +4263,17 @@ class DatabaseService {
         final doorConflicts = entry.value;
 
         // Skip if entire door was marked as skipped
-        if (doorConflicts.any((c) => c.resolution == DoorResolutionAction.skip)) {
+        if (doorConflicts
+            .any((c) => c.resolution == DoorResolutionAction.skip)) {
           continue;
         }
 
         final alias = doorConflicts.first.incomingDoor.doorAlias?.trim();
 
         // Handle keepBoth action for identity collisions
-        final keepBothConflict = doorConflicts.where((c) => c.resolution == DoorResolutionAction.keepBoth).firstOrNull;
+        final keepBothConflict = doorConflicts
+            .where((c) => c.resolution == DoorResolutionAction.keepBoth)
+            .firstOrNull;
         if (keepBothConflict != null) {
           final newAlias = keepBothConflict.newAlias?.trim();
           if (newAlias != null && newAlias.isNotEmpty) {
@@ -3882,8 +4302,10 @@ class DatabaseService {
                 final val = conflict.incomingDoor.toMap()[fieldName];
                 propertyUpdates[fieldName] = val;
               }
-              if (conflict.type == DoorConflictType.newDropdownOption && conflict.incomingValue.isNotEmpty) {
-                DoorOptionsService.addOption(conflict.fieldName, conflict.incomingValue);
+              if (conflict.type == DoorConflictType.newDropdownOption &&
+                  conflict.incomingValue.isNotEmpty) {
+                DoorOptionsService.addOption(
+                    conflict.fieldName, conflict.incomingValue);
               }
               break;
 
@@ -3935,9 +4357,11 @@ class DatabaseService {
             limit: 1,
           );
           if (existingRows.isEmpty) {
-            final doorMap = doorConflicts.first.incomingDoor.toMap()..remove('id');
+            final doorMap = doorConflicts.first.incomingDoor.toMap()
+              ..remove('id');
             doorMap.addAll(propertyUpdates);
-            await txn.insert('doors', doorMap, conflictAlgorithm: ConflictAlgorithm.replace);
+            await txn.insert('doors', doorMap,
+                conflictAlgorithm: ConflictAlgorithm.replace);
           } else if (propertyUpdates.isNotEmpty) {
             await txn.update(
               'doors',
@@ -3984,7 +4408,8 @@ class DatabaseService {
   }
 
   /// Returns full export payload for a single inspection job
-  static Future<Map<String, dynamic>> getSingleInspectionExportData(int inspectionId) async {
+  static Future<Map<String, dynamic>> getSingleInspectionExportData(
+      int inspectionId) async {
     final db = await getDb();
 
     final inspRows = await db.query(
@@ -4027,7 +4452,8 @@ class DatabaseService {
   }
 
   /// Returns complete historical audit data for a single customer across all inspections
-  static Future<Map<String, dynamic>> getClientAuditExportData(String clientName) async {
+  static Future<Map<String, dynamic>> getClientAuditExportData(
+      String clientName) async {
     final db = await getDb();
 
     final inspRows = await db.query(
@@ -4054,7 +4480,8 @@ class DatabaseService {
   }
 
   /// Returns full multi-client audit export data
-  static Future<List<Map<String, dynamic>>> getMultiClientAuditExportData(List<String> clientNames) async {
+  static Future<List<Map<String, dynamic>>> getMultiClientAuditExportData(
+      List<String> clientNames) async {
     final List<Map<String, dynamic>> result = [];
     for (final client in clientNames) {
       final data = await getClientAuditExportData(client);
@@ -4065,5 +4492,3 @@ class DatabaseService {
     return result;
   }
 }
-
-

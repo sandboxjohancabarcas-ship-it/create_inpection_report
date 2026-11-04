@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
-import 'package:wartungstool/models/door_conflict.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
 
@@ -13,9 +12,11 @@ class ExcelImportResult {
   final int errorsLinked;
   final List<String> warnings;
   final List<String> logs;
+
   /// Doors that had conflicts and were NOT written to DB yet.
   /// Route the Manager to DoorConflictReviewPage when this is non-empty.
   final List<DoorConflict> doorConflicts;
+
   /// Catalog conflicts found during Fehlerübersicht processing.
   final List<ImportConflict> catalogConflicts;
 
@@ -49,7 +50,8 @@ class ExcelDataImporter {
     final String fileName = p.basename(excelFile.path);
     final RegExp projRegExp = RegExp(r'(P-\d+)', caseSensitive: false);
     final RegExpMatch? projMatch = projRegExp.firstMatch(fileName);
-    final String projectNumber = projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
+    final String projectNumber =
+        projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
 
     File fileToRead = excelFile;
     File? tempXlsx;
@@ -63,7 +65,8 @@ class ExcelDataImporter {
         );
         tempXlsx = await excelFile.copy(tempPath);
         fileToRead = tempXlsx;
-        logs.add('Makro-Datei ($ext) in temporäre .xlsx umgewandelt: $tempPath');
+        logs.add(
+            'Makro-Datei ($ext) in temporäre .xlsx umgewandelt: $tempPath');
       } catch (e) {
         logs.add('Hinweis: Konvertierung von $ext in .xlsx übersprungen ($e)');
       }
@@ -73,7 +76,8 @@ class ExcelDataImporter {
     final decoder = SpreadsheetDecoder.decodeBytes(bytes);
 
     final allSheets = decoder.tables.keys.toList();
-    logs.add('Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
+    logs.add(
+        'Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
 
     // 1. Ensure master error catalog is initialized from asset/db and apply any resolutions
     await DatabaseService.checkAndInitializeCatalog();
@@ -92,11 +96,13 @@ class ExcelDataImporter {
           resolvedCodes[res.conflict.code] = newCode;
           resolvedCodes[res.conflict.description] = newCode;
           resolvedCodes[res.conflict.incoming.description] = newCode;
-          await DatabaseService.insertErrorCatalog(res.conflict.incoming.copyWith(
+          await DatabaseService.insertErrorCatalog(
+              res.conflict.incoming.copyWith(
             code: newCode,
             status: 'Approved',
           ));
-        } else if (res.action == ResolutionAction.replaceExisting || res.action == ResolutionAction.keepExisting) {
+        } else if (res.action == ResolutionAction.replaceExisting ||
+            res.action == ResolutionAction.keepExisting) {
           if (res.newCode != null && res.newCode!.isNotEmpty) {
             resolvedCodes[res.conflict.code] = res.newCode!;
             resolvedCodes[res.conflict.description] = res.newCode!;
@@ -104,16 +110,18 @@ class ExcelDataImporter {
           }
         }
       }
-      logs.add('Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
+      logs.add(
+          'Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
     }
 
     // Refresh memory catalog list
     final catalog = await DatabaseService.getAllErrorCatalog();
-    final officialCatalog = catalog.where((e) =>
-      e.status == 'Approved' &&
-      e.category != 'Altdaten' &&
-      !e.code.toUpperCase().startsWith('ALT-')
-    ).toList();
+    final officialCatalog = catalog
+        .where((e) =>
+            e.status == 'Approved' &&
+            e.category != 'Altdaten' &&
+            !e.code.toUpperCase().startsWith('ALT-'))
+        .toList();
     int sheetsProcessed = 0;
     int totalDoorsImported = 0;
     int totalErrorsLinked = 0;
@@ -123,19 +131,21 @@ class ExcelDataImporter {
     for (var sheetName in decoder.tables.keys) {
       final lowerName = sheetName.trim().toLowerCase();
       // Inspection sheets MUST have prefix "türlisten", "türliste", "türen", or "doors"
-      final isTuerlistenSheet = lowerName.startsWith('türlisten') || 
-                                lowerName.startsWith('türliste') || 
-                                lowerName.startsWith('türen') || 
-                                lowerName.startsWith('doors');
+      final isTuerlistenSheet = lowerName.startsWith('türlisten') ||
+          lowerName.startsWith('türliste') ||
+          lowerName.startsWith('türen') ||
+          lowerName.startsWith('doors');
 
       if (!isTuerlistenSheet) {
-        logs.add('Arbeitsblatt "$sheetName" übersprungen (kein "Türlisten"-Präfix).');
+        logs.add(
+            'Arbeitsblatt "$sheetName" übersprungen (kein "Türlisten"-Präfix).');
         continue;
       }
 
       final sheet = decoder.tables[sheetName]!;
       if (sheet.maxRows < 2) {
-        final warn = 'Arbeitsblatt "$sheetName" hat nicht genügend Zeilen (${sheet.maxRows} < 2).';
+        final warn =
+            'Arbeitsblatt "$sheetName" hat nicht genügend Zeilen (${sheet.maxRows} < 2).';
         warnings.add(warn);
         logs.add('WARNUNG: $warn');
         continue;
@@ -144,7 +154,9 @@ class ExcelDataImporter {
       String metadataText = '';
       for (int r = 0; r < sheet.maxRows && r < 3; r++) {
         final row = sheet.rows[r];
-        if (row.isNotEmpty && row[0] != null && row[0].toString().trim().isNotEmpty) {
+        if (row.isNotEmpty &&
+            row[0] != null &&
+            row[0].toString().trim().isNotEmpty) {
           metadataText = row[0].toString();
           break;
         }
@@ -153,11 +165,15 @@ class ExcelDataImporter {
       final meta = _parseMetadata(metadataText);
 
       // Extract date from sheet name if present (e.g. "Türlisten 04.09.2025")
-      final sheetDateMatch = RegExp(r'(\d{2})[\.\-_](\d{2})[\.\-_](\d{4}|\d{2})').firstMatch(sheetName) ??
-                             RegExp(r'(\d{4})[\.\-_](\d{2})[\.\-_](\d{2})').firstMatch(sheetName);
+      final sheetDateMatch =
+          RegExp(r'(\d{2})[\.\-_](\d{2})[\.\-_](\d{4}|\d{2})')
+                  .firstMatch(sheetName) ??
+              RegExp(r'(\d{4})[\.\-_](\d{2})[\.\-_](\d{2})')
+                  .firstMatch(sheetName);
       if (sheetDateMatch != null) {
         if (sheetDateMatch.group(1)!.length == 4) {
-          meta['date'] = '${sheetDateMatch.group(1)}-${sheetDateMatch.group(2)!.padLeft(2, '0')}-${sheetDateMatch.group(3)!.padLeft(2, '0')}';
+          meta['date'] =
+              '${sheetDateMatch.group(1)}-${sheetDateMatch.group(2)!.padLeft(2, '0')}-${sheetDateMatch.group(3)!.padLeft(2, '0')}';
         } else {
           final day = sheetDateMatch.group(1)!.padLeft(2, '0');
           final month = sheetDateMatch.group(2)!.padLeft(2, '0');
@@ -168,7 +184,8 @@ class ExcelDataImporter {
       }
 
       final String dateStr = meta['date'] ?? '';
-      final DateTime sheetDate = DateTime.tryParse(dateStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final DateTime sheetDate =
+          DateTime.tryParse(dateStr) ?? DateTime.fromMillisecondsSinceEpoch(0);
 
       doorSheetsToProcess.add({
         'sheetName': sheetName,
@@ -185,8 +202,8 @@ class ExcelDataImporter {
       return dateB.compareTo(dateA);
     });
 
-    logs.add('Reihenfolge der verarbeiteten Blätter (neueste zuerst): ' + 
-      doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', '));
+    logs.add(
+        'Reihenfolge der verarbeiteten Blätter (neueste zuerst): ${doorSheetsToProcess.map((ds) => '${ds['sheetName']} (${ds['meta']['date']})').join(', ')}');
 
     // ── Evaluate Error Catalog Conflicts on the Latest Inspection Sheet ──
     final latestSheetInfo = doorSheetsToProcess.firstOrNull;
@@ -202,7 +219,13 @@ class ExcelDataImporter {
           for (int c = 0; c < rRow.length && c < 5; c++) {
             if (rRow[c] != null) {
               final cellVal = rRow[c].toString().trim().toLowerCase();
-              if (cellVal == 'pos' || cellVal == 'pos.' || cellVal == 'lfd' || cellVal == 'nr' || cellVal == 'tür-nr' || cellVal == 'türnummer' || cellVal == 'tür nr') {
+              if (cellVal == 'pos' ||
+                  cellVal == 'pos.' ||
+                  cellVal == 'lfd' ||
+                  cellVal == 'nr' ||
+                  cellVal == 'tür-nr' ||
+                  cellVal == 'türnummer' ||
+                  cellVal == 'tür nr') {
                 lHeaderRowIndex = r;
                 foundHeader = true;
                 break;
@@ -213,14 +236,16 @@ class ExcelDataImporter {
         }
       }
       if (lHeaderRowIndex >= latestSheet.rows.length) lHeaderRowIndex = 0;
-      final lHeaderRow = latestSheet.rows.isNotEmpty ? latestSheet.rows[lHeaderRowIndex] : [];
+      final lHeaderRow =
+          latestSheet.rows.isNotEmpty ? latestSheet.rows[lHeaderRowIndex] : [];
 
       int lNotesCol = -1;
       if (latestSheet.maxRows > 1) {
         final row2 = latestSheet.rows[1];
         for (int c = 0; c < row2.length; c++) {
           final val = _cell(row2, c);
-          if (val != null && val.toString().trim().toLowerCase().startsWith('anmerkung')) {
+          if (val != null &&
+              val.toString().trim().toLowerCase().startsWith('anmerkung')) {
             lNotesCol = c;
             break;
           }
@@ -241,7 +266,8 @@ class ExcelDataImporter {
         final val = _cell(lHeaderRow, c);
         if (val == null) continue;
         final headerStr = val.toString().trim();
-        if (headerStr.isEmpty || headerStr.toLowerCase().startsWith('anmerkung')) break;
+        if (headerStr.isEmpty ||
+            headerStr.toLowerCase().startsWith('anmerkung')) break;
 
         final match = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(headerStr);
         String code;
@@ -250,16 +276,28 @@ class ExcelDataImporter {
           code = match.group(1)!;
           desc = match.group(2)!;
         } else {
-          final exactCatalogMatch = officialCatalog.where((e) =>
-            e.description.trim().toLowerCase() == headerStr.toLowerCase() ||
-            e.description.trim().toLowerCase() == headerStr.replaceFirst(RegExp(r'^Hinweis:\s*', caseSensitive: false), '').trim().toLowerCase()
-          ).firstOrNull;
+          final exactCatalogMatch = officialCatalog
+              .where((e) =>
+                  e.description.trim().toLowerCase() ==
+                      headerStr.toLowerCase() ||
+                  e.description.trim().toLowerCase() ==
+                      headerStr
+                          .replaceFirst(
+                              RegExp(r'^Hinweis:\s*', caseSensitive: false), '')
+                          .trim()
+                          .toLowerCase())
+              .firstOrNull;
           code = exactCatalogMatch?.code ?? headerStr;
           desc = exactCatalogMatch?.description ?? headerStr;
         }
 
-        final existingForCode = officialCatalog.where((e) => e.code.toLowerCase() == code.toLowerCase()).firstOrNull;
-        final existingForDesc = officialCatalog.where((e) => _cleanCatalogDesc(e.description) == _cleanCatalogDesc(desc)).firstOrNull;
+        final existingForCode = officialCatalog
+            .where((e) => e.code.toLowerCase() == code.toLowerCase())
+            .firstOrNull;
+        final existingForDesc = officialCatalog
+            .where((e) =>
+                _cleanCatalogDesc(e.description) == _cleanCatalogDesc(desc))
+            .firstOrNull;
 
         final isResolved = resolvedCodes.containsKey(code) ||
             resolvedCodes.containsKey(desc) ||
@@ -275,25 +313,38 @@ class ExcelDataImporter {
 
           if (existingForCode == null && existingForDesc == null) {
             isConflict = true;
-            reason = 'Unbekannter Mangel-/Hinweis-Spaltenkopf in neuester Inspektion "$latestSheetName".';
-          } else if (existingForCode != null && existingForDesc != null && existingForCode.code.toLowerCase() != existingForDesc.code.toLowerCase()) {
+            reason =
+                'Unbekannter Mangel-/Hinweis-Spaltenkopf in neuester Inspektion "$latestSheetName".';
+          } else if (existingForCode != null &&
+              existingForDesc != null &&
+              existingForCode.code.toLowerCase() !=
+                  existingForDesc.code.toLowerCase()) {
             isConflict = true;
             existingMatch = existingForCode;
-            reason = 'Mangel "$headerStr" hat Code "$code", aber die Beschreibung entspricht bestehendem Code "${existingForDesc.code}".';
-          } else if (existingForCode != null && _cleanCatalogDesc(existingForCode.description) != _cleanCatalogDesc(desc) && desc.length > 5 && !desc.toLowerCase().startsWith('fehler')) {
+            reason =
+                'Mangel "$headerStr" hat Code "$code", aber die Beschreibung entspricht bestehendem Code "${existingForDesc.code}".';
+          } else if (existingForCode != null &&
+              _cleanCatalogDesc(existingForCode.description) !=
+                  _cleanCatalogDesc(desc) &&
+              desc.length > 5 &&
+              !desc.toLowerCase().startsWith('fehler')) {
             isConflict = true;
             existingMatch = existingForCode;
-            reason = 'Bestehender Eintrag mit Code "$code" hat andere Beschreibung ("${existingForCode.description}").';
-          } else if (existingForDesc != null && existingForDesc.code.toLowerCase() != code.toLowerCase() && RegExp(r'^\d+(\.\d+)?$').hasMatch(code)) {
+            reason =
+                'Bestehender Eintrag mit Code "$code" hat andere Beschreibung ("${existingForCode.description}").';
+          } else if (existingForDesc != null &&
+              existingForDesc.code.toLowerCase() != code.toLowerCase() &&
+              RegExp(r'^\d+(\.\d+)?$').hasMatch(code)) {
             isConflict = true;
             existingMatch = existingForDesc;
-            reason = 'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDesc.code}).';
+            reason =
+                'Bestehender Eintrag mit identischer Beschreibung hat anderen Code (${existingForDesc.code}).';
           }
 
           if (isConflict) {
             final alreadyInConflict = allCatalogConflicts.any((cf) =>
-              cf.code.toLowerCase() == code.toLowerCase() ||
-              cf.description.toLowerCase() == headerStr.toLowerCase());
+                cf.code.toLowerCase() == code.toLowerCase() ||
+                cf.description.toLowerCase() == headerStr.toLowerCase());
 
             if (!alreadyInConflict) {
               final isNotice = code.toLowerCase().startsWith('0.') ||
@@ -316,14 +367,16 @@ class ExcelDataImporter {
                 reason: reason,
               ));
 
-              final msg = '[KATALOG-KONFLIKT] Unbekannter/abweichender Mangel "$headerStr" in neuester Inspektion "$latestSheetName" erfordert Überprüfung durch den Manager.';
+              final msg =
+                  '[KATALOG-KONFLIKT] Unbekannter/abweichender Mangel "$headerStr" in neuester Inspektion "$latestSheetName" erfordert Überprüfung durch den Manager.';
               warnings.add(msg);
               logs.add(msg);
             }
           }
         }
       }
-    logs.add('Neueste Inspektion "$latestSheetName": ${allCatalogConflicts.length} Mängelkatalog-Konflikte erkannt.');
+      logs.add(
+          'Neueste Inspektion "$latestSheetName": ${allCatalogConflicts.length} Mängelkatalog-Konflikte erkannt.');
     }
 
     // ── Resolve Canonical Object Address for this Project/File ──────────
@@ -340,7 +393,8 @@ class ExcelDataImporter {
       final sheetMeta = ds['meta'] as Map<String, dynamic>;
       final rawAddr = (sheetMeta['objectAddress'] ?? '').toString().trim();
       if (_hasStreetOrNumber(rawAddr)) {
-        if (canonicalObjectAddress.isEmpty || rawAddr.length > canonicalObjectAddress.length) {
+        if (canonicalObjectAddress.isEmpty ||
+            rawAddr.length > canonicalObjectAddress.length) {
           canonicalObjectAddress = rawAddr;
         }
       }
@@ -348,44 +402,58 @@ class ExcelDataImporter {
 
     // If still empty, use newest sheet's objectAddress if non-empty, otherwise fileNameAddress
     if (canonicalObjectAddress.isEmpty) {
-      final newestAddr = (doorSheetsToProcess.firstOrNull?['meta']?['objectAddress'] ?? '').toString().trim();
-      canonicalObjectAddress = newestAddr.isNotEmpty ? newestAddr : fileNameAddress;
+      final newestAddr =
+          (doorSheetsToProcess.firstOrNull?['meta']?['objectAddress'] ?? '')
+              .toString()
+              .trim();
+      canonicalObjectAddress =
+          newestAddr.isNotEmpty ? newestAddr : fileNameAddress;
     }
 
     if (canonicalObjectAddress.isNotEmpty && projectNumber.isNotEmpty) {
-      logs.add('Projekt-Anker $projectNumber: Kanonische Liegenschaftsadresse festgelegt als: "$canonicalObjectAddress"');
+      logs.add(
+          'Projekt-Anker $projectNumber: Kanonische Liegenschaftsadresse festgelegt als: "$canonicalObjectAddress"');
     }
 
     for (final dsInfo in doorSheetsToProcess) {
       final String sheetName = dsInfo['sheetName'] as String;
       final sheet = dsInfo['sheet'];
-      final Map<String, String> meta = Map<String, String>.from(dsInfo['meta'] as Map);
+      final Map<String, String> meta =
+          Map<String, String>.from(dsInfo['meta'] as Map);
       meta['projectNumber'] = projectNumber;
       if (meta['clientName'] != null && meta['clientName']!.isNotEmpty) {
-        meta['clientName'] = CustomerNormalizer.getCanonicalName(meta['clientName']!);
+        meta['clientName'] =
+            CustomerNormalizer.getCanonicalName(meta['clientName']!);
       }
 
       // If sheet has a short/incomplete address or differs from canonical address for this project, unify it
       final String rawSheetAddr = (meta['objectAddress'] ?? '').trim();
       if (canonicalObjectAddress.isNotEmpty) {
-        if (rawSheetAddr.isEmpty || !_hasStreetOrNumber(rawSheetAddr) || projectNumber.isNotEmpty) {
+        if (rawSheetAddr.isEmpty ||
+            !_hasStreetOrNumber(rawSheetAddr) ||
+            projectNumber.isNotEmpty) {
           meta['objectAddress'] = canonicalObjectAddress;
         }
       }
 
-      logs.add('Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
-      logs.add('Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}", Projektnummer="${meta['projectNumber']}"');
+      logs.add(
+          'Verarbeite Türlisten-Blatt: "$sheetName" (${sheet.maxRows} Zeilen)...');
+      logs.add(
+          'Metadaten für "$sheetName": Kunde="${meta['clientName']}", Objekt="${meta['objectAddress']}", Datum="${meta['date']}", Auftrag="${meta['jobNumber']}", Projektnummer="${meta['projectNumber']}"');
 
       // Check for existing inspection to warn user on duplicate re-import
-      final existingInspId = await DatabaseService.findExistingInspectionId(meta);
+      final existingInspId =
+          await DatabaseService.findExistingInspectionId(meta);
       if (existingInspId != null) {
-        logs.add('WARNUNG: Das Inspektionsdokument für Auftrag "${meta['jobNumber']}" (Kunde: "${meta['clientName']}", Objekt: "${meta['objectAddress']}", Datum: "${meta['date']}") existiert bereits im Stammdatenbestand.');
+        logs.add(
+            'WARNUNG: Das Inspektionsdokument für Auftrag "${meta['jobNumber']}" (Kunde: "${meta['clientName']}", Objekt: "${meta['objectAddress']}", Datum: "${meta['date']}") existiert bereits im Stammdatenbestand.');
       }
 
       // Fetch existing inspection or create new inspection record to prevent duplication on re-import
       final inspectionId = await DatabaseService.getOrInsertInspection(meta);
       sheetsProcessed++;
-      logs.add('Inspektion ID $inspectionId für "$sheetName" (Auftrag: ${meta['jobNumber']}) verarbeitet.');
+      logs.add(
+          'Inspektion ID $inspectionId für "$sheetName" (Auftrag: ${meta['jobNumber']}) verarbeitet.');
 
       // Analyze Column headers to build error column mappings
       int headerRowIndex = 2;
@@ -396,7 +464,13 @@ class ExcelDataImporter {
           for (int c = 0; c < rRow.length && c < 5; c++) {
             if (rRow[c] != null) {
               final cellVal = rRow[c].toString().trim().toLowerCase();
-              if (cellVal == 'pos' || cellVal == 'pos.' || cellVal == 'lfd' || cellVal == 'nr' || cellVal == 'tür-nr' || cellVal == 'türnummer' || cellVal == 'tür nr') {
+              if (cellVal == 'pos' ||
+                  cellVal == 'pos.' ||
+                  cellVal == 'lfd' ||
+                  cellVal == 'nr' ||
+                  cellVal == 'tür-nr' ||
+                  cellVal == 'türnummer' ||
+                  cellVal == 'tür nr') {
                 headerRowIndex = r;
                 foundHeader = true;
                 break;
@@ -461,7 +535,11 @@ class ExcelDataImporter {
             final cell = row[c];
             if (cell != null) {
               final str = cell.toString().trim();
-              if (str.isNotEmpty && str != '1' && str != '0' && double.tryParse(str) == null && str.length > 2) {
+              if (str.isNotEmpty &&
+                  str != '1' &&
+                  str != '0' &&
+                  double.tryParse(str) == null &&
+                  str.length > 2) {
                 textCountPerCol[c] = (textCountPerCol[c] ?? 0) + 1;
               }
             }
@@ -469,11 +547,12 @@ class ExcelDataImporter {
         }
 
         if (textCountPerCol.isNotEmpty) {
-          final sorted = textCountPerCol.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          final sorted = textCountPerCol.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
           notesColumnIndex = sorted.first.key;
         }
       }
-      
+
       // 3. Scan from fixedColumnCount onwards for error headers
       for (int c = fixedColumnCount; c < headerRow.length; c++) {
         if (c == notesColumnIndex) continue;
@@ -481,10 +560,11 @@ class ExcelDataImporter {
         if (val == null) continue;
         final headerStr = val.toString().trim();
         if (headerStr.isEmpty) continue;
-        if (headerStr.toLowerCase() == 'anmerkung' || headerStr.toLowerCase().startsWith('anmerkung')) {
+        if (headerStr.toLowerCase() == 'anmerkung' ||
+            headerStr.toLowerCase().startsWith('anmerkung')) {
           break; // Stop at notes column
         }
-        
+
         // Try to parse code (e.g. "0.32 Das Brand-...")
         final match = RegExp(r'^([\d\.]+)\s+(.*)$').firstMatch(headerStr);
         String code;
@@ -492,14 +572,22 @@ class ExcelDataImporter {
           code = match.group(1)!;
         } else {
           // Check if header matches an existing catalog item by description
-          final exactCatalogMatch = catalog.where((e) =>
-            e.description.trim().toLowerCase() == headerStr.toLowerCase() ||
-            e.description.trim().toLowerCase() == headerStr.replaceFirst(RegExp(r'^Hinweis:\s*', caseSensitive: false), '').trim().toLowerCase()
-          ).firstOrNull;
+          final exactCatalogMatch = catalog
+              .where((e) =>
+                  e.description.trim().toLowerCase() ==
+                      headerStr.toLowerCase() ||
+                  e.description.trim().toLowerCase() ==
+                      headerStr
+                          .replaceFirst(
+                              RegExp(r'^Hinweis:\s*', caseSensitive: false), '')
+                          .trim()
+                          .toLowerCase())
+              .firstOrNull;
 
           if (exactCatalogMatch != null) {
             code = exactCatalogMatch.code;
-            logs.add('Spaltenkopf "$headerStr" in "$sheetName" zu bestehendem Katalogcode "${exactCatalogMatch.code}" zugeordnet.');
+            logs.add(
+                'Spaltenkopf "$headerStr" in "$sheetName" zu bestehendem Katalogcode "${exactCatalogMatch.code}" zugeordnet.');
           } else {
             code = headerStr;
           }
@@ -508,14 +596,16 @@ class ExcelDataImporter {
         errorColumns[c] = code;
       }
 
-      logs.add('Mängelspalten für "$sheetName": ${errorColumns.length} Mängelcodes erkannt. (Anmerkung: ${notesColumnIndex >= 0 ? "Spalte $notesColumnIndex" : "Standard"})');
+      logs.add(
+          'Mängelspalten für "$sheetName": ${errorColumns.length} Mängelcodes erkannt. (Anmerkung: ${notesColumnIndex >= 0 ? "Spalte $notesColumnIndex" : "Standard"})');
 
       int sheetDoorsCount = 0;
       int sheetErrorsCount = 0;
 
       // ── Collect all doors from this sheet first, then batch-merge ────────
       final sheetDoors = <Door>[];
-      final sheetDoorRows = <int, List<dynamic>>{}; // doorIndex -> raw row for error linking
+      final sheetDoorRows =
+          <int, List<dynamic>>{}; // doorIndex -> raw row for error linking
 
       // Process Door data rows (Row after header onwards)
       for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
@@ -524,7 +614,7 @@ class ExcelDataImporter {
 
         final posVal = _toStr(_cell(row, 0));
         final doorNumVal = _toStr(_cell(row, 1));
-        
+
         // Skip row if both pos and doorNumber are blank or if row contains summary/footer text
         if ((posVal.isEmpty && doorNumVal.isEmpty) ||
             _isSummaryOrFooterText(posVal) ||
@@ -540,7 +630,7 @@ class ExcelDataImporter {
         final floor = _toStr(_cell(row, 2));
         final roomNumber = _toStr(_cell(row, 3));
         final roomDesignation = _toStr(_cell(row, 4));
-        
+
         String doorType = '';
         String approvalNumber = '?';
         String manufacturer = '';
@@ -591,13 +681,18 @@ class ExcelDataImporter {
           closingSeq = _toStr(_cell(row, 16));
           lockDim = _toStr(_cell(row, 17));
           final fsaStr = _toStr(_cell(row, 18));
-          if (fsaStr.isNotEmpty && fsaStr != '?') fsaDriveAcceptanceDate = fsaStr;
+          if (fsaStr.isNotEmpty && fsaStr != '?')
+            fsaDriveAcceptanceDate = fsaStr;
           closerHinge = _toBool(_cell(row, 19));
           closerOpposite = _toBool(_cell(row, 20));
 
           final insideRaw = _toStr(_cell(row, 21));
           if (insideRaw.isNotEmpty) {
-            lintelInsideOver1m = _toBool(insideRaw) || insideRaw.contains('m') || insideRaw == 'X' || insideRaw == 'Ja' || insideRaw == 'J';
+            lintelInsideOver1m = _toBool(insideRaw) ||
+                insideRaw.contains('m') ||
+                insideRaw == 'X' ||
+                insideRaw == 'Ja' ||
+                insideRaw == 'J';
             if (insideRaw.contains('m') || RegExp(r'\d').hasMatch(insideRaw)) {
               lintelInsideValue = insideRaw;
             }
@@ -605,8 +700,13 @@ class ExcelDataImporter {
 
           final outsideRaw = _toStr(_cell(row, 22));
           if (outsideRaw.isNotEmpty) {
-            lintelOutsideOver1m = _toBool(outsideRaw) || outsideRaw.contains('m') || outsideRaw == 'X' || outsideRaw == 'Ja' || outsideRaw == 'J';
-            if (outsideRaw.contains('m') || RegExp(r'\d').hasMatch(outsideRaw)) {
+            lintelOutsideOver1m = _toBool(outsideRaw) ||
+                outsideRaw.contains('m') ||
+                outsideRaw == 'X' ||
+                outsideRaw == 'Ja' ||
+                outsideRaw == 'J';
+            if (outsideRaw.contains('m') ||
+                RegExp(r'\d').hasMatch(outsideRaw)) {
               lintelOutsideValue = outsideRaw;
             }
           }
@@ -637,7 +737,11 @@ class ExcelDataImporter {
 
           final insideRaw = _toStr(_cell(row, 15));
           if (insideRaw.isNotEmpty) {
-            lintelInsideOver1m = _toBool(insideRaw) || insideRaw.contains('m') || insideRaw == 'X' || insideRaw == 'Ja' || insideRaw == 'J';
+            lintelInsideOver1m = _toBool(insideRaw) ||
+                insideRaw.contains('m') ||
+                insideRaw == 'X' ||
+                insideRaw == 'Ja' ||
+                insideRaw == 'J';
             if (insideRaw.contains('m') || RegExp(r'\d').hasMatch(insideRaw)) {
               lintelInsideValue = insideRaw;
             }
@@ -685,7 +789,8 @@ class ExcelDataImporter {
           doorType: doorType,
           approvalNumber: approvalNumber.isNotEmpty ? approvalNumber : '?',
           manufacturer: manufacturer,
-          manufacturerNumber: manufacturerNumber.isNotEmpty ? manufacturerNumber : '?',
+          manufacturerNumber:
+              manufacturerNumber.isNotEmpty ? manufacturerNumber : '?',
           dopNumber: dopNumber.isNotEmpty ? dopNumber : '?',
           manufactureYear: manufactureYear.isNotEmpty ? manufactureYear : '?',
           wingCount: wingCount,
@@ -723,7 +828,8 @@ class ExcelDataImporter {
       final String clientStr = (meta['clientName'] ?? '').trim();
       final String jobStr = (meta['jobNumber'] ?? '').trim();
       final String dateStr = (meta['date'] ?? '').trim();
-      final String sheetSourceContext = 'Datei: "$fileName" (Blatt: "$sheetName")'
+      final String sheetSourceContext =
+          'Datei: "$fileName" (Blatt: "$sheetName")'
           '${clientStr.isNotEmpty ? " | Kunde: $clientStr" : ""}'
           '${jobStr.isNotEmpty ? " | Auftragsnr.: $jobStr" : ""}'
           '${dateStr.isNotEmpty ? " | Datum: $dateStr" : ""}';
@@ -739,7 +845,8 @@ class ExcelDataImporter {
 
       if (mergeResult.hasConflicts) {
         allDoorConflicts.addAll(mergeResult.conflicts);
-        logs.add('KONFLIKTE: ${mergeResult.conflicts.length} Türkonflikte in "$sheetName" '
+        logs.add(
+            'KONFLIKTE: ${mergeResult.conflicts.length} Türkonflikte in "$sheetName" '
             '(${mergeResult.identityCount} Identität, ${mergeResult.safetyCount} Sicherheit, '
             '${mergeResult.technicalCount} Technisch, ${mergeResult.logicalCount} Logisch) '
             '— diese Türen wurden NICHT importiert und warten auf Freigabe.');
@@ -760,9 +867,7 @@ class ExcelDataImporter {
           final existing = await DatabaseService.getDoorByAlias(alias);
           doorId = existing?.id;
         }
-        if (doorId == null) {
-          doorId = await DatabaseService.insertDoor(door);
-        }
+        doorId ??= await DatabaseService.insertDoor(door);
 
         final doorFunctionOK = door.doorFunctionOK;
         final row = sheetDoorRows[di] ?? [];
@@ -795,21 +900,27 @@ class ExcelDataImporter {
             if (qty > 0) {
               if (isLatestSheet) {
                 // Find in catalog using the mapped targetCode or description
-                final catalogItem = catalog.where(
-                  (e) => e.code.toLowerCase() == targetCode.toLowerCase() ||
-                         e.description.trim().toLowerCase() == targetCode.toLowerCase(),
-                ).firstOrNull;
+                final catalogItem = catalog
+                    .where(
+                      (e) =>
+                          e.code.toLowerCase() == targetCode.toLowerCase() ||
+                          e.description.trim().toLowerCase() ==
+                              targetCode.toLowerCase(),
+                    )
+                    .firstOrNull;
 
                 int? errorId = catalogItem?.errorId;
                 if (errorId == null) {
-                  final dbItem = await DatabaseService.searchErrorCatalog(targetCode);
+                  final dbItem =
+                      await DatabaseService.searchErrorCatalog(targetCode);
                   if (dbItem.isNotEmpty && dbItem.first.errorId != null) {
                     errorId = dbItem.first.errorId;
                   }
                 }
 
                 if (errorId != null) {
-                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                  await DatabaseService.insertInspectionDoorError(
+                      InspectionDoorError(
                     inspectionDoorId: junctionId,
                     errorId: errorId,
                     errorCode: catalogItem?.code ?? targetCode,
@@ -821,16 +932,23 @@ class ExcelDataImporter {
                   sheetErrorsCount++;
                 } else {
                   // No auto-registration: unapproved errors are skipped until Manager resolves conflict
-                  logs.add('Mangel "$targetCode" für Tür ${door.doorNumber} in "$sheetName" nicht verknüpft (wartet auf Konfliktlösung durch Manager).');
+                  logs.add(
+                      'Mangel "$targetCode" für Tür ${door.doorNumber} in "$sheetName" nicht verknüpft (wartet auf Konfliktlösung durch Manager).');
                 }
               } else {
                 // Older inspection sheet (Alternative 1: Best-match without raising conflicts)
-                final catalogItemByCode = officialCatalog.where(
-                  (e) => e.code.toLowerCase() == targetCode.toLowerCase(),
-                ).firstOrNull;
+                final catalogItemByCode = officialCatalog
+                    .where(
+                      (e) => e.code.toLowerCase() == targetCode.toLowerCase(),
+                    )
+                    .firstOrNull;
 
                 final catalogItemByDesc = catalogItemByCode == null
-                    ? officialCatalog.where((e) => _cleanCatalogDesc(e.description) == _cleanCatalogDesc(rawHeader)).firstOrNull
+                    ? officialCatalog
+                        .where((e) =>
+                            _cleanCatalogDesc(e.description) ==
+                            _cleanCatalogDesc(rawHeader))
+                        .firstOrNull
                     : null;
 
                 final catalogItem = catalogItemByCode ?? catalogItemByDesc;
@@ -838,11 +956,13 @@ class ExcelDataImporter {
                 if (catalogItem != null && catalogItem.errorId != null) {
                   String errorNote = 'Keine Notizen für Fehler';
                   if (rawHeader.isNotEmpty &&
-                      _cleanCatalogDesc(catalogItem.description) != _cleanCatalogDesc(rawHeader)) {
+                      _cleanCatalogDesc(catalogItem.description) !=
+                          _cleanCatalogDesc(rawHeader)) {
                     errorNote = 'Historische Bezeichnung: $rawHeader';
                   }
 
-                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                  await DatabaseService.insertInspectionDoorError(
+                      InspectionDoorError(
                     inspectionDoorId: junctionId,
                     errorId: catalogItem.errorId!,
                     errorCode: catalogItem.code,
@@ -854,9 +974,11 @@ class ExcelDataImporter {
                   sheetErrorsCount++;
                 } else {
                   // Fallback to continuous legacy error entry under category "Altdaten" (e.g. ALT-001, ALT-002, ...)
-                  final legacyItem = await DatabaseService.getOrCreateLegacyError(rawHeader);
+                  final legacyItem =
+                      await DatabaseService.getOrCreateLegacyError(rawHeader);
 
-                  await DatabaseService.insertInspectionDoorError(InspectionDoorError(
+                  await DatabaseService.insertInspectionDoorError(
+                      InspectionDoorError(
                     inspectionDoorId: junctionId,
                     errorId: legacyItem.errorId!,
                     errorCode: legacyItem.code,
@@ -883,19 +1005,23 @@ class ExcelDataImporter {
         }
       }
 
-      logs.add('Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen importiert, $sheetErrorsCount Mängel verknüpft.');
+      logs.add(
+          'Blatt "$sheetName" abgeschlossen: $sheetDoorsCount Türen importiert, $sheetErrorsCount Mängel verknüpft.');
     }
 
-    logs.add('Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte, ${allCatalogConflicts.length} Katalogkonflikte zur Überprüfung.');
+    logs.add(
+        'Import abgeschlossen: Total $sheetsProcessed von ${allSheets.length} Arbeitsblättern verarbeitet. $totalDoorsImported Türen, $totalErrorsLinked Mängel verknüpft, ${warnings.length} Warnungen, ${allDoorConflicts.length} Türkonflikte, ${allCatalogConflicts.length} Katalogkonflikte zur Überprüfung.');
 
     // Write full logs to migration_protocol.log in project root
     try {
       final logFile = File('migration_protocol.log');
       final StringBuffer sb = StringBuffer();
-      sb.writeln('======================================================================');
+      sb.writeln(
+          '======================================================================');
       sb.writeln('MIGRATION PROTOCOL - IMPORT FROM: ${excelFile.path}');
       sb.writeln('Date of Migration: ${DateTime.now()}');
-      sb.writeln('======================================================================');
+      sb.writeln(
+          '======================================================================');
       sb.writeln('SUMMARY:');
       sb.writeln('  - Sheets Processed: $sheetsProcessed');
       sb.writeln('  - Doors Imported: $totalDoorsImported');
@@ -903,14 +1029,17 @@ class ExcelDataImporter {
       sb.writeln('  - Warnings: ${warnings.length}');
       sb.writeln('  - Door Conflicts: ${allDoorConflicts.length}');
       sb.writeln('  - Catalog Conflicts: ${allCatalogConflicts.length}');
-      sb.writeln('----------------------------------------------------------------------');
+      sb.writeln(
+          '----------------------------------------------------------------------');
       sb.writeln('MIGRATION LOGS:');
       for (final logLine in logs) {
         sb.writeln('  $logLine');
       }
-      sb.writeln('======================================================================\n');
-      
-      await logFile.writeAsString(sb.toString(), mode: FileMode.append, flush: true);
+      sb.writeln(
+          '======================================================================\n');
+
+      await logFile.writeAsString(sb.toString(),
+          mode: FileMode.append, flush: true);
       print('Migration protocol written to: ${logFile.absolute.path}');
     } catch (e) {
       print('Failed to write migration protocol log file: $e');
@@ -936,23 +1065,83 @@ class ExcelDataImporter {
   static Map<String, String> _parseMetadata(String text) {
     String extract(String label, List<String> nextLabels) {
       final nextOrEnd = nextLabels.isNotEmpty ? nextLabels.join('|') : '\$';
-      final pattern = RegExp('$label:\\s*(.*?)(?=$nextOrEnd|\\s+\\w+:\\s*|\\s*\$)');
+      final pattern =
+          RegExp('$label:\\s*(.*?)(?=$nextOrEnd|\\s+\\w+:\\s*|\\s*\$)');
       final match = pattern.firstMatch(text);
       return match?.group(1)?.trim() ?? '';
     }
 
-    final client = extract('Kunde', ['Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
-    final object = extract('Objekt', ['Kunde', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
-    final dateStr = extract('Datum', ['Kunde', 'Objekt', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
-    final contact = extract('(?:Ansprechpartner|Kontakt Person vor Ort)', ['Kunde', 'Objekt', 'Datum', 'Monteur', 'Service Techniker', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
-    final inspector = extract('(?:Monteur|Service Techniker)', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Auftragsnummer', 'Auftragsnr.', 'Projekt']);
-    final jobNum = extract('(?:Auftragsnummer|Auftragsnr\\.)', ['Kunde', 'Objekt', 'Datum', 'Ansprechpartner', 'Kontakt Person vor Ort', 'Monteur', 'Service Techniker', 'Projekt']);
+    final client = extract('Kunde', [
+      'Objekt',
+      'Datum',
+      'Ansprechpartner',
+      'Kontakt Person vor Ort',
+      'Monteur',
+      'Service Techniker',
+      'Auftragsnummer',
+      'Auftragsnr.',
+      'Projekt'
+    ]);
+    final object = extract('Objekt', [
+      'Kunde',
+      'Datum',
+      'Ansprechpartner',
+      'Kontakt Person vor Ort',
+      'Monteur',
+      'Service Techniker',
+      'Auftragsnummer',
+      'Auftragsnr.',
+      'Projekt'
+    ]);
+    final dateStr = extract('Datum', [
+      'Kunde',
+      'Objekt',
+      'Ansprechpartner',
+      'Kontakt Person vor Ort',
+      'Monteur',
+      'Service Techniker',
+      'Auftragsnummer',
+      'Auftragsnr.',
+      'Projekt'
+    ]);
+    final contact = extract('(?:Ansprechpartner|Kontakt Person vor Ort)', [
+      'Kunde',
+      'Objekt',
+      'Datum',
+      'Monteur',
+      'Service Techniker',
+      'Auftragsnummer',
+      'Auftragsnr.',
+      'Projekt'
+    ]);
+    final inspector = extract('(?:Monteur|Service Techniker)', [
+      'Kunde',
+      'Objekt',
+      'Datum',
+      'Ansprechpartner',
+      'Kontakt Person vor Ort',
+      'Auftragsnummer',
+      'Auftragsnr.',
+      'Projekt'
+    ]);
+    final jobNum = extract('(?:Auftragsnummer|Auftragsnr\\.)', [
+      'Kunde',
+      'Objekt',
+      'Datum',
+      'Ansprechpartner',
+      'Kontakt Person vor Ort',
+      'Monteur',
+      'Service Techniker',
+      'Projekt'
+    ]);
 
     String formattedDate = '';
     if (dateStr.isNotEmpty) {
-      final dateMatch = RegExp(r'(\d{2})\.(\d{2})\.(\d{4})').firstMatch(dateStr);
+      final dateMatch =
+          RegExp(r'(\d{2})\.(\d{2})\.(\d{4})').firstMatch(dateStr);
       if (dateMatch != null) {
-        formattedDate = '${dateMatch.group(3)}-${dateMatch.group(2)!.padLeft(2, '0')}-${dateMatch.group(1)!.padLeft(2, '0')}';
+        formattedDate =
+            '${dateMatch.group(3)}-${dateMatch.group(2)!.padLeft(2, '0')}-${dateMatch.group(1)!.padLeft(2, '0')}';
       }
     }
     if (formattedDate.isEmpty) {
@@ -978,7 +1167,11 @@ class ExcelDataImporter {
     // Remove project number pattern e.g. P-000604 or P-003341
     clean = clean.replaceAll(RegExp(r'\bP-\d+\b', caseSensitive: false), ' ');
     // Remove suffixes like Türen, Türliste, final, Monteur, Wartung, KINCHI, TEST, Kopie, template
-    clean = clean.replaceAll(RegExp(r'\b(Türen|Türliste|final|Monteur|Wartung|KINCHI|TEST|Kopie|template|1 Monteur)\b', caseSensitive: false), ' ');
+    clean = clean.replaceAll(
+        RegExp(
+            r'\b(Türen|Türliste|final|Monteur|Wartung|KINCHI|TEST|Kopie|template|1 Monteur)\b',
+            caseSensitive: false),
+        ' ');
     // Remove underscores and isolated hyphens (preserving hyphenated German street names like Carl-Cohn-Straße)
     clean = clean.replaceAll('_', ' ');
     clean = clean.replaceAll(RegExp(r'\s+-\s+'), ' ');
@@ -1040,7 +1233,9 @@ class ExcelDataImporter {
         return val.toInt().toString();
       }
       final strVal = val.toString().trim();
-      return strVal.endsWith('.0') ? strVal.substring(0, strVal.length - 2) : strVal;
+      return strVal.endsWith('.0')
+          ? strVal.substring(0, strVal.length - 2)
+          : strVal;
     }
 
     if (val is int) {
@@ -1112,10 +1307,17 @@ class ExcelDataImporter {
   static String _toEscapeDoorControl(dynamic val) {
     if (val == null) return 'Nein';
     final str = _toStr(val).trim();
-    if (str.isEmpty || str == '0' || str.toLowerCase() == 'false' || str.toLowerCase() == 'nein') {
+    if (str.isEmpty ||
+        str == '0' ||
+        str.toLowerCase() == 'false' ||
+        str.toLowerCase() == 'nein') {
       return 'Nein';
     }
-    if (str == '1' || str.toLowerCase() == 'true' || str.toLowerCase() == 'ja' || str == 'X' || str == 'x') {
+    if (str == '1' ||
+        str.toLowerCase() == 'true' ||
+        str.toLowerCase() == 'ja' ||
+        str == 'X' ||
+        str == 'x') {
       return 'Ja ?';
     }
     return str;
@@ -1124,9 +1326,11 @@ class ExcelDataImporter {
   /// Sanitizes door numbers by stripping unknown noise characters (commas, question marks, isolated dashes).
   /// Preserves valid alphanumeric formats like "21.A", "2202.5", "EG.01", "T-01".
   @visibleForTesting
-  static String sanitizeDoorNumberForTest(String raw) => _sanitizeDoorNumber(raw);
+  static String sanitizeDoorNumberForTest(String raw) =>
+      _sanitizeDoorNumber(raw);
 
-  static String _sanitizeDoorNumber(String raw, {int pos = 0, int rowIndex = 0}) {
+  static String _sanitizeDoorNumber(String raw,
+      {int pos = 0, int rowIndex = 0}) {
     if (raw.isEmpty || _isSummaryOrFooterText(raw)) {
       return pos > 0 ? pos.toString() : 'TÜR-$rowIndex';
     }
@@ -1157,9 +1361,10 @@ class ExcelDataImporter {
 
   static String _formatNotes(String raw) {
     if (raw.trim().isEmpty) return '';
-    String text = raw.replaceAll(RegExp(r'_x000[dD]_?'), '\n')
-                     .replaceAll('\r\n', '\n')
-                     .replaceAll('\r', '\n');
+    String text = raw
+        .replaceAll(RegExp(r'_x000[dD]_?'), '\n')
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
     final lines = text.split('\n');
     final cleaned = <String>[];
     bool previousEmpty = false;
@@ -1186,7 +1391,8 @@ class ExcelDataImporter {
 
   static String _cleanCatalogDesc(String text) {
     return text
-        .replaceFirst(RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
+        .replaceFirst(
+            RegExp(r'^(Hinweis|Mangel):\s*', caseSensitive: false), '')
         .replaceFirst(RegExp(r'^[xX]\s+'), '')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()

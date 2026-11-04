@@ -12,6 +12,8 @@ import '../services/customer_normalizer.dart';
 import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
 import '../utils/inspection_year_utils.dart';
+import '../widgets/craftnote_job_picker_modal.dart';
+import '../widgets/import_report_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
@@ -24,7 +26,9 @@ class MasterDoorsPage extends StatefulWidget {
 }
 
 enum MasterViewMode { customerInspections, doorInventory }
+
 enum ErrorFilterOption { all, withErrors, errorFree }
+
 enum ErrorSortOption { defaultSort, mostErrors, leastErrors }
 
 class _MasterDoorsPageState extends State<MasterDoorsPage> {
@@ -33,7 +37,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   ErrorSortOption _errorSort = ErrorSortOption.defaultSort;
   List<Map<String, dynamic>> _masterDoors = [];
   List<Map<String, dynamic>> _inspections = [];
-  List<Map<String, String>> _projects = [{'projectNumber': 'Alle', 'objectAddress': ''}];
+  List<Map<String, String>> _projects = [
+    {'projectNumber': 'Alle', 'objectAddress': ''}
+  ];
   String _selectedProject = 'Alle';
   bool _isLoading = true;
   bool _isProcessing = false;
@@ -72,8 +78,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ...projectsList,
           ];
           final projectExists = _projects.any((p) {
-            final key = p['projectNumber']!.isNotEmpty ? p['projectNumber']! : p['objectAddress']!;
-            return key == _selectedProject || p['projectNumber'] == _selectedProject;
+            final key = p['projectNumber']!.isNotEmpty
+                ? p['projectNumber']!
+                : p['objectAddress']!;
+            return key == _selectedProject ||
+                p['projectNumber'] == _selectedProject;
           });
           if (!projectExists) {
             _selectedProject = 'Alle';
@@ -87,7 +96,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Laden: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Fehler beim Laden: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -101,19 +112,58 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // PACKAGE EXPORT (TECHNICIAN DB PACKAGES)
+  // CRAFTNOTE RESULT IMPORT (MANAGER)
   // ─────────────────────────────────────────────────────────────
 
+  Future<void> _handleCraftnoteManagerImport() async {
+    String? initialOrder;
+    if (_selectedInspectionIds.isNotEmpty) {
+      final firstId = _selectedInspectionIds.first;
+      final selectedInsp = _inspections.firstWhere(
+        (i) => i['inspectionId'] == firstId,
+        orElse: () => {},
+      );
+      initialOrder = selectedInsp['jobNumber']?.toString() ??
+          selectedInsp['auftragsnummer']?.toString();
+    }
+
+    final result = await CraftnoteJobPickerModal.show(
+      context,
+      initialOrderNumber: initialOrder,
+      isManagerMode: true,
+    );
+
+    if (result != null && result.success) {
+      await _loadData();
+      if (!mounted) return;
+      if (result.report != null) {
+        await ImportReportDialog.show(context, result.report!);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PACKAGE EXPORT (TECHNICIAN DB PACKAGES)
+  // ─────────────────────────────────────────────────────────────
 
   Future<void> _handleExportSelectedInspections() async {
     if (_selectedInspectionIds.isEmpty) return;
     setState(() => _isProcessing = true);
     try {
-      final exportPath = await DatabaseService.exportJobPackage(_selectedInspectionIds.toList());
+      final exportPath = await DatabaseService.exportJobPackage(
+          _selectedInspectionIds.toList());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${_selectedInspectionIds.length} Prüfpaket(e) exportiert:\n$exportPath'),
+            content: Text(
+                '${_selectedInspectionIds.length} Prüfpaket(e) exportiert:\n$exportPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -123,7 +173,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Export fehlgeschlagen: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -135,11 +187,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     if (_selectedDoorIds.isEmpty) return;
     setState(() => _isProcessing = true);
     try {
-      final exportPath = await DatabaseService.exportDoorsPackage(_selectedDoorIds.toList());
+      final exportPath =
+          await DatabaseService.exportDoorsPackage(_selectedDoorIds.toList());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Prüfpaket für ${_selectedDoorIds.length} Tür(en) exportiert:\n$exportPath'),
+            content: Text(
+                'Prüfpaket für ${_selectedDoorIds.length} Tür(en) exportiert:\n$exportPath'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -149,7 +203,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Export fehlgeschlagen: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -157,18 +213,22 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     }
   }
 
-
   // ─────────────────────────────────────────────────────────────
   // GAEB EXPORT & CLOUD UPLOAD
   // ─────────────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> _prepareGaebExportData(List<int> inspectionIds) async {
+  Future<List<Map<String, dynamic>>> _prepareGaebExportData(
+      List<int> inspectionIds) async {
     List<Map<String, dynamic>> flatExportList = [];
     for (int inspectionId in inspectionIds) {
-      final doors = await DatabaseService.getDoorsByInspectionIds([inspectionId]);
-      final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
-      final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
-      final allErrors = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
+      final doors =
+          await DatabaseService.getDoorsByInspectionIds([inspectionId]);
+      final junctionList =
+          await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
+      final List<int> junctionIds =
+          junctionList.map((j) => j['id'] as int).toList();
+      final allErrors =
+          await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
       for (var door in doors) {
         final junction = junctionList.firstWhere(
@@ -181,7 +241,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             .where((e) => e['inspectionDoorId'] == junction['id'])
             .map((e) => {
                   'code': e['code']?.toString() ?? 'MISSING_CODE',
-                  'description': e['description']?.toString() ?? 'Fehlerbeschreibung fehlt',
+                  'description': e['description']?.toString() ??
+                      'Fehlerbeschreibung fehlt',
                 })
             .toList();
 
@@ -194,7 +255,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     return flatExportList;
   }
 
-  Future<void> _handleGaebExport({required bool isXml, List<int>? targetInspectionIds}) async {
+  Future<void> _handleGaebExport(
+      {required bool isXml, List<int>? targetInspectionIds}) async {
     final ids = targetInspectionIds ?? _selectedInspectionIds.toList();
     if (ids.isEmpty) return;
 
@@ -212,12 +274,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       );
 
       final data = await _prepareGaebExportData(ids);
-      final File file = isXml ? await service.exportToXml(data) : await service.exportToD83(data);
+      final File file = isXml
+          ? await service.exportToXml(data)
+          : await service.exportToD83(data);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${isXml ? "GAEB XML" : "GAEB 90"} exportiert:\n${file.path}'),
+            content: Text(
+                '${isXml ? "GAEB XML" : "GAEB 90"} exportiert:\n${file.path}'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -231,7 +296,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('GAEB-Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('GAEB-Export fehlgeschlagen: $e'),
+              backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -239,7 +306,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     }
   }
 
-  Future<void> _uploadToCloud(File file, String jobNumber, int directoryId) async {
+  Future<void> _uploadToCloud(
+      File file, String jobNumber, int directoryId) async {
     if (!mounted) return;
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -258,7 +326,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       String msg = 'Netzwerkfehler: $e';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cloud-Upload fehlgeschlagen: $msg'), backgroundColor: Colors.orange),
+          SnackBar(
+              content: Text('Cloud-Upload fehlgeschlagen: $msg'),
+              backgroundColor: Colors.orange),
         );
       }
     }
@@ -268,15 +338,23 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     final userCredentials = await _showUserSelectionDialog();
     if (userCredentials == null) return null;
 
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')));
     try {
-      final loggedIn = await _apiService.login(userCredentials['username']!, userCredentials['password']!);
+      final loggedIn = await _apiService.login(
+          userCredentials['username']!, userCredentials['password']!);
       if (!loggedIn) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Login fehlgeschlagen.'), backgroundColor: Colors.orange));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Login fehlgeschlagen.'),
+              backgroundColor: Colors.orange));
         return null;
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Login-Fehler: $e'), backgroundColor: Colors.orange));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Login-Fehler: $e'), backgroundColor: Colors.orange));
       return null;
     }
 
@@ -284,11 +362,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     try {
       fetchedDirectories = await _apiService.getDirectories();
       if (fetchedDirectories.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Keine Verzeichnisse gefunden.'), backgroundColor: Colors.orange));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Keine Verzeichnisse gefunden.'),
+              backgroundColor: Colors.orange));
         return null;
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fehler beim Laden: $e'), backgroundColor: Colors.orange));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Fehler beim Laden: $e'),
+            backgroundColor: Colors.orange));
       return null;
     }
 
@@ -309,26 +393,36 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 title: const Text('cabarcas@gottsberg.de'),
                 value: 'cabarcas',
                 groupValue: selectedUserOption,
-                onChanged: (val) => setDialogState(() => selectedUserOption = val),
+                onChanged: (val) =>
+                    setDialogState(() => selectedUserOption = val),
               ),
               RadioListTile<String>(
                 title: const Text('s.bluemel@konzschaefer.de'),
                 value: 'bluemel',
                 groupValue: selectedUserOption,
-                onChanged: (val) => setDialogState(() => selectedUserOption = val),
+                onChanged: (val) =>
+                    setDialogState(() => selectedUserOption = val),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Überspringen')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('Überspringen')),
             ElevatedButton(
               onPressed: selectedUserOption == null
                   ? null
                   : () {
                       if (selectedUserOption == 'cabarcas') {
-                        Navigator.pop(context, {'username': "cabarcas@gottsberg.de", 'password': "KINCHI_HiLdE21042017!"});
+                        Navigator.pop(context, {
+                          'username': "cabarcas@gottsberg.de",
+                          'password': "KINCHI_HiLdE21042017!"
+                        });
                       } else {
-                        Navigator.pop(context, {'username': "s.bluemel@konzschaefer.de", 'password': "Konz2006"});
+                        Navigator.pop(context, {
+                          'username': "s.bluemel@konzschaefer.de",
+                          'password': "Konz2006"
+                        });
                       }
                     },
               child: const Text('Weiter'),
@@ -364,9 +458,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Abbrechen')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('Abbrechen')),
             ElevatedButton(
-              onPressed: selectedId == null ? null : () => Navigator.pop(context, selectedId),
+              onPressed: selectedId == null
+                  ? null
+                  : () => Navigator.pop(context, selectedId),
               child: const Text('Hochladen'),
             ),
           ],
@@ -389,10 +487,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               'Türen (Stammdaten) und der Fehlerkatalog bleiben erhalten.',
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Abbrechen')),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Alles löschen', style: TextStyle(color: Colors.red)),
+                child: const Text('Alles löschen',
+                    style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -442,7 +543,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
   void _toggleCustomerInspections(List<int> inspectionIds) {
     setState(() {
-      final allSelected = inspectionIds.every((id) => _selectedInspectionIds.contains(id));
+      final allSelected =
+          inspectionIds.every((id) => _selectedInspectionIds.contains(id));
       if (allSelected) {
         _selectedInspectionIds.removeAll(inspectionIds);
       } else {
@@ -463,7 +565,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           'Prüfungsdaten unwiderruflich aus der Haupt-Datenbank löschen?',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -487,7 +591,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text('Fehler beim Löschen: $e'),
+                backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -508,7 +614,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           'Prüfungsdaten unwiderruflich löschen?',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -521,7 +629,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        await DatabaseService.deleteInspections(_selectedInspectionIds.toList());
+        await DatabaseService.deleteInspections(
+            _selectedInspectionIds.toList());
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Aufträge erfolgreich gelöscht.')),
@@ -532,7 +641,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+            SnackBar(
+                content: Text('Fehler beim Löschen: $e'),
+                backgroundColor: Colors.red),
           );
         }
       } finally {
@@ -570,10 +681,13 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('Master-Portal (Manager)', style: TextStyle(fontSize: 18)),
+                          const Text('Master-Portal (Manager)',
+                              style: TextStyle(fontSize: 18)),
                           Text(
-                            AppVersionService.getCompactVersionInfo(isManager: true),
-                            style: const TextStyle(fontSize: 11, color: Colors.white70),
+                            AppVersionService.getCompactVersionInfo(
+                                isManager: true),
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.white70),
                           ),
                         ],
                       ),
@@ -602,6 +716,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ] else if (isInspectionSelectionMode) ...[
             IconButton(
+              icon: const Icon(Icons.cloud_download, color: Colors.blueAccent),
+              tooltip: 'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
+              onPressed: _isProcessing ? null : _handleCraftnoteManagerImport,
+            ),
+            IconButton(
               icon: const Icon(Icons.upload_file),
               tooltip: 'Paket für Techniker exportieren',
               onPressed: _handleExportSelectedInspections,
@@ -618,16 +737,24 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               onPressed: _isProcessing ? null : _showCreateProjectDialog,
             ),
             IconButton(
-              icon: const Icon(Icons.drive_folder_upload),
-              tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
-              onPressed: _isProcessing ? null : () => BatchMigrationDialog.show(context, onMigrationCompleted: _loadData),
+              icon: const Icon(Icons.cloud_download, color: Colors.blueAccent),
+              tooltip: 'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
+              onPressed: _isProcessing ? null : _handleCraftnoteManagerImport,
             ),
             IconButton(
-              icon: const Icon(Icons.published_with_changes, color: Colors.deepPurpleAccent),
+              icon: const Icon(Icons.drive_folder_upload),
+              tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
+              onPressed: _isProcessing
+                  ? null
+                  : () => BatchMigrationDialog.show(context,
+                      onMigrationCompleted: _loadData),
+            ),
+            IconButton(
+              icon: const Icon(Icons.published_with_changes,
+                  color: Colors.deepPurpleAccent),
               tooltip: 'Migrations-Audit & DB-Reparatur',
               onPressed: () => MigrationLogDialog.show(context),
             ),
-
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               tooltip: 'Alle Aufträge löschen',
@@ -664,7 +791,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             children: [
               // Segmented Switcher: Projekte & Aufträge vs. Türen-Inventar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: SegmentedButton<MasterViewMode>(
                   segments: const [
                     ButtonSegment<MasterViewMode>(
@@ -692,12 +820,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               // Project / Liegenschaft Filter Chips
               if (_projects.length > 1)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.domain, size: 18, color: Colors.blueAccent),
+                      const Icon(Icons.domain,
+                          size: 18, color: Colors.blueAccent),
                       const SizedBox(width: 8),
-                      const Text('Projekt:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      const Text('Projekt:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: SingleChildScrollView(
@@ -706,7 +838,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             children: _projects.map((proj) {
                               final projNum = proj['projectNumber'] ?? '';
                               final objAddr = proj['objectAddress'] ?? '';
-                              final projKey = projNum.isNotEmpty ? projNum : (objAddr.isNotEmpty ? objAddr : 'Alle');
+                              final projKey = projNum.isNotEmpty
+                                  ? projNum
+                                  : (objAddr.isNotEmpty ? objAddr : 'Alle');
                               final isSelected = projKey == _selectedProject;
 
                               String labelText = 'Alle Projekte';
@@ -723,12 +857,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                               return Padding(
                                 padding: const EdgeInsets.only(right: 6.0),
                                 child: ChoiceChip(
-                                  avatar: isSelected && projKey != 'Alle' ? const Icon(Icons.check, size: 14) : null,
-                                  label: Text(labelText, style: const TextStyle(fontSize: 12)),
+                                  avatar: isSelected && projKey != 'Alle'
+                                      ? const Icon(Icons.check, size: 14)
+                                      : null,
+                                  label: Text(labelText,
+                                      style: const TextStyle(fontSize: 12)),
                                   selected: isSelected,
                                   onSelected: (selected) {
                                     if (selected) {
-                                      setState(() => _selectedProject = projKey);
+                                      setState(
+                                          () => _selectedProject = projKey);
                                       _loadData();
                                     }
                                   },
@@ -789,9 +927,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                   const VerticalDivider(),
                   TextButton.icon(
-                    onPressed: _isProcessing ? null : _handleExportSelectedDoors,
+                    onPressed:
+                        _isProcessing ? null : _handleExportSelectedDoors,
                     icon: const Icon(Icons.upload_file),
-                    label: Text('Paket exportieren (${_selectedDoorIds.length})'),
+                    label:
+                        Text('Paket exportieren (${_selectedDoorIds.length})'),
                   ),
                 ],
               ),
@@ -803,16 +943,35 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     children: [
                       IconButton(
                         onPressed: _handleDeleteSelectedInspections,
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
+                        icon:
+                            const Icon(Icons.delete_outline, color: Colors.red),
                         tooltip: 'Auswahl löschen',
+                      ),
+                      const VerticalDivider(),
+                      Tooltip(
+                        message: 'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
+                        child: TextButton.icon(
+                          onPressed: _isProcessing
+                              ? null
+                              : _handleCraftnoteManagerImport,
+                          icon: const Icon(Icons.cloud_download,
+                              color: Colors.blueAccent),
+                          label: const Text('Craftnote Ergebnis',
+                              style: TextStyle(color: Colors.blueAccent)),
+                        ),
                       ),
                       const VerticalDivider(),
                       Tooltip(
                         message: 'Paket für Techniker exportieren',
                         child: TextButton.icon(
-                          onPressed: _isProcessing ? null : _handleExportSelectedInspections,
-                          icon: const Icon(Icons.upload_file, color: Colors.green),
-                          label: Text('Paket (${_selectedInspectionIds.length})', style: const TextStyle(color: Colors.green)),
+                          onPressed: _isProcessing
+                              ? null
+                              : _handleExportSelectedInspections,
+                          icon: const Icon(Icons.upload_file,
+                              color: Colors.green),
+                          label: Text(
+                              'Paket (${_selectedInspectionIds.length})',
+                              style: const TextStyle(color: Colors.green)),
                         ),
                       ),
                     ],
@@ -827,7 +986,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   onPressed: _isProcessing ? null : _showCreateProjectDialog,
                   icon: const Icon(Icons.domain_add),
                   label: const Text('Neues Projekt / Vorlage'),
-                  tooltip: 'Neues Projekt / Adresse mit leerer Techniker-Vorlage anlegen',
+                  tooltip:
+                      'Neues Projekt / Adresse mit leerer Techniker-Vorlage anlegen',
                 )
               : FloatingActionButton(
                   heroTag: 'fab_master_doors',
@@ -836,7 +996,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const DoorInspectionForm(isManagerMode: true),
+                        builder: (_) =>
+                            const DoorInspectionForm(isManagerMode: true),
                       ),
                     );
                     _loadData();
@@ -856,7 +1017,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.domain_disabled_outlined, size: 64, color: Colors.grey.shade400),
+            Icon(Icons.domain_disabled_outlined,
+                size: 64, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
               _searchController.text.isNotEmpty || _selectedProject != 'Alle'
@@ -889,7 +1051,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
       grouped.putIfAbsent(groupKey, () => []).add(insp);
     }
 
-    final projectKeys = grouped.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final projectKeys = grouped.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return ListView.builder(
       key: const PageStorageKey('master_project_inspections_list'),
@@ -915,14 +1078,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             .toList();
 
         final bool isAllProjectSelected = projectInspectionIds.isNotEmpty &&
-            projectInspectionIds.every((id) => _selectedInspectionIds.contains(id));
+            projectInspectionIds
+                .every((id) => _selectedInspectionIds.contains(id));
         final bool isAnyProjectSelected = projectInspectionIds
             .any((id) => _selectedInspectionIds.contains(id));
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6),
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
             key: PageStorageKey('project_group_${projectGroupTitle}_$index'),
             initiallyExpanded: true,
@@ -931,7 +1096,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ? true
                   : (isAnyProjectSelected ? null : false),
               tristate: true,
-              onChanged: (_) => _toggleCustomerInspections(projectInspectionIds),
+              onChanged: (_) =>
+                  _toggleCustomerInspections(projectInspectionIds),
             ),
             title: Row(
               children: [
@@ -942,20 +1108,25 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     color: Colors.indigo.shade50,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.domain, color: Colors.indigo.shade700, size: 20),
+                  child: Icon(Icons.domain,
+                      color: Colors.indigo.shade700, size: 20),
                 ),
                 Expanded(
                   child: Text(
                     projectGroupTitle,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: () async {
                     final firstJob = projectInspections.first;
-                    final pNum = firstJob['projectNumber']?.toString().trim() ?? '';
-                    final addr = firstJob['objectAddress']?.toString().trim() ?? '';
-                    final client = firstJob['clientName']?.toString().trim() ?? '';
+                    final pNum =
+                        firstJob['projectNumber']?.toString().trim() ?? '';
+                    final addr =
+                        firstJob['objectAddress']?.toString().trim() ?? '';
+                    final client =
+                        firstJob['clientName']?.toString().trim() ?? '';
                     final created = await CreateProjectDialog.show(
                       context,
                       initialProjectNumber: pNum.isNotEmpty ? pNum : null,
@@ -966,10 +1137,14 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       _loadData();
                     }
                   },
-                  icon: const Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 18),
+                  icon: const Icon(Icons.add_circle_outline,
+                      color: Colors.blueAccent, size: 18),
                   label: const Text(
                     '+ Neuer Auftrag',
-                    style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.blueAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
                 TextButton.icon(
@@ -979,11 +1154,14 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           final messenger = ScaffoldMessenger.of(context);
                           setState(() => _isProcessing = true);
                           try {
-                            final exportPath = await DatabaseService.exportJobPackage(projectInspectionIds);
+                            final exportPath =
+                                await DatabaseService.exportJobPackage(
+                                    projectInspectionIds);
                             if (mounted) {
                               messenger.showSnackBar(
                                 SnackBar(
-                                  content: Text('Projektpaket ($projectGroupTitle) mit ${projectInspectionIds.length} Auftrag/Aufträgen exportiert:\n$exportPath'),
+                                  content: Text(
+                                      'Projektpaket ($projectGroupTitle) mit ${projectInspectionIds.length} Auftrag/Aufträgen exportiert:\n$exportPath'),
                                   backgroundColor: Colors.green,
                                   duration: const Duration(seconds: 5),
                                 ),
@@ -992,17 +1170,23 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           } catch (e) {
                             if (mounted) {
                               messenger.showSnackBar(
-                                SnackBar(content: Text('Export fehlgeschlagen: $e'), backgroundColor: Colors.red),
+                                SnackBar(
+                                    content: Text('Export fehlgeschlagen: $e'),
+                                    backgroundColor: Colors.red),
                               );
                             }
                           } finally {
                             if (mounted) setState(() => _isProcessing = false);
                           }
                         },
-                  icon: const Icon(Icons.upload_file, color: Colors.green, size: 18),
+                  icon: const Icon(Icons.upload_file,
+                      color: Colors.green, size: 18),
                   label: Text(
                     'Projektpaket (${projectInspectionIds.length})',
-                    style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -1010,15 +1194,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 2.0),
               child: Text(
-                '${projectInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt' +
-                    (clients.isNotEmpty ? ' • Kunde: $clients' : ''),
+                '${projectInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt${clients.isNotEmpty ? ' • Kunde: $clients' : ''}',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
               ),
             ),
             children: projectInspections.map((job) {
               final id = job['inspectionId'] as int;
               final isSelected = _selectedInspectionIds.contains(id);
-              final bool locked = InspectionYearUtils.isInspectionLocked(job['isLocked']);
+              final bool locked =
+                  InspectionYearUtils.isInspectionLocked(job['isLocked']);
               final orderType = job['orderType']?.toString() ?? 'Wartung';
               final isReparatur = orderType == 'Reparatur';
               final isErledigt = orderType == 'Erledigt';
@@ -1026,223 +1210,269 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
               final Color badgeBg = isErledigt
                   ? Colors.green.shade50
-                  : (isReparatur ? Colors.orange.shade100 : Colors.blue.shade50);
+                  : (isReparatur
+                      ? Colors.orange.shade100
+                      : Colors.blue.shade50);
               final Color badgeBorder = isErledigt
                   ? Colors.green.shade400
-                  : (isReparatur ? Colors.orange.shade400 : Colors.blue.shade300);
+                  : (isReparatur
+                      ? Colors.orange.shade400
+                      : Colors.blue.shade300);
               final Color badgeTextColor = isErledigt
                   ? Colors.green.shade900
-                  : (isReparatur ? Colors.orange.shade900 : Colors.blue.shade800);
+                  : (isReparatur
+                      ? Colors.orange.shade900
+                      : Colors.blue.shade800);
               final IconData badgeIcon = isErledigt
                   ? Icons.task_alt
-                  : (isReparatur ? Icons.handyman_outlined : Icons.build_circle_outlined);
+                  : (isReparatur
+                      ? Icons.handyman_outlined
+                      : Icons.build_circle_outlined);
 
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Material(
-                  color: isSelected ? Colors.blue.shade50.withValues(alpha: 0.3) : Colors.transparent,
+                  color: isSelected
+                      ? Colors.blue.shade50.withValues(alpha: 0.3)
+                      : Colors.transparent,
                   shape: RoundedRectangleBorder(
                     side: BorderSide(
-                      color: isSelected ? Colors.blue.shade400 : Colors.grey.shade200,
+                      color: isSelected
+                          ? Colors.blue.shade400
+                          : Colors.grey.shade200,
                       width: isSelected ? 1.5 : 1.0,
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: ListTile(
-                  leading: Checkbox(
-                    value: isSelected,
-                    onChanged: (_) => _toggleInspectionSelection(id),
-                  ),
-                  title: Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      Text(
-                        'Auftrag: ${job['jobNumber'] ?? "N/A"}',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: badgeBorder),
+                    leading: Checkbox(
+                      value: isSelected,
+                      onChanged: (_) => _toggleInspectionSelection(id),
+                    ),
+                    title: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Text(
+                          'Auftrag: ${job['jobNumber'] ?? "N/A"}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              badgeIcon,
-                              size: 11,
-                              color: badgeTextColor,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              orderType,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: badgeTextColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () async {
-                          await DatabaseService.setInspectionLockStatus(id, !locked);
-                          _loadData();
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: locked ? Colors.red.shade50 : Colors.green.shade50,
-                            border: Border.all(color: locked ? Colors.red.shade300 : Colors.green.shade300),
-                            borderRadius: BorderRadius.circular(12),
+                            color: badgeBg,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: badgeBorder),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                locked ? Icons.lock : Icons.lock_open,
+                                badgeIcon,
                                 size: 11,
-                                color: locked ? Colors.red.shade900 : Colors.green.shade900,
+                                color: badgeTextColor,
                               ),
                               const SizedBox(width: 3),
                               Text(
-                                locked ? 'Gesperrt' : 'Freigegeben',
+                                orderType,
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: locked ? Colors.red.shade900 : Colors.green.shade900,
+                                  color: badgeTextColor,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                      if (job['date'] != null && job['date'].toString().isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            job['date'].toString(),
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                          ),
-                        ),
-                    ],
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (job['clientName'] != null && job['clientName'].toString().isNotEmpty)
-                          Text(
-                            'Kunde: ${job['clientName']}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                          ),
-                        if (job['objectAddress'] != null && job['objectAddress'].toString().isNotEmpty)
-                          Text(
-                            'Objekt: ${job['objectAddress']}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                          ),
-                        if ((isReparatur || isErledigt) && repairDateStr != null && repairDateStr.isNotEmpty)
-                          Text(
-                            'Reparaturdatum: $repairDateStr',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: isErledigt ? Colors.green.shade900 : Colors.orange.shade900,
+                        GestureDetector(
+                          onTap: () async {
+                            await DatabaseService.setInspectionLockStatus(
+                                id, !locked);
+                            _loadData();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: locked
+                                  ? Colors.red.shade50
+                                  : Colors.green.shade50,
+                              border: Border.all(
+                                  color: locked
+                                      ? Colors.red.shade300
+                                      : Colors.green.shade300),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  locked ? Icons.lock : Icons.lock_open,
+                                  size: 11,
+                                  color: locked
+                                      ? Colors.red.shade900
+                                      : Colors.green.shade900,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  locked ? 'Gesperrt' : 'Freigegeben',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: locked
+                                        ? Colors.red.shade900
+                                        : Colors.green.shade900,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        Text(
-                          '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.blue.shade800),
                         ),
+                        if (job['date'] != null &&
+                            job['date'].toString().isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              job['date'].toString(),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
+                            ),
+                          ),
                       ],
                     ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!isErledigt)
-                        IconButton(
-                          icon: const Icon(Icons.task_alt, color: Colors.green),
-                          tooltip: 'Als "Erledigt" abschließen & konsolidieren',
-                          onPressed: () async {
-                            final jobNum = job['jobNumber']?.toString() ?? '';
-                            final projNum = job['projectNumber']?.toString();
-                            await DatabaseService.consolidateJobToErledigt(
-                              jobNumber: jobNum,
-                              projectNumber: projNum,
-                            );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Auftrag $jobNum erfolgreich als "Erledigt" abgeschlossen.'),
-                                  backgroundColor: Colors.green,
-                                ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (job['clientName'] != null &&
+                              job['clientName'].toString().isNotEmpty)
+                            Text(
+                              'Kunde: ${job['clientName']}',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade700),
+                            ),
+                          if (job['objectAddress'] != null &&
+                              job['objectAddress'].toString().isNotEmpty)
+                            Text(
+                              'Objekt: ${job['objectAddress']}',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade700),
+                            ),
+                          if ((isReparatur || isErledigt) &&
+                              repairDateStr != null &&
+                              repairDateStr.isNotEmpty)
+                            Text(
+                              'Reparaturdatum: $repairDateStr',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isErledigt
+                                    ? Colors.green.shade900
+                                    : Colors.orange.shade900,
+                              ),
+                            ),
+                          Text(
+                            '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.blue.shade800),
+                          ),
+                        ],
+                      ),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!isErledigt)
+                          IconButton(
+                            icon:
+                                const Icon(Icons.task_alt, color: Colors.green),
+                            tooltip:
+                                'Als "Erledigt" abschließen & konsolidieren',
+                            onPressed: () async {
+                              final jobNum = job['jobNumber']?.toString() ?? '';
+                              final projNum = job['projectNumber']?.toString();
+                              await DatabaseService.consolidateJobToErledigt(
+                                jobNumber: jobNum,
+                                projectNumber: projNum,
                               );
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                        'Auftrag $jobNum erfolgreich als "Erledigt" abgeschlossen.'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                                _loadData();
+                              }
+                            },
+                          ),
+                        IconButton(
+                          icon: Icon(
+                            locked ? Icons.lock : Icons.lock_open,
+                            color: locked ? Colors.red : Colors.green,
+                          ),
+                          tooltip:
+                              locked ? 'Auftrag entsperren' : 'Auftrag sperren',
+                          onPressed: () async {
+                            await DatabaseService.setInspectionLockStatus(
+                                id, !locked);
+                            _loadData();
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined,
+                              color: Colors.grey),
+                          tooltip: 'Auftrag bearbeiten',
+                          onPressed: () async {
+                            final updated = await EditInspectionDialog.show(
+                              context,
+                              inspectionId: id,
+                              initialData: job,
+                              isManagerMode: true,
+                            );
+                            if (updated == true && mounted) {
                               _loadData();
                             }
                           },
                         ),
-                      IconButton(
-                        icon: Icon(
-                          locked ? Icons.lock : Icons.lock_open,
-                          color: locked ? Colors.red : Colors.green,
-                        ),
-                        tooltip: locked ? 'Auftrag entsperren' : 'Auftrag sperren',
-                        onPressed: () async {
-                          await DatabaseService.setInspectionLockStatus(id, !locked);
-                          _loadData();
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: Colors.grey),
-                        tooltip: 'Auftrag bearbeiten',
-                        onPressed: () async {
-                          final updated = await EditInspectionDialog.show(
-                            context,
-                            inspectionId: id,
-                            initialData: job,
-                            isManagerMode: true,
-                          );
-                          if (updated == true && mounted) {
-                            _loadData();
-                          }
-                        },
-                      ),
-                      const Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  onLongPress: () => _toggleInspectionSelection(id),
-                  onTap: () async {
-                    if (_selectedInspectionIds.isNotEmpty) {
-                      _toggleInspectionSelection(id);
-                    } else {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => InspectionDoorsPage(
-                            inspectionId: id,
-                            title: '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
-                            isManagerMode: true,
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                    onLongPress: () => _toggleInspectionSelection(id),
+                    onTap: () async {
+                      if (_selectedInspectionIds.isNotEmpty) {
+                        _toggleInspectionSelection(id);
+                      } else {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => InspectionDoorsPage(
+                              inspectionId: id,
+                              title:
+                                  '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
+                              isManagerMode: true,
+                            ),
                           ),
-                        ),
-                      );
-                      _loadData();
-                    }
-                  },
+                        );
+                        _loadData();
+                      }
+                    },
+                  ),
                 ),
-              ),
-            );
+              );
             }).toList(),
           ),
         );
@@ -1261,12 +1491,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     List<Map<String, dynamic>> displayDoors = List.from(_masterDoors);
     if (_errorFilter == ErrorFilterOption.withErrors) {
       displayDoors = displayDoors.where((d) {
-        final count = (d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final count = (d['openErrorCount'] as num?)?.toInt() ??
+            (d['totalErrorCount'] as num?)?.toInt() ??
+            0;
         return count > 0;
       }).toList();
     } else if (_errorFilter == ErrorFilterOption.errorFree) {
       displayDoors = displayDoors.where((d) {
-        final count = (d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final count = (d['openErrorCount'] as num?)?.toInt() ??
+            (d['totalErrorCount'] as num?)?.toInt() ??
+            0;
         return count == 0;
       }).toList();
     }
@@ -1274,15 +1508,24 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     // Apply Error Status Sorting
     if (_errorSort == ErrorSortOption.mostErrors) {
       displayDoors.sort((a, b) {
-        final countA = (a['openErrorCount'] as num?)?.toInt() ?? (a['totalErrorCount'] as num?)?.toInt() ?? 0;
-        final countB = (b['openErrorCount'] as num?)?.toInt() ?? (b['totalErrorCount'] as num?)?.toInt() ?? 0;
+        final countA = (a['openErrorCount'] as num?)?.toInt() ??
+            (a['totalErrorCount'] as num?)?.toInt() ??
+            0;
+        final countB = (b['openErrorCount'] as num?)?.toInt() ??
+            (b['totalErrorCount'] as num?)?.toInt() ??
+            0;
         return countB.compareTo(countA); // Descending: Most open errors first
       });
     } else if (_errorSort == ErrorSortOption.leastErrors) {
       displayDoors.sort((a, b) {
-        final countA = (a['openErrorCount'] as num?)?.toInt() ?? (a['totalErrorCount'] as num?)?.toInt() ?? 0;
-        final countB = (b['openErrorCount'] as num?)?.toInt() ?? (b['totalErrorCount'] as num?)?.toInt() ?? 0;
-        return countA.compareTo(countB); // Ascending: Least open errors / error-free first
+        final countA = (a['openErrorCount'] as num?)?.toInt() ??
+            (a['totalErrorCount'] as num?)?.toInt() ??
+            0;
+        final countB = (b['openErrorCount'] as num?)?.toInt() ??
+            (b['totalErrorCount'] as num?)?.toInt() ??
+            0;
+        return countA.compareTo(
+            countB); // Ascending: Least open errors / error-free first
       });
     } else {
       // Default: Hierarchical sort by Floor -> Room -> Door Number
@@ -1295,29 +1538,50 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
     final int totalCount = _masterDoors.length;
     final int shownCount = displayDoors.length;
-    final int withErrorsCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) > 0).length;
-    final int errorFreeCount = displayDoors.where((d) => ((d['openErrorCount'] as num?)?.toInt() ?? (d['totalErrorCount'] as num?)?.toInt() ?? 0) == 0).length;
-    final bool isFilterActive = _searchController.text.isNotEmpty || _selectedProject != 'Alle' || _errorFilter != ErrorFilterOption.all;
+    final int withErrorsCount = displayDoors
+        .where((d) =>
+            ((d['openErrorCount'] as num?)?.toInt() ??
+                (d['totalErrorCount'] as num?)?.toInt() ??
+                0) >
+            0)
+        .length;
+    final int errorFreeCount = displayDoors
+        .where((d) =>
+            ((d['openErrorCount'] as num?)?.toInt() ??
+                (d['totalErrorCount'] as num?)?.toInt() ??
+                0) ==
+            0)
+        .length;
+    final bool isFilterActive = _searchController.text.isNotEmpty ||
+        _selectedProject != 'Alle' ||
+        _errorFilter != ErrorFilterOption.all;
 
     return Column(
       children: [
         // Error Filter & Sort Control Bar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.3),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 const Icon(Icons.filter_list, size: 16, color: Colors.grey),
                 const SizedBox(width: 4),
-                const Text('Mängelfilter:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                const Text('Mängelfilter:',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Alle Türen', style: TextStyle(fontSize: 11)),
+                  label:
+                      const Text('Alle Türen', style: TextStyle(fontSize: 11)),
                   selected: _errorFilter == ErrorFilterOption.all,
                   onSelected: (selected) {
-                    if (selected) setState(() => _errorFilter = ErrorFilterOption.all);
+                    if (selected)
+                      setState(() => _errorFilter = ErrorFilterOption.all);
                   },
                 ),
                 const SizedBox(width: 6),
@@ -1325,14 +1589,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.red),
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 14, color: Colors.red),
                       const SizedBox(width: 4),
                       const Text('Mit Mängeln', style: TextStyle(fontSize: 11)),
                     ],
                   ),
                   selected: _errorFilter == ErrorFilterOption.withErrors,
                   onSelected: (selected) {
-                    if (selected) setState(() => _errorFilter = ErrorFilterOption.withErrors);
+                    if (selected)
+                      setState(
+                          () => _errorFilter = ErrorFilterOption.withErrors);
                   },
                 ),
                 const SizedBox(width: 6),
@@ -1340,20 +1607,25 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                      const Icon(Icons.check_circle_outline,
+                          size: 14, color: Colors.green),
                       const SizedBox(width: 4),
                       const Text('Mängelfrei', style: TextStyle(fontSize: 11)),
                     ],
                   ),
                   selected: _errorFilter == ErrorFilterOption.errorFree,
                   onSelected: (selected) {
-                    if (selected) setState(() => _errorFilter = ErrorFilterOption.errorFree);
+                    if (selected)
+                      setState(
+                          () => _errorFilter = ErrorFilterOption.errorFree);
                   },
                 ),
                 const SizedBox(width: 16),
                 const Icon(Icons.sort, size: 16, color: Colors.grey),
                 const SizedBox(width: 4),
-                const Text('Sortierung:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                const Text('Sortierung:',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
                 const SizedBox(width: 6),
                 PopupMenuButton<ErrorSortOption>(
                   initialValue: _errorSort,
@@ -1389,20 +1661,26 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     PopupMenuItem(
                       value: ErrorSortOption.mostErrors,
                       child: Row(
-                        children: const [
-                          Icon(Icons.arrow_downward, color: Colors.red, size: 18),
+                        children: [
+                          Icon(Icons.arrow_downward,
+                              color: Colors.red, size: 18),
                           SizedBox(width: 8),
-                          Expanded(child: Text('Meiste Mängel zuerst', overflow: TextOverflow.ellipsis)),
+                          Expanded(
+                              child: Text('Meiste Mängel zuerst',
+                                  overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ),
                     PopupMenuItem(
                       value: ErrorSortOption.leastErrors,
                       child: Row(
-                        children: const [
-                          Icon(Icons.arrow_upward, color: Colors.green, size: 18),
+                        children: [
+                          Icon(Icons.arrow_upward,
+                              color: Colors.green, size: 18),
                           SizedBox(width: 8),
-                          Expanded(child: Text('Wenigste Mängel zuerst', overflow: TextOverflow.ellipsis)),
+                          Expanded(
+                              child: Text('Wenigste Mängel zuerst',
+                                  overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ),
@@ -1417,42 +1695,59 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
         // Metrics Summary Banner for Door Inventory
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: isFilterActive ? Colors.blue.shade50.withValues(alpha: 0.6) : Colors.grey.shade100,
+          color: isFilterActive
+              ? Colors.blue.shade50.withValues(alpha: 0.6)
+              : Colors.grey.shade100,
           child: Row(
             children: [
               Icon(
-                isFilterActive ? Icons.filter_alt_outlined : Icons.analytics_outlined,
+                isFilterActive
+                    ? Icons.filter_alt_outlined
+                    : Icons.analytics_outlined,
                 size: 18,
-                color: isFilterActive ? Colors.blue.shade800 : Colors.grey.shade700,
+                color: isFilterActive
+                    ? Colors.blue.shade800
+                    : Colors.grey.shade700,
               ),
               const SizedBox(width: 8),
               Text(
                 'Angezeigt: ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey.shade900),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Colors.grey.shade900),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: isFilterActive ? Colors.blue.shade700 : Colors.deepPurple,
+                  color:
+                      isFilterActive ? Colors.blue.shade700 : Colors.deepPurple,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '$shownCount Tür(en)',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
                 ),
               ),
               if (isFilterActive && totalCount != shownCount) ...[
                 const SizedBox(width: 6),
                 Text(
                   '(von $totalCount gesamt)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                      fontStyle: FontStyle.italic),
                 ),
               ],
               const Spacer(),
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.red.shade50,
                       border: Border.all(color: Colors.red.shade200),
@@ -1460,12 +1755,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     ),
                     child: Text(
                       '$withErrorsCount mit Mängeln',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.red.shade900),
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.red.shade900),
                     ),
                   ),
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.green.shade50,
                       border: Border.all(color: Colors.green.shade200),
@@ -1473,7 +1772,10 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     ),
                     child: Text(
                       '$errorFreeCount mängelfrei',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green.shade900),
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green.shade900),
                     ),
                   ),
                 ],
@@ -1490,39 +1792,48 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.door_sliding_outlined, size: 64, color: Colors.grey.shade400),
+                      Icon(Icons.door_sliding_outlined,
+                          size: 64, color: Colors.grey.shade400),
                       const SizedBox(height: 16),
                       Text(
                         _errorFilter == ErrorFilterOption.withErrors
                             ? 'Keine Türen mit Mängeln gefunden'
                             : _errorFilter == ErrorFilterOption.errorFree
                                 ? 'Keine mängelfreien Türen gefunden'
-                                : _searchController.text.isNotEmpty || _selectedProject != 'Alle'
+                                : _searchController.text.isNotEmpty ||
+                                        _selectedProject != 'Alle'
                                     ? 'Keine passenden Türen gefunden'
                                     : 'Keine Türen in der Hauptdatenbank vorhanden',
-                        style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+                        style: TextStyle(
+                            fontSize: 16, color: Colors.grey.shade700),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
                   key: const PageStorageKey('master_door_inventory_list'),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   itemCount: displayDoors.length,
                   itemBuilder: (context, index) {
                     final doorMap = displayDoors[index];
                     final id = doorMap['id'] as int;
                     final door = Door.fromMap(doorMap);
                     final isSelected = _selectedDoorIds.contains(id);
-                    final int errorCount = (doorMap['openErrorCount'] as num?)?.toInt() ?? (doorMap['totalErrorCount'] as num?)?.toInt() ?? 0;
-                    final String clientName = doorMap['clientName'] ?? 'Ohne Zuordnung';
+                    final int errorCount =
+                        (doorMap['openErrorCount'] as num?)?.toInt() ??
+                            (doorMap['totalErrorCount'] as num?)?.toInt() ??
+                            0;
+                    final String clientName =
+                        doorMap['clientName'] ?? 'Ohne Zuordnung';
                     final String jobNumber = doorMap['jobNumber'] ?? '';
                     final int? inspectionId = doorMap['inspectionId'] as int?;
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       elevation: isSelected ? 4 : 1,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                       child: ListTile(
                         leading: isSelectionMode
                             ? Checkbox(
@@ -1530,31 +1841,42 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                                 onChanged: (_) => _toggleDoorSelection(id),
                               )
                             : CircleAvatar(
-                                backgroundColor: errorCount > 0 ? Colors.red.shade100 : Colors.green.shade100,
+                                backgroundColor: errorCount > 0
+                                    ? Colors.red.shade100
+                                    : Colors.green.shade100,
                                 child: Icon(
                                   Icons.door_front_door,
-                                  color: errorCount > 0 ? Colors.red.shade800 : Colors.green.shade800,
+                                  color: errorCount > 0
+                                      ? Colors.red.shade800
+                                      : Colors.green.shade800,
                                 ),
                               ),
                         title: Row(
                           children: [
                             Text(
-                              door.doorNumber.isNotEmpty ? 'Tür ${door.doorNumber}' : 'Tür ohne Nummer',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              door.doorNumber.isNotEmpty
+                                  ? 'Tür ${door.doorNumber}'
+                                  : 'Tür ohne Nummer',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(width: 8),
-                            if (door.doorAlias != null && door.doorAlias!.isNotEmpty)
+                            if (door.doorAlias != null &&
+                                door.doorAlias!.isNotEmpty)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.blue.shade50,
-                                  border: Border.all(color: Colors.blue.shade300),
+                                  border:
+                                      Border.all(color: Colors.blue.shade300),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.qr_code, size: 12, color: Colors.blue.shade700),
+                                    Icon(Icons.qr_code,
+                                        size: 12, color: Colors.blue.shade700),
                                     const SizedBox(width: 4),
                                     Text(
                                       door.doorAlias!,
@@ -1570,26 +1892,34 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             const Spacer(),
                             if (errorCount > 0)
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.red,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   '$errorCount ${errorCount == 1 ? "Mangel" : "Mängel"}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               )
                             else
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: Colors.green.shade600,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: const Text(
                                   'Mängelfrei',
-                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                           ],
@@ -1601,17 +1931,22 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             children: [
                               Text(
                                 'Kunde: $clientName ${jobNumber.isNotEmpty ? "($jobNumber)" : ""}',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade800),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 '${door.floor.isNotEmpty ? "${door.floor} | " : ""}${door.roomDesignation.isNotEmpty ? door.roomDesignation : "Kein Raum"} ${door.roomNumber.isNotEmpty ? "(${door.roomNumber})" : ""}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey.shade600),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'Typ: ${door.doorType} | Material: ${door.material} | Schließer: ${door.closerType}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey.shade600),
                               ),
                             ],
                           ),
@@ -1622,18 +1957,21 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: const Icon(Icons.history_edu, color: Colors.blueGrey),
+                                    icon: const Icon(Icons.history_edu,
+                                        color: Colors.blueGrey),
                                     tooltip: 'Tür-Akte & Historie',
                                     onPressed: () {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => DoorHistoryPage(doorId: id),
+                                          builder: (_) =>
+                                              DoorHistoryPage(doorId: id),
                                         ),
                                       );
                                     },
                                   ),
-                                  const Icon(Icons.edit_note, color: Colors.grey),
+                                  const Icon(Icons.edit_note,
+                                      color: Colors.grey),
                                 ],
                               ),
                         onTap: () async {

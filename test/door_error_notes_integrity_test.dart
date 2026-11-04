@@ -21,16 +21,22 @@ class MockPathProviderPlatform extends Fake
 }
 
 /// Helper replicating DoorInspectionForm._isErrorDerivedLine and notes consolidation logic
-bool isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog, List<String> currentFormattedEntries) {
+bool isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog,
+    List<String> currentFormattedEntries) {
   if (line.isEmpty) return false;
-  if (currentFormattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry))) {
+  if (currentFormattedEntries.any((entry) =>
+      entry == line || entry.startsWith(line) || line.startsWith(entry))) {
     return true;
   }
-  if (line.startsWith('M-') || line.startsWith('ERR_') || line.startsWith('PROP-') || line.startsWith('ALT-')) {
+  if (line.startsWith('M-') ||
+      line.startsWith('ERR_') ||
+      line.startsWith('PROP-') ||
+      line.startsWith('ALT-')) {
     return true;
   }
   final cleanLine = line
-      .replaceAll(RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
+      .replaceAll(
+          RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
       .trim()
       .toLowerCase();
   for (final cat in allCatalog) {
@@ -64,10 +70,13 @@ String reconcileNotes({
 }) {
   final List<String> formattedEntries = [];
   for (final e in errors) {
-    final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '').toString().trim();
+    final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '')
+        .toString()
+        .trim();
     final note = (e['notes'] ?? '').toString().trim();
     final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-    final isResolved = (status == 'resolved' || status == 'gelöst' || status == 'beholfen');
+    final isResolved =
+        (status == 'resolved' || status == 'gelöst' || status == 'beholfen');
     final statusSuffix = isResolved ? ' [Gelöst]' : '';
 
     if (desc.isNotEmpty && note.isNotEmpty) {
@@ -140,7 +149,9 @@ void main() {
   });
 
   group('Door Notes and Error Lifecycle Integrity Tests', () {
-    test('Door notes correctly update on error create and delete while preserving manual notes', () async {
+    test(
+        'Door notes correctly update on error create and delete while preserving manual notes',
+        () async {
       final db = await LocalDatabaseService.getDb();
       final allCatalog = await LocalDatabaseService.getAllErrorCatalog();
 
@@ -152,7 +163,8 @@ void main() {
         'jobNumber': 'JOB-01',
       });
 
-      final initialNotes = 'Manueller Hinweis: Schlüssel beim Hausmeister\nZusatz: Vor Ort prüfen';
+      final initialNotes =
+          'Manueller Hinweis: Schlüssel beim Hausmeister\nZusatz: Vor Ort prüfen';
       final doorId = await db.insert('doors', {
         'doorNumber': 'T-101',
         'doorAlias': 'ALIAS-101',
@@ -170,7 +182,8 @@ void main() {
       });
 
       // 2. Add two errors to the door
-      final err1Id = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final err1Id = await LocalDatabaseService.insertInspectionDoorError(
+          InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: allCatalog[0].errorId ?? 1,
         errorCode: allCatalog[0].code,
@@ -179,7 +192,8 @@ void main() {
         severity: 'high',
       ));
 
-      final err2Id = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final err2Id = await LocalDatabaseService.insertInspectionDoorError(
+          InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: allCatalog[1].errorId ?? 2,
         errorCode: allCatalog[1].code,
@@ -189,20 +203,26 @@ void main() {
       ));
 
       // 3. Reconcile notes with 2 errors present
-      var activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      var activeErrors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       var syncedNotes = reconcileNotes(
         currentNotes: initialNotes,
         allCatalog: allCatalog,
         errors: activeErrors,
       );
 
-      expect(syncedNotes, contains('Manueller Hinweis: Schlüssel beim Hausmeister'));
+      expect(syncedNotes,
+          contains('Manueller Hinweis: Schlüssel beim Hausmeister'));
       expect(syncedNotes, contains('Zusatz: Vor Ort prüfen'));
-      expect(syncedNotes, contains('Türblatt verzogen / schließt nicht: klemmt oben rechts'));
-      expect(syncedNotes, contains('Dichtung beschädigt: eingerissen an Bandseite'));
+      expect(syncedNotes,
+          contains('Türblatt verzogen / schließt nicht: klemmt oben rechts'));
+      expect(syncedNotes,
+          contains('Dichtung beschädigt: eingerissen an Bandseite'));
 
       // Save to database
-      var doorRow = (await db.query('doors', where: 'id = ?', whereArgs: [doorId])).first;
+      var doorRow =
+          (await db.query('doors', where: 'id = ?', whereArgs: [doorId])).first;
       var doorObj = Door.fromMap(doorRow).copyWith(notes: syncedNotes);
       await LocalDatabaseService.updateDoor(doorObj);
 
@@ -210,7 +230,9 @@ void main() {
       await LocalDatabaseService.deleteInspectionDoorError(err2Id);
 
       // 5. Reconcile notes after deletion
-      activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      activeErrors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       final reconciledAfterDelete = reconcileNotes(
         currentNotes: syncedNotes,
         allCatalog: allCatalog,
@@ -218,24 +240,30 @@ void main() {
       );
 
       // Verify Error 2 note is REMOVED, Error 1 note is KEPT, and manual notes are KEPT
-      expect(reconciledAfterDelete, contains('Manueller Hinweis: Schlüssel beim Hausmeister'));
+      expect(reconciledAfterDelete,
+          contains('Manueller Hinweis: Schlüssel beim Hausmeister'));
       expect(reconciledAfterDelete, contains('Zusatz: Vor Ort prüfen'));
-      expect(reconciledAfterDelete, contains('Türblatt verzogen / schließt nicht: klemmt oben rechts'));
+      expect(reconciledAfterDelete,
+          contains('Türblatt verzogen / schließt nicht: klemmt oben rechts'));
       expect(reconciledAfterDelete.contains('Dichtung beschädigt'), isFalse);
-      expect(reconciledAfterDelete.contains('eingerissen an Bandseite'), isFalse);
+      expect(
+          reconciledAfterDelete.contains('eingerissen an Bandseite'), isFalse);
 
       // Persist update and verify DB consistency
       doorObj = doorObj.copyWith(notes: reconciledAfterDelete);
       await LocalDatabaseService.updateDoor(doorObj);
-      
-      final updatedDoorRow = (await db.query('doors', where: 'id = ?', whereArgs: [doorId])).first;
+
+      final updatedDoorRow =
+          (await db.query('doors', where: 'id = ?', whereArgs: [doorId])).first;
       final updatedDoor = Door.fromMap(updatedDoorRow);
       expect(updatedDoor.notes, equals(reconciledAfterDelete));
-      expect(updatedDoor.notes!.contains('Dichtung beschädigt'), isFalse);
-      expect(updatedDoor.notes!.contains('Manueller Hinweis'), isTrue);
+      expect(updatedDoor.notes.contains('Dichtung beschädigt'), isFalse);
+      expect(updatedDoor.notes.contains('Manueller Hinweis'), isTrue);
     });
 
-    test('Door notes append [Gelöst] when error resolutionStatus is set to resolved', () async {
+    test(
+        'Door notes append [Gelöst] when error resolutionStatus is set to resolved',
+        () async {
       final db = await LocalDatabaseService.getDb();
       final allCatalog = await LocalDatabaseService.getAllErrorCatalog();
 
@@ -263,7 +291,8 @@ void main() {
       });
 
       // Insert error initially as open
-      final errId = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final errId = await LocalDatabaseService.insertInspectionDoorError(
+          InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: allCatalog[0].errorId ?? 1,
         errorCode: allCatalog[0].code,
@@ -273,14 +302,19 @@ void main() {
         resolutionStatus: 'open',
       ));
 
-      var activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      var activeErrors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       var syncedNotes = reconcileNotes(
         currentNotes: 'Manuelle Vorabnotiz',
         allCatalog: allCatalog,
         errors: activeErrors,
       );
 
-      expect(syncedNotes, contains('Türblatt verzogen / schließt nicht: Schloss schließt schwer'));
+      expect(
+          syncedNotes,
+          contains(
+              'Türblatt verzogen / schließt nicht: Schloss schließt schwer'));
       expect(syncedNotes.contains('[Gelöst]'), isFalse);
 
       // Mark error as resolved
@@ -295,7 +329,9 @@ void main() {
         resolutionStatus: 'resolved',
       ));
 
-      activeErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      activeErrors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       var reconciledResolved = reconcileNotes(
         currentNotes: syncedNotes,
         allCatalog: allCatalog,
@@ -303,7 +339,10 @@ void main() {
       );
 
       expect(reconciledResolved, contains('Manuelle Vorabnotiz'));
-      expect(reconciledResolved, contains('Türblatt verzogen / schließt nicht: Schloss schließt schwer [Gelöst]'));
+      expect(
+          reconciledResolved,
+          contains(
+              'Türblatt verzogen / schließt nicht: Schloss schließt schwer [Gelöst]'));
     });
   });
 }

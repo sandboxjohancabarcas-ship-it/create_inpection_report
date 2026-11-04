@@ -17,7 +17,8 @@ class ErrorConflictReviewPage extends StatefulWidget {
   });
 
   @override
-  State<ErrorConflictReviewPage> createState() => _ErrorConflictReviewPageState();
+  State<ErrorConflictReviewPage> createState() =>
+      _ErrorConflictReviewPageState();
 }
 
 class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
@@ -33,7 +34,12 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
   bool _isLoading = true;
   bool _isApplying = false;
 
-  List<String> _categories = ['Hinweise und Anmerkungen', 'Türblatt/Zarge', 'Feststellanlagen (FSA)', 'Mangel'];
+  List<String> _categories = [
+    'Hinweise und Anmerkungen',
+    'Türblatt/Zarge',
+    'Feststellanlagen (FSA)',
+    'Mangel'
+  ];
   final List<String> _severities = ['low', 'medium', 'high', 'critical'];
 
   @override
@@ -91,11 +97,14 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
     try {
       final catalog = await DatabaseService.getAllErrorCatalog();
       final officialCats = await DatabaseService.getErrorCatalogCategories();
-      final filteredCats = officialCats.where((c) => c != 'Altdaten' && c.trim().isNotEmpty).toList();
+      final filteredCats = officialCats
+          .where((c) => c != 'Altdaten' && c.trim().isNotEmpty)
+          .toList();
 
       if (filteredCats.isEmpty) {
         final derived = catalog
-            .where((e) => e.category != 'Altdaten' && e.category.trim().isNotEmpty)
+            .where(
+                (e) => e.category != 'Altdaten' && e.category.trim().isNotEmpty)
             .map((e) => e.category)
             .toSet()
             .toList();
@@ -120,7 +129,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
       }
 
       // Sort catalog in natural numerical/code order (e.g., 0.1, 0.2, 0.10, 1.1, 1.2, etc.)
-      catalog.sort((a, b) => CatalogIntegrityService.compareCodes(a.code, b.code));
+      catalog
+          .sort((a, b) => CatalogIntegrityService.compareCodes(a.code, b.code));
 
       setState(() {
         _existingCatalog = catalog;
@@ -180,7 +190,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         if (newCode.isEmpty || newDesc.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Bitte geben Sie für alle neuen Einträge einen Code und eine Beschreibung ein.'),
+              content: Text(
+                  'Bitte geben Sie für alle neuen Einträge einen Code und eine Beschreibung ein.'),
               backgroundColor: Colors.red,
             ),
           );
@@ -188,15 +199,19 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         }
 
         // 1. Identical code collision against existing official catalog
-        final collision = CatalogIntegrityService.findCodeCollision(newCode, _existingCatalog);
+        final collision = CatalogIntegrityService.findCodeCollision(
+            newCode, _existingCatalog);
         if (collision != null) {
-          collisions.add('Code "$newCode" (Bereits im Katalog für: "${collision.description}" [${collision.category}])');
+          collisions.add(
+              'Code "$newCode" (Bereits im Katalog für: "${collision.description}" [${collision.category}])');
         }
 
         duplicateNewCodes.putIfAbsent(newCode, () => []).add(newDesc);
 
         // 2. High similarity check with existing catalog description
-        final similar = CatalogIntegrityService.findSimilarDescription(newDesc, _existingCatalog, threshold: 0.78);
+        final similar = CatalogIntegrityService.findSimilarDescription(
+            newDesc, _existingCatalog,
+            threshold: 0.78);
         if (similar != null) {
           similarWarnings.add({
             'newCode': newCode,
@@ -212,7 +227,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
     // Check duplicate codes among the new items being created in this resolution batch
     for (final entry in duplicateNewCodes.entries) {
       if (entry.value.length > 1) {
-        collisions.add('Code "${entry.key}" wird mehrfach gleichzeitig für verschiedene neue Mängel vergeben.');
+        collisions.add(
+            'Code "${entry.key}" wird mehrfach gleichzeitig für verschiedene neue Mängel vergeben.');
       }
     }
 
@@ -238,23 +254,31 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
               ),
               const SizedBox(height: 10),
               ...collisions.map((c) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('• ', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                    Expanded(child: Text(c, style: const TextStyle(color: Colors.red))),
-                  ],
-                ),
-              )),
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('• ',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold)),
+                        Expanded(
+                            child: Text(c,
+                                style: const TextStyle(color: Colors.red))),
+                      ],
+                    ),
+                  )),
               const SizedBox(height: 12),
-              const Text('Bitte korrigieren Sie die Fehlercodes vor dem Speichern, um die Integrität des Mängelkatalogs zu schützen.'),
+              const Text(
+                  'Bitte korrigieren Sie die Fehlercodes vor dem Speichern, um die Integrität des Mängelkatalogs zu schützen.'),
             ],
           ),
           actions: [
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey.shade800, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey.shade800,
+                  foregroundColor: Colors.white),
               child: const Text('Eingaben anpassen'),
             ),
           ],
@@ -270,7 +294,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         builder: (ctx) => AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 28),
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.amber.shade900, size: 28),
               const SizedBox(width: 8),
               const Text('Ähnliche Mängel im Katalog gefunden'),
             ],
@@ -287,26 +312,33 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                 ),
                 const SizedBox(height: 10),
                 ...similarWarnings.map((w) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.amber.shade300),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Neuer Mangel: ${w['newCode']} - "${w['newDesc']}"', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 4),
-                        Text('Bestehend: ${w['existingCode']} - "${w['existingDesc']}" (${w['similarity']}% Ähnlichkeit)', style: TextStyle(color: Colors.grey.shade800, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                )),
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                'Neuer Mangel: ${w['newCode']} - "${w['newDesc']}"',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 4),
+                            Text(
+                                'Bestehend: ${w['existingCode']} - "${w['existingDesc']}" (${w['similarity']}% Ähnlichkeit)',
+                                style: TextStyle(
+                                    color: Colors.grey.shade800, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    )),
                 const SizedBox(height: 10),
-                const Text('Möchten Sie diese Einträge trotzdem als neue Katalogeinträge anlegen oder zurückgehen und die bestehenden Mängel zuordnen?'),
+                const Text(
+                    'Möchten Sie diese Einträge trotzdem als neue Katalogeinträge anlegen oder zurückgehen und die bestehenden Mängel zuordnen?'),
               ],
             ),
           ),
@@ -316,7 +348,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
               child: const Text('Zurück zum Anpassen'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade800,
+                  foregroundColor: Colors.white),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Trotzdem als Neu anlegen'),
             ),
@@ -339,7 +373,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
 
       if (action == ResolutionAction.addAsNew) {
         final newCode = _codeControllers[key]?.text.trim() ?? c.code;
-        final newDesc = _descriptionControllers[key]?.text.trim() ?? c.description;
+        final newDesc =
+            _descriptionControllers[key]?.text.trim() ?? c.description;
         final cat = _categorySelections[key] ?? 'Mangel';
         final sev = _severitySelections[key] ?? 'medium';
 
@@ -386,7 +421,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         for (final file in widget.sourceFiles!) {
           final ext = file.path.split('.').last.toLowerCase();
           if (['xlsx', 'xls', 'xlsm', 'xlms', 'csv'].contains(ext)) {
-            await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
+            await ExcelDataImporter.importFromFile(file,
+                resolutions: resolutions);
           }
         }
       }
@@ -394,7 +430,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Fehlerkatalog-Konflikte erfolgreich gelöst und übernommen.'),
+            content: Text(
+                'Fehlerkatalog-Konflikte erfolgreich gelöst und übernommen.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -418,9 +455,10 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final singleFileName = (widget.sourceFiles != null && widget.sourceFiles!.isNotEmpty)
-        ? widget.sourceFiles!.first.path.split(Platform.pathSeparator).last
-        : null;
+    final singleFileName =
+        (widget.sourceFiles != null && widget.sourceFiles!.isNotEmpty)
+            ? widget.sourceFiles!.first.path.split(Platform.pathSeparator).last
+            : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -445,7 +483,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                   color: Colors.orange.shade50,
                   child: Row(
                     children: [
-                      Icon(Icons.report_problem_outlined, color: Colors.orange.shade900, size: 28),
+                      Icon(Icons.report_problem_outlined,
+                          color: Colors.orange.shade900, size: 28),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
@@ -465,7 +504,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                             Text(
                               'Folgende Fehler/Hinweise wurden in den Türlisten gefunden, existieren aber nicht im zentralen Mängelkatalog. '
                               'Legen Sie fest, ob diese als neuer Mangel mit passendem Kategorie-Code angelegt, einem bestehenden Eintrag zugeordnet oder ignoriert werden sollen.',
-                              style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+                              style: TextStyle(
+                                  color: Colors.orange.shade900, fontSize: 13),
                             ),
                           ],
                         ),
@@ -476,12 +516,14 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
 
                 // Bulk actions
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton.icon(
-                        onPressed: () => _setAllActions(ResolutionAction.addAsNew),
+                        onPressed: () =>
+                            _setAllActions(ResolutionAction.addAsNew),
                         icon: const Icon(Icons.add_circle_outline),
                         label: const Text('Alle: Als Neu anlegen'),
                       ),
@@ -512,7 +554,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                    border:
+                        Border(top: BorderSide(color: Colors.grey.shade200)),
                   ),
                   child: Row(
                     children: [
@@ -533,7 +576,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                                       height: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
                                       ),
                                     ),
                                     SizedBox(width: 12),
@@ -547,7 +592,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                       OutlinedButton(
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 16, horizontal: 24),
                         ),
                         child: const Text('Abbrechen'),
                       ),
@@ -566,11 +612,14 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
 
     // Real-time catalog integrity checks for this card
     final codeCollision = action == ResolutionAction.addAsNew
-        ? CatalogIntegrityService.findCodeCollision(currentCode, _existingCatalog)
+        ? CatalogIntegrityService.findCodeCollision(
+            currentCode, _existingCatalog)
         : null;
 
     final similarMatch = action == ResolutionAction.addAsNew
-        ? CatalogIntegrityService.findSimilarDescription(currentDesc, _existingCatalog, threshold: 0.75)
+        ? CatalogIntegrityService.findSimilarDescription(
+            currentDesc, _existingCatalog,
+            threshold: 0.75)
         : null;
 
     return Card(
@@ -581,7 +630,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
         side: BorderSide(
           color: codeCollision != null
               ? Colors.red.shade400
-              : (similarMatch != null ? Colors.amber.shade400 : Colors.orange.shade200),
+              : (similarMatch != null
+                  ? Colors.amber.shade400
+                  : Colors.orange.shade200),
           width: 1.5,
         ),
       ),
@@ -599,7 +650,8 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                     color: Colors.orange.shade100,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.rule_folder_outlined, color: Colors.orange.shade800),
+                  child: Icon(Icons.rule_folder_outlined,
+                      color: Colors.orange.shade800),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -607,13 +659,17 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        conflict.description.isNotEmpty ? conflict.description : conflict.code,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        conflict.description.isNotEmpty
+                            ? conflict.description
+                            : conflict.code,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       if (conflict.reason.isNotEmpty)
                         Text(
                           conflict.reason,
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                          style: TextStyle(
+                              color: Colors.grey.shade700, fontSize: 12),
                         ),
                     ],
                   ),
@@ -684,15 +740,20 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _categories.contains(_categorySelections[key])
-                          ? _categorySelections[key]
-                          : _categories.firstOrNull,
+                      initialValue:
+                          _categories.contains(_categorySelections[key])
+                              ? _categorySelections[key]
+                              : _categories.firstOrNull,
                       decoration: const InputDecoration(
                         labelText: 'Kategorie (Code passt sich an)',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+                      items: _categories
+                          .map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c, overflow: TextOverflow.ellipsis)))
+                          .toList(),
                       onChanged: (val) {
                         if (val != null) {
                           _onCategoryChanged(key, val);
@@ -703,15 +764,19 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _severitySelections[key],
+                      initialValue: _severitySelections[key],
                       decoration: const InputDecoration(
                         labelText: 'Schweregrad',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      items: _severities.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      items: _severities
+                          .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
                       onChanged: (val) {
-                        if (val != null) setState(() => _severitySelections[key] = val);
+                        if (val != null)
+                          setState(() => _severitySelections[key] = val);
                       },
                     ),
                   ),
@@ -731,12 +796,16 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.error_outline, color: Colors.red.shade800, size: 20),
+                      Icon(Icons.error_outline,
+                          color: Colors.red.shade800, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Achtung Code-Kollision: Der Code "$currentCode" existiert bereits für "${codeCollision.description}" (Kategorie: ${codeCollision.category}). Bitte vergeben Sie einen eindeutigen Code.',
-                          style: TextStyle(color: Colors.red.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.red.shade900,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
@@ -759,12 +828,16 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 20),
+                          Icon(Icons.warning_amber_rounded,
+                              color: Colors.amber.shade900, size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Ähnlicher Mangel im Katalog gefunden (${similarMatch.similarityPercentage}% Ähnlichkeit):\n"${similarMatch.existing.code}: ${similarMatch.existing.description}" (${similarMatch.existing.category})',
-                              style: TextStyle(color: Colors.amber.shade900, fontSize: 12, fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                  color: Colors.amber.shade900,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -775,17 +848,20 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                         child: TextButton.icon(
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.amber.shade900,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             visualDensity: VisualDensity.compact,
                           ),
                           onPressed: () {
                             setState(() {
                               _actions[key] = ResolutionAction.replaceExisting;
-                              _mappedCodeSelections[key] = similarMatch.existing.code;
+                              _mappedCodeSelections[key] =
+                                  similarMatch.existing.code;
                             });
                           },
                           icon: const Icon(Icons.swap_horiz, size: 16),
-                          label: Text('Diesen Code stattdessen zuordnen (${similarMatch.existing.code})'),
+                          label: Text(
+                              'Diesen Code stattdessen zuordnen (${similarMatch.existing.code})'),
                         ),
                       ),
                     ],
@@ -793,23 +869,29 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                 ),
             ] else if (action == ResolutionAction.replaceExisting) ...[
               DropdownButtonFormField<String>(
-                value: _mappedCodeSelections[key],
+                initialValue: _mappedCodeSelections[key],
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Bestehenden Katalog-Fehler auswählen',
                   border: OutlineInputBorder(),
                   isDense: true,
-                  helperText: 'Dieser Mangel wird für die importierten Türen verwendet.',
+                  helperText:
+                      'Dieser Mangel wird für die importierten Türen verwendet.',
                 ),
                 hint: const Text('Bitte Katalog-Eintrag wählen...'),
                 items: (_existingCatalog
-                    .where((e) => e.category != 'Altdaten' && !e.code.toUpperCase().startsWith('ALT-'))
-                    .toList()
-                  ..sort((a, b) => CatalogIntegrityService.compareCodes(a.code, b.code)))
+                        .where((e) =>
+                            e.category != 'Altdaten' &&
+                            !e.code.toUpperCase().startsWith('ALT-'))
+                        .toList()
+                      ..sort((a, b) =>
+                          CatalogIntegrityService.compareCodes(a.code, b.code)))
                     .map((item) {
                   return DropdownMenuItem<String>(
                     value: item.code,
-                    child: Text('${item.code} - ${item.category}: ${item.description}', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        '${item.code} - ${item.category}: ${item.description}',
+                        overflow: TextOverflow.ellipsis),
                   );
                 }).toList(),
                 onChanged: (val) {

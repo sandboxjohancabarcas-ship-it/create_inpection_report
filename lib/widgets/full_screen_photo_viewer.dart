@@ -17,10 +17,12 @@ class FullScreenPhotoGalleryViewer extends StatefulWidget {
   });
 
   @override
-  State<FullScreenPhotoGalleryViewer> createState() => _FullScreenPhotoGalleryViewerState();
+  State<FullScreenPhotoGalleryViewer> createState() =>
+      _FullScreenPhotoGalleryViewerState();
 }
 
-class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryViewer> {
+class _FullScreenPhotoGalleryViewerState
+    extends State<FullScreenPhotoGalleryViewer> {
   late PageController _pageController;
   late int _currentIndex;
   final FocusNode _focusNode = FocusNode();
@@ -174,9 +176,10 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
               left: 16,
               right: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
+                  color: Colors.black.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.white24),
                 ),
@@ -185,7 +188,8 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
                     // Index Badge
                     if (hasMultiple)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         margin: const EdgeInsets.only(right: 10),
                         decoration: BoxDecoration(
                           color: Colors.white24,
@@ -209,10 +213,12 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
                           onTap: _copyPhotoName,
                           borderRadius: BorderRadius.circular(6),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 2, horizontal: 4),
                             child: Row(
                               children: [
-                                const Icon(Icons.image, size: 16, color: Colors.lightBlueAccent),
+                                const Icon(Icons.image,
+                                    size: 16, color: Colors.lightBlueAccent),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
@@ -227,7 +233,8 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
                                   ),
                                 ),
                                 const SizedBox(width: 4),
-                                const Icon(Icons.copy, size: 13, color: Colors.white70),
+                                const Icon(Icons.copy,
+                                    size: 13, color: Colors.white70),
                               ],
                             ),
                           ),
@@ -241,16 +248,19 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
                             )
-                          : const Icon(Icons.download, color: Colors.white, size: 22),
+                          : const Icon(Icons.download,
+                              color: Colors.white, size: 22),
                       tooltip: 'Foto als Datei speichern',
                       onPressed: _saveCurrentPhoto,
                     ),
 
                     // Close Button
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                      icon: const Icon(Icons.close,
+                          color: Colors.white, size: 24),
                       tooltip: 'Schließen',
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -294,8 +304,11 @@ class _FullScreenPhotoGalleryViewerState extends State<FullScreenPhotoGalleryVie
                     ),
                     child: IconButton(
                       iconSize: 32,
-                      icon: const Icon(Icons.chevron_right, color: Colors.white),
-                      onPressed: _currentIndex < widget.photos.length - 1 ? _nextPhoto : null,
+                      icon:
+                          const Icon(Icons.chevron_right, color: Colors.white),
+                      onPressed: _currentIndex < widget.photos.length - 1
+                          ? _nextPhoto
+                          : null,
                     ),
                   ),
                 ),

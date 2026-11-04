@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
-import '../services/gaeb_export_service.dart';
 import '../services/kinchi_api_service.dart';
 import '../widgets/edit_inspection_dialog.dart';
 import '../utils/file_export_helper.dart';
@@ -45,13 +42,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   }
 
   /// Handles the cloud upload of a generated GAEB file
-  Future<void> _uploadToCloud(File file, String jobNumber, int directoryId) async {
+  Future<void> _uploadToCloud(
+      File file, String jobNumber, int directoryId) async {
     try {
       // Using hardcoded test credentials as requested
-      final loggedIn = await _apiService.login(
-        "s.bluemel@konzschaefer.de", 
-        "Konz2006"
-      );
+      final loggedIn =
+          await _apiService.login("s.bluemel@konzschaefer.de", "Konz2006");
 
       if (!loggedIn) throw Exception("Login fehlgeschlagen");
 
@@ -68,7 +64,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cloud-Upload fehlgeschlagen: $e'), backgroundColor: Colors.orange),
+          SnackBar(
+              content: Text('Cloud-Upload fehlgeschlagen: $e'),
+              backgroundColor: Colors.orange),
         );
       }
     }
@@ -125,7 +123,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           labelText: 'Verzeichnis-ID',
                           errorText: validationError,
                         ),
-                        onChanged: (_) => setDialogState(() => validationError = null),
+                        onChanged: (_) =>
+                            setDialogState(() => validationError = null),
                       ),
                     ),
                 ],
@@ -137,7 +136,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    int targetId = selectedOption == 520 ? 520 : int.tryParse(customIdController.text) ?? 0;
+                    int targetId = selectedOption == 520
+                        ? 520
+                        : int.tryParse(customIdController.text) ?? 0;
 
                     if (targetId <= 0) {
                       setDialogState(() => validationError = 'Ungültige ID');
@@ -146,11 +147,14 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
 
                     try {
                       // Quick validation check against API
-                      final List<dynamic> directories = await _apiService.getDirectories();
-                      final exists = directories.any((d) => d['id'] == targetId);
+                      final List<dynamic> directories =
+                          await _apiService.getDirectories();
+                      final exists =
+                          directories.any((d) => d['id'] == targetId);
 
                       if (!exists) {
-                        setDialogState(() => validationError = 'ID $targetId nicht gefunden.');
+                        setDialogState(() =>
+                            validationError = 'ID $targetId nicht gefunden.');
                         return;
                       }
                       Navigator.pop(context, targetId);
@@ -171,19 +175,24 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   /// Confirms and executes deletion of specific inspections
   Future<void> _handleDeleteInspections(List<int> ids) async {
     final bool confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Löschen bestätigen'),
-        content: Text('${ids.length} Auftrag/Aufträge und zugehörige Prüfungsdaten unwiderruflich löschen?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Löschen bestätigen'),
+            content: Text(
+                '${ids.length} Auftrag/Aufträge und zugehörige Prüfungsdaten unwiderruflich löschen?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child:
+                    const Text('Löschen', style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
 
     if (!confirm) return;
 
@@ -198,7 +207,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Löschen: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Fehler beim Löschen: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -207,22 +218,25 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   /// Confirms and executes clearing of all job-related data
   Future<void> _handlePurgeAll() async {
     final bool confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Alle Auftragsdaten löschen?'),
-        content: const Text(
-          'Dies wird ALLE Aufträge, Prüfungsdetails und Fehlerzuordnungen löschen.\n\n'
-          'Türen (Stammdaten) und der Fehlerkatalog bleiben erhalten.'
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Alles löschen', style: TextStyle(color: Colors.red)),
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Alle Auftragsdaten löschen?'),
+            content: const Text(
+                'Dies wird ALLE Aufträge, Prüfungsdetails und Fehlerzuordnungen löschen.\n\n'
+                'Türen (Stammdaten) und der Fehlerkatalog bleiben erhalten.'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Alles löschen',
+                    style: TextStyle(color: Colors.red)),
+              ),
+            ],
           ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
     if (confirm) await DatabaseService.purgeAllInspections();
     _refreshInspections();
   }
@@ -231,7 +245,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
     setState(() {
       _selectedInspectionIds.clear();
       _currentVisibleResults = [];
-      _inspectionsFuture = DatabaseService.searchInspections(_searchController.text);
+      _inspectionsFuture =
+          DatabaseService.searchInspections(_searchController.text);
     });
   }
 
@@ -250,28 +265,32 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   /// Collects full data for selected inspections including doors and errors
   Future<List<Map<String, dynamic>>> _prepareExportData() async {
     List<Map<String, dynamic>> flatExportList = [];
-    
-    for (int inspectionId in _selectedInspectionIds) {
-      final doors = await DatabaseService.getDoorsByInspectionIds([inspectionId]);
 
-      final junctionList = await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
-      final List<int> junctionIds = junctionList.map((j) => j['id'] as int).toList();
-      final allErrors = await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
+    for (int inspectionId in _selectedInspectionIds) {
+      final doors =
+          await DatabaseService.getDoorsByInspectionIds([inspectionId]);
+
+      final junctionList =
+          await DatabaseService.getInspectionDoorsByInspectionId(inspectionId);
+      final List<int> junctionIds =
+          junctionList.map((j) => j['id'] as int).toList();
+      final allErrors =
+          await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
       for (var door in doors) {
         // Find the junction that links this door to this inspection
-        final junction = junctionList.firstWhere(
-          (j) => j['doorId'] == door.id, 
-          orElse: () => <String, dynamic>{}
-        );
+        final junction = junctionList.firstWhere((j) => j['doorId'] == door.id,
+            orElse: () => <String, dynamic>{});
         if (junction.isEmpty) continue;
 
         final doorErrors = allErrors
             .where((e) => e['inspectionDoorId'] == junction['id'])
             .map((e) => {
-              'code': e['code']?.toString() ?? 'MISSING_CODE', // Fallback for RNoPart
-              'description': e['description']?.toString() ?? 'Fehlerbeschreibung fehlt', // Fallback for description
-            })
+                  'code': e['code']?.toString() ??
+                      'MISSING_CODE', // Fallback for RNoPart
+                  'description': e['description']?.toString() ??
+                      'Fehlerbeschreibung fehlt', // Fallback for description
+                })
             .toList();
 
         flatExportList.add({
@@ -302,13 +321,15 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         firstInsp = await DatabaseService.getInspectionById(ids.first);
       }
       final defaultFileName = FileExportHelper.buildPackageFileName(
-        jobNumber: firstInsp?['jobNumber']?.toString() ?? firstInsp?['auftragsnummer']?.toString(),
+        jobNumber: firstInsp?['jobNumber']?.toString() ??
+            firstInsp?['auftragsnummer']?.toString(),
         projectNumber: firstInsp?['projectNumber']?.toString(),
-        objectAddress: firstInsp?['objectAddress']?.toString() ?? firstInsp?['clientName']?.toString(),
+        objectAddress: firstInsp?['objectAddress']?.toString() ??
+            firstInsp?['clientName']?.toString(),
         packageType: 'inspektion_paket',
       );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
-      
+
       await LocalDatabaseService.exportWorkingDb(tempExportPath);
 
       final tempFile = File(tempExportPath);
@@ -353,7 +374,8 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
   Future<void> _handleImportResultPackage() async {
     try {
       // Select the .db file from the inspector
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.any);
+      FilePickerResult? result =
+          await FilePicker.platform.pickFiles(type: FileType.any);
 
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
@@ -361,7 +383,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         if (!mounted) return;
 
         // Check compatibility before import (Inspector result package uses local schema v16)
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(path, targetVersion: 17);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(
+            path,
+            targetVersion: 17);
         if (compat.hasVersionMismatch) {
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
             context,
@@ -379,14 +403,16 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
           builder: (context) => AlertDialog(
             title: const Text('Ergebnis-Paket importieren'),
             content: const Text(
-              'Möchten Sie dieses Paket in die Haupt-Datenbank einspielen? '
-              'Bestehende Daten werden bei Übereinstimmung (Alias/Auftragsnummer) aktualisiert.'
-            ),
+                'Möchten Sie dieses Paket in die Haupt-Datenbank einspielen? '
+                'Bestehende Daten werden bei Übereinstimmung (Alias/Auftragsnummer) aktualisiert.'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Abbrechen')),
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Abbrechen')),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Importieren', style: TextStyle(color: Colors.blue)),
+                child: const Text('Importieren',
+                    style: TextStyle(color: Colors.blue)),
               ),
             ],
           ),
@@ -395,7 +421,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
         if (confirm != true) return;
 
         setState(() => _isImporting = true);
-        
+
         // Execute the merge logic defined in Block 2
         await DatabaseService.importAndMergePackage(path);
 
@@ -440,7 +466,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
           IconButton(
             icon: const Icon(Icons.drive_folder_upload),
             tooltip: 'Ergebnis importieren',
-            onPressed: _isImporting || _isDownloading ? null : _handleImportResultPackage,
+            onPressed: _isImporting || _isDownloading
+                ? null
+                : _handleImportResultPackage,
           ),
         ],
       ),
@@ -472,9 +500,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
             ),
           ),
           // Selection Controls Row (Block 3)
-          if (_searchController.text.isNotEmpty || _selectedInspectionIds.isNotEmpty)
+          if (_searchController.text.isNotEmpty ||
+              _selectedInspectionIds.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
               child: Row(
                 children: [
                   if (_currentVisibleResults.isNotEmpty)
@@ -486,9 +516,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                   const Spacer(),
                   if (_selectedInspectionIds.isNotEmpty)
                     TextButton.icon(
-                      onPressed: () => setState(() => _selectedInspectionIds.clear()),
+                      onPressed: () =>
+                          setState(() => _selectedInspectionIds.clear()),
                       icon: const Icon(Icons.deselect),
-                      label: Text('Auswahl aufheben (${_selectedInspectionIds.length})'),
+                      label: Text(
+                          'Auswahl aufheben (${_selectedInspectionIds.length})'),
                     ),
                 ],
               ),
@@ -511,7 +543,7 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                     }
 
                     final inspections = snapshot.data!;
-                    
+
                     // Cache currently visible results for selection logic
                     _currentVisibleResults = inspections;
 
@@ -533,15 +565,19 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                         }
 
                         return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                           child: ListTile(
-                            leading: const Icon(Icons.business, color: Colors.blue),
-                            title: Text(job['clientName'] ?? 'Unbekannter Kunde'),
+                            leading:
+                                const Icon(Icons.business, color: Colors.blue),
+                            title:
+                                Text(job['clientName'] ?? 'Unbekannter Kunde'),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text('Auftrag: ${job['jobNumber']}'),
-                                if (job['projectNumber'] != null && job['projectNumber'].toString().isNotEmpty)
+                                if (job['projectNumber'] != null &&
+                                    job['projectNumber'].toString().isNotEmpty)
                                   Text('Projekt: ${job['projectNumber']}'),
                                 Text('Datum: ${job['date']}'),
                               ],
@@ -550,10 +586,12 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.edit_note, color: Colors.blue),
+                                  icon: const Icon(Icons.edit_note,
+                                      color: Colors.blue),
                                   tooltip: 'Metadaten bearbeiten',
                                   onPressed: () async {
-                                    final updated = await EditInspectionDialog.show(
+                                    final updated =
+                                        await EditInspectionDialog.show(
                                       context,
                                       inspectionId: id,
                                       initialData: job,
@@ -570,10 +608,11 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                                 ),
                               ],
                             ),
-                            onTap: _isDownloading 
-                                ? null 
-                                : (_selectedInspectionIds.isEmpty 
-                                    ? () => _handleJobDownload([job['inspectionId']])
+                            onTap: _isDownloading
+                                ? null
+                                : (_selectedInspectionIds.isEmpty
+                                    ? () => _handleJobDownload(
+                                        [job['inspectionId']])
                                     : toggleSelection),
                             onLongPress: toggleSelection,
                           ),
@@ -594,7 +633,9 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           SizedBox(height: 20),
                           Text(
                             'Job-Daten werden vorbereitet...',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -612,38 +653,45 @@ class _JobSelectionPageState extends State<JobSelectionPage> {
                           SizedBox(height: 20),
                           Text(
                             'Paket wird importiert...',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                     ),
                   ),
-            ],
+              ],
             ),
           ),
         ],
       ),
-      bottomNavigationBar: _selectedInspectionIds.isEmpty ? null : BottomAppBar(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              onPressed: () => _handleDeleteInspections(_selectedInspectionIds.toList()),
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-              tooltip: 'Auswahl löschen',
-            ),
-            const VerticalDivider(),
-            TextButton.icon(
-              onPressed: () => _handleJobDownload(_selectedInspectionIds.toList()),
-              icon: const Icon(Icons.download_for_offline, color: Colors.green),
-              label: const Text(
-                'Paket laden',
-                style: TextStyle(color: Colors.green),
+      bottomNavigationBar: _selectedInspectionIds.isEmpty
+          ? null
+          : BottomAppBar(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    onPressed: () => _handleDeleteInspections(
+                        _selectedInspectionIds.toList()),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    tooltip: 'Auswahl löschen',
+                  ),
+                  const VerticalDivider(),
+                  TextButton.icon(
+                    onPressed: () =>
+                        _handleJobDownload(_selectedInspectionIds.toList()),
+                    icon: const Icon(Icons.download_for_offline,
+                        color: Colors.green),
+                    label: const Text(
+                      'Paket laden',
+                      style: TextStyle(color: Colors.green),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
     );
   }
 }

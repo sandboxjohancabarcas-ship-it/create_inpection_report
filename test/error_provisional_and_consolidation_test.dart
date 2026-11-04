@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/error_catalog.dart';
-import 'package:wartungstool/models/inspection_door_error.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/catalog_integrity_service.dart';
 
@@ -45,24 +43,30 @@ void main() {
   });
 
   group('Provisional Error & Integrity Validation Tests', () {
-    test('Identifies collision and proposes next free code for category', () async {
+    test('Identifies collision and proposes next free code for category',
+        () async {
       final officialCatalog = await DatabaseService.getAllErrorCatalog();
 
       // Check collision on existing 1.1
-      final collision = CatalogIntegrityService.findCodeCollision('1.1', officialCatalog);
+      final collision =
+          CatalogIntegrityService.findCodeCollision('1.1', officialCatalog);
       expect(collision, isNotNull);
-      expect(collision!.description, equals('Türblatt verzogen / schließt nicht'));
+      expect(
+          collision!.description, equals('Türblatt verzogen / schließt nicht'));
 
       // Check non-colliding new code
-      final noCollision = CatalogIntegrityService.findCodeCollision('1.3', officialCatalog);
+      final noCollision =
+          CatalogIntegrityService.findCodeCollision('1.3', officialCatalog);
       expect(noCollision, isNull);
 
       // Propose next code for Türblatt/Zarge -> should be 1.3
-      final nextCode = CatalogIntegrityService.proposeNextCodeForCategory('Türblatt/Zarge', officialCatalog);
+      final nextCode = CatalogIntegrityService.proposeNextCodeForCategory(
+          'Türblatt/Zarge', officialCatalog);
       expect(nextCode, equals('1.3'));
     });
 
-    test('Identifies description similarity to avoid duplicate defect creation', () async {
+    test('Identifies description similarity to avoid duplicate defect creation',
+        () async {
       final officialCatalog = await DatabaseService.getAllErrorCatalog();
 
       // Slightly rephrased description
@@ -77,7 +81,9 @@ void main() {
       expect(similar.similarityPercentage, greaterThanOrEqualTo(70));
     });
 
-    test('approveAndRemapPendingError updates linked door errors when code is updated', () async {
+    test(
+        'approveAndRemapPendingError updates linked door errors when code is updated',
+        () async {
       final db = await DatabaseService.getDb();
 
       // 1. Insert a pending proposal
@@ -89,7 +95,8 @@ void main() {
         status: 'Pending',
       ));
 
-      final pendingList = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      final pendingList =
+          await DatabaseService.getAllErrorCatalog(status: 'Pending');
       expect(pendingList.length, equals(1));
       final pendingItem = pendingList.first;
 
@@ -117,12 +124,15 @@ void main() {
 
       // Verify catalog item status and code
       final updatedCatalog = await DatabaseService.getAllErrorCatalog();
-      final approvedInCatalog = updatedCatalog.firstWhere((e) => e.code == '1.3');
+      final approvedInCatalog =
+          updatedCatalog.firstWhere((e) => e.code == '1.3');
       expect(approvedInCatalog.status, equals('Approved'));
-      expect(approvedInCatalog.description, equals('Bodenabschlussdichtung schleift'));
+      expect(approvedInCatalog.description,
+          equals('Bodenabschlussdichtung schleift'));
 
       // Verify no pending proposals remain
-      final remainingPending = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      final remainingPending =
+          await DatabaseService.getAllErrorCatalog(status: 'Pending');
       expect(remainingPending.isEmpty, isTrue);
 
       // Verify linked door error was remapped to 1.3
@@ -132,7 +142,9 @@ void main() {
       expect(linkedErrors.first['errorId'], equals(approvedInCatalog.errorId));
     });
 
-    test('mergePendingErrorIntoExisting remaps door errors to official target and removes proposal', () async {
+    test(
+        'mergePendingErrorIntoExisting remaps door errors to official target and removes proposal',
+        () async {
       final db = await DatabaseService.getDb();
 
       // 1. Insert pending proposal with duplicate intent
@@ -144,8 +156,10 @@ void main() {
         status: 'Pending',
       ));
 
-      final pendingItem = (await DatabaseService.getAllErrorCatalog(status: 'Pending')).first;
-      final targetOfficial = (await DatabaseService.getAllErrorCatalog()).firstWhere((e) => e.code == '1.1');
+      final pendingItem =
+          (await DatabaseService.getAllErrorCatalog(status: 'Pending')).first;
+      final targetOfficial = (await DatabaseService.getAllErrorCatalog())
+          .firstWhere((e) => e.code == '1.1');
 
       // 2. Insert linked door error
       await db.insert('inspection_door_errors', {
@@ -164,7 +178,8 @@ void main() {
       );
 
       // Verify proposal is removed from catalog
-      final pendingAfter = await DatabaseService.getAllErrorCatalog(status: 'Pending');
+      final pendingAfter =
+          await DatabaseService.getAllErrorCatalog(status: 'Pending');
       expect(pendingAfter.isEmpty, isTrue);
 
       // Verify door error was remapped to target 1.1

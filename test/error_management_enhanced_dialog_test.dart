@@ -10,14 +10,13 @@ import 'package:wartungstool/pages/error_management_page.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/door_options_service.dart';
 
-import 'package:wartungstool/pages/new_door_page.dart';
-
 class MockPathProviderPlatform extends PathProviderPlatform
     with MockPlatformInterfaceMixin {
   @override
   Future<String?> getApplicationSupportPath() async {
     return Directory.current.path;
   }
+
   @override
   Future<String?> getApplicationDocumentsPath() async {
     return Directory.current.path;
@@ -112,7 +111,9 @@ void main() {
     await LocalDatabaseService.closeDb();
   });
 
-  testWidgets('Error management dialog allows category filtering, search, notes pop-up and error addition', (WidgetTester tester) async {
+  testWidgets(
+      'Error management dialog allows category filtering, search, notes pop-up and error addition',
+      (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -128,7 +129,8 @@ void main() {
     );
     for (int i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+      await tester
+          .runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
       if (!tester.any(find.byType(CircularProgressIndicator))) break;
     }
     await tester.pump();
@@ -143,7 +145,8 @@ void main() {
     // Verify dialog is open and shows category selection & search bar
     expect(find.text('Fehler hinzufügen'), findsWidgets);
     expect(find.text('1. Fehlerkategorie wählen:'), findsOneWidget);
-    expect(find.text('2. Suche (nach Kategorie, Code oder Beschreibung):'), findsOneWidget);
+    expect(find.text('2. Suche (nach Kategorie, Code oder Beschreibung):'),
+        findsOneWidget);
 
     // Verify error list count
     expect(find.text('4 Fehler gefunden'), findsOneWidget);
@@ -170,7 +173,8 @@ void main() {
     expect(find.text('1.1.1'), findsNothing);
 
     // Test Search input
-    final searchField = find.widgetWithText(TextField, 'Suchbegriff eingeben...');
+    final searchField =
+        find.widgetWithText(TextField, 'Suchbegriff eingeben...');
     expect(searchField, findsOneWidget);
     await tester.enterText(searchField, 'defekt');
     await tester.pump();
@@ -197,10 +201,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Notizen zum Fehler'), findsOneWidget);
-    expect(find.text('Geben Sie hier detaillierte Beobachtungen und Notizen zum Fehler ein:'), findsOneWidget);
+    expect(
+        find.text(
+            'Geben Sie hier detaillierte Beobachtungen und Notizen zum Fehler ein:'),
+        findsOneWidget);
 
     // Enter notes in pop-up
-    final popUpTextField = find.widgetWithText(TextField, 'Detaillierte Fehlerbeschreibung, Fundort, Ursache, Bemerkungen...');
+    final popUpTextField = find.widgetWithText(TextField,
+        'Detaillierte Fehlerbeschreibung, Fundort, Ursache, Bemerkungen...');
     expect(popUpTextField, findsOneWidget);
     await tester.enterText(popUpTextField, 'Schlossfalle klemmt beim Zuziehen');
     await tester.pump();
@@ -213,7 +221,8 @@ void main() {
 
     // Save the error
     await tester.runAsync(() async {
-      final submitButton = find.widgetWithText(ElevatedButton, 'Fehler hinzufügen').last;
+      final submitButton =
+          find.widgetWithText(ElevatedButton, 'Fehler hinzufügen').last;
       await tester.tap(submitButton);
       await Future.delayed(const Duration(milliseconds: 800));
     });
@@ -224,6 +233,7 @@ void main() {
     // Verify error is added to list on error management page
     expect(find.text('2.1.1'), findsOneWidget);
     expect(find.text('Schlossfalle defekt'), findsOneWidget);
-    expect(find.text('Notizen: Schlossfalle klemmt beim Zuziehen'), findsOneWidget);
+    expect(find.text('Notizen: Schlossfalle klemmt beim Zuziehen'),
+        findsOneWidget);
   });
 }

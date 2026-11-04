@@ -16,7 +16,7 @@ class DoorInspectionForm extends StatefulWidget {
   final bool isManagerMode;
   final int? inspectionId;
   final bool? isReadOnly;
- 
+
   const DoorInspectionForm({
     super.key,
     this.door,
@@ -39,7 +39,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   late TextEditingController jobNumberController;
   late TextEditingController projectNumberController;
   late TextEditingController inspectorNameController;
-  
+
   // Controllers for door technical fields
   late TextEditingController doorNumberController;
   late TextEditingController roomDesignationController;
@@ -93,11 +93,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
   String? closerType;
   String? closingSequenceSystem;
   String? fittingType;
-  
+
   // Numeric fields
   int wingCount = 1;
   int pos = 0;
-  
+
   // Date field
   DateTime inspectionDate = DateTime.now();
   DateTime? repairDate;
@@ -149,12 +149,15 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     // Initialize door technical controllers
     doorNumberController = TextEditingController(text: d?.doorNumber ?? '');
-    roomDesignationController = TextEditingController(text: d?.roomDesignation ?? '');
+    roomDesignationController =
+        TextEditingController(text: d?.roomDesignation ?? '');
     floorController = TextEditingController(text: d?.floor ?? '');
     roomNumberController = TextEditingController(text: d?.roomNumber ?? '');
-    lockDimensionsController = TextEditingController(text: d?.lockDimensions ?? '');
+    lockDimensionsController =
+        TextEditingController(text: d?.lockDimensions ?? '');
     doorAliasController = TextEditingController(text: d?.doorAlias ?? '');
-    provisionalAliasController = TextEditingController(text: d?.provisionalAlias ?? d?.doorAlias ?? '');
+    provisionalAliasController =
+        TextEditingController(text: d?.provisionalAlias ?? d?.doorAlias ?? '');
     dopNumberController = TextEditingController(text: d?.dopNumber ?? '');
     notesController = TextEditingController(text: d?.notes ?? '');
 
@@ -187,21 +190,29 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     // Initialize free-text dropdown fields & year
     approvalNumber = d?.approvalNumber ?? '?';
-    manufacturer = d?.manufacturer ?? DoorOptionsService.getDefault('manufacturer') ?? '?';
+    manufacturer =
+        d?.manufacturer ?? DoorOptionsService.getDefault('manufacturer') ?? '?';
     manufacturerNumber = d?.manufacturerNumber ?? '?';
     manufactureYear = d?.manufactureYear ?? '?';
     fsaDriveAcceptanceDate = d?.fsaDriveAcceptanceDate;
 
     // Initialize dropdowns (use defaults from config file if creating a new door)
-    escapeDoorControl = d?.escapeDoorControl ?? DoorOptionsService.getDefault('escapeDoorControl') ?? 'Nein';
-    accessControl = d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
-    panicFunction = d?.panicFunction ?? DoorOptionsService.getDefault('panicFunction');
+    escapeDoorControl = d?.escapeDoorControl ??
+        DoorOptionsService.getDefault('escapeDoorControl') ??
+        'Nein';
+    accessControl =
+        d?.accessControl ?? DoorOptionsService.getDefault('accessControl');
+    panicFunction =
+        d?.panicFunction ?? DoorOptionsService.getDefault('panicFunction');
     doorType = d?.doorType ?? DoorOptionsService.getDefault('doorType');
     material = d?.material ?? DoorOptionsService.getDefault('material');
-    dinConfiguration = d?.dinConfiguration ?? DoorOptionsService.getDefault('dinConfiguration');
+    dinConfiguration = d?.dinConfiguration ??
+        DoorOptionsService.getDefault('dinConfiguration');
     closerType = d?.closerType ?? DoorOptionsService.getDefault('closerType');
-    closingSequenceSystem = d?.closingSequenceSystem ?? DoorOptionsService.getDefault('closingSequenceSystem');
-    fittingType = d?.fittingType ?? DoorOptionsService.getDefault('fittingType');
+    closingSequenceSystem = d?.closingSequenceSystem ??
+        DoorOptionsService.getDefault('closingSequenceSystem');
+    fittingType =
+        d?.fittingType ?? DoorOptionsService.getDefault('fittingType');
 
     // Initialize numeric fields
     wingCount = d?.wingCount ?? DoorOptionsService.getDefault('wingCount') ?? 1;
@@ -229,10 +240,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   Future<void> _loadInspectionData() async {
     // Select correct database based on role
-    final db = widget.isManagerMode 
-        ? await DatabaseService.getDb() 
+    final db = widget.isManagerMode
+        ? await DatabaseService.getDb()
         : await LocalDatabaseService.getDb();
-        
+
     List<Map<String, dynamic>> results = [];
     if (widget.door != null && widget.door!.id != null) {
       if (widget.inspectionId != null) {
@@ -284,16 +295,20 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       final repDateStr = insp['repairDate']?.toString();
       setState(() {
         currentInspectionId = widget.inspectionId ?? insp['inspectionId'];
-        _isLocked = InspectionYearUtils.isInspectionLocked(insp['isLocked'], insp['date']);
+        _isLocked = InspectionYearUtils.isInspectionLocked(
+            insp['isLocked'], insp['date']);
         customerNameController.text = insp['clientName'] ?? '';
         customerAddressController.text = insp['objectAddress'] ?? '';
         contactPersonController.text = insp['contactPerson'] ?? '';
         jobNumberController.text = insp['jobNumber'] ?? '';
         projectNumberController.text = insp['projectNumber'] ?? '';
         inspectorNameController.text = insp['inspectorName'] ?? '';
-        inspectionDate = DateTime.tryParse(insp['date'] ?? '') ?? DateTime.now();
+        inspectionDate =
+            DateTime.tryParse(insp['date'] ?? '') ?? DateTime.now();
         orderType = insp['orderType']?.toString() ?? 'Wartung';
-        repairDate = (repDateStr != null && repDateStr.isNotEmpty) ? DateTime.tryParse(repDateStr) : null;
+        repairDate = (repDateStr != null && repDateStr.isNotEmpty)
+            ? DateTime.tryParse(repDateStr)
+            : null;
       });
 
       // Calculate next available door position (pos) for this inspection if creating a new door
@@ -307,7 +322,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
         if (existingDoors.isNotEmpty) {
           final maxPos = (existingDoors.first['maxPos'] as num?)?.toInt();
-          final count = (existingDoors.first['doorCount'] as num?)?.toInt() ?? 0;
+          final count =
+              (existingDoors.first['doorCount'] as num?)?.toInt() ?? 0;
           setState(() {
             pos = (maxPos != null && maxPos > 0) ? maxPos + 1 : count + 1;
           });
@@ -340,8 +356,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       return;
     }
     try {
-      final db = widget.isManagerMode 
-          ? await DatabaseService.getDb() 
+      final db = widget.isManagerMode
+          ? await DatabaseService.getDb()
           : await LocalDatabaseService.getDb();
 
       final junctionResults = await db.query(
@@ -359,15 +375,22 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       if (junctionResults.isNotEmpty) {
         final junctionId = junctionResults.first['id'] as int;
         final errors = widget.isManagerMode
-            ? await DatabaseService.getDetailedErrorsForInspectionDoor(junctionId)
-            : await LocalDatabaseService.getDetailedErrorsForInspectionDoor(junctionId);
+            ? await DatabaseService.getDetailedErrorsForInspectionDoor(
+                junctionId)
+            : await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+                junctionId);
 
         final List<String> formattedEntries = [];
         for (final e in errors) {
-          final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '').toString().trim();
+          final desc = (e['description'] ?? e['code'] ?? e['errorCode'] ?? '')
+              .toString()
+              .trim();
           final note = (e['notes'] ?? '').toString().trim();
-          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-          final isResolved = (status == 'resolved' || status == 'gelöst' || status == 'beholfen');
+          final status =
+              (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          final isResolved = (status == 'resolved' ||
+              status == 'gelöst' ||
+              status == 'beholfen');
           final statusSuffix = isResolved ? ' [Gelöst]' : '';
 
           if (desc.isNotEmpty && note.isNotEmpty) {
@@ -405,8 +428,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
         int openErrors = 0;
         for (final e in errors) {
-          final status = (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
-          if (status != 'resolved' && status != 'gelöst' && status != 'beholfen') {
+          final status =
+              (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          if (status != 'resolved' &&
+              status != 'gelöst' &&
+              status != 'beholfen') {
             openErrors++;
           }
         }
@@ -457,19 +483,25 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
   }
 
-  bool _isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog, List<String> currentFormattedEntries) {
+  bool _isErrorDerivedLine(String line, List<ErrorCatalog> allCatalog,
+      List<String> currentFormattedEntries) {
     if (line.isEmpty) return false;
     // Direct match with any currently active error note entry
-    if (currentFormattedEntries.any((entry) => entry == line || entry.startsWith(line) || line.startsWith(entry))) {
+    if (currentFormattedEntries.any((entry) =>
+        entry == line || entry.startsWith(line) || line.startsWith(entry))) {
       return true;
     }
     // Legacy error prefixes
-    if (line.startsWith('M-') || line.startsWith('ERR_') || line.startsWith('PROP-') || line.startsWith('ALT-')) {
+    if (line.startsWith('M-') ||
+        line.startsWith('ERR_') ||
+        line.startsWith('PROP-') ||
+        line.startsWith('ALT-')) {
       return true;
     }
     // Match against any known catalog error description or code prefix
     final cleanLine = line
-        .replaceAll(RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
+        .replaceAll(
+            RegExp(r'\s*\[Gelöst\]|\s*\(Gelöst\)', caseSensitive: false), '')
         .trim()
         .toLowerCase();
     for (final cat in allCatalog) {
@@ -512,7 +544,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.note_alt_outlined, color: Colors.blue.shade800, size: 24),
+              child: Icon(Icons.note_alt_outlined,
+                  color: Colors.blue.shade800, size: 24),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -550,14 +583,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, size: 20, color: Colors.blue.shade800),
+                      Icon(Icons.info_outline,
+                          size: 20, color: Colors.blue.shade800),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           readOnly
                               ? 'Erfasste Notizen und automatisch dokumentierte Mängelhinweise zu dieser Tür (Lesemodus).'
                               : 'Hier werden angemeldete Mängelhinweise und Notizen zusammengefasst. Sie können den Text beliebig erweitern oder ergänzen.',
-                          style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.blue.shade900),
                         ),
                       ),
                     ],
@@ -573,7 +608,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   decoration: InputDecoration(
                     labelText: 'Notizen & Mängelbeschreibungen (Volltext)',
                     alignLabelWithHint: true,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
                     hintText: 'Keine Notizen erfasst...',
                   ),
                 ),
@@ -598,7 +634,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               icon: const Icon(Icons.check),
               label: const Text('Übernehmen'),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
               onPressed: () {
                 setState(() {
@@ -636,7 +673,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       alias = prov;
     }
     return Door(
-      id: _activeDoor?.id ?? widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
+      id: _activeDoor?.id ??
+          widget.door?.id, // Leave null for new doors to allow AUTOINCREMENT
       pos: pos,
       doorAlias: alias,
       provisionalAlias: prov,
@@ -646,23 +684,37 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       roomDesignation: roomDesignationController.text,
       doorType: doorType ?? DoorOptionsService.getDefault('doorType') ?? 'T30',
       wingCount: wingCount,
-      material: material ?? DoorOptionsService.getDefault('material') ?? 'Stahl',
+      material:
+          material ?? DoorOptionsService.getDefault('material') ?? 'Stahl',
       manufacturer: manufacturer,
-      dinConfiguration: dinConfiguration ?? DoorOptionsService.getDefault('dinConfiguration') ?? 'DIN L',
-      closerType: closerType ?? DoorOptionsService.getDefault('closerType') ?? 'TS93',
-      closingSequenceSystem: closingSequenceSystem ?? DoorOptionsService.getDefault('closingSequenceSystem') ?? 'None',
+      dinConfiguration: dinConfiguration ??
+          DoorOptionsService.getDefault('dinConfiguration') ??
+          'DIN L',
+      closerType:
+          closerType ?? DoorOptionsService.getDefault('closerType') ?? 'TS93',
+      closingSequenceSystem: closingSequenceSystem ??
+          DoorOptionsService.getDefault('closingSequenceSystem') ??
+          'None',
       lockDimensions: lockDimensionsController.text,
       closerOnHingeSide: closerOnHingeSide,
       closerOnOppositeSide: closerOnOppositeSide,
       lintelHeightInsideOver1m: lintelHeightInsideOver1m,
-      escapeDoorControl: escapeDoorControl ?? DoorOptionsService.getDefault('escapeDoorControl') ?? 'Nein',
-      accessControl: accessControl ?? DoorOptionsService.getDefault('accessControl') ?? 'Nein',
+      escapeDoorControl: escapeDoorControl ??
+          DoorOptionsService.getDefault('escapeDoorControl') ??
+          'Nein',
+      accessControl: accessControl ??
+          DoorOptionsService.getDefault('accessControl') ??
+          'Nein',
       escapeRouteSituation: escapeRouteSituation,
       escapeRouteSignage: escapeSignage,
       blindCylinder: blindCylinder,
       pzCylinder: pzCylinder,
-      fittingType: fittingType ?? DoorOptionsService.getDefault('fittingType') ?? 'Drücker',
-      panicFunction: panicFunction ?? DoorOptionsService.getDefault('panicFunction') ?? 'Nein',
+      fittingType: fittingType ??
+          DoorOptionsService.getDefault('fittingType') ??
+          'Drücker',
+      panicFunction: panicFunction ??
+          DoorOptionsService.getDefault('panicFunction') ??
+          'Nein',
       escapeDirectionRespected: escapeDirectionRespected,
       fullPanicStandWing: fullPanicStandWing,
       doorFunctionOK: properFunction,
@@ -670,8 +722,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       manufacturerNumber: manufacturerNumber,
       dopNumber: dopNumberController.text,
       lintelHeightOutsideOver1m: lintelHeightOutsideOver1m,
-      lintelHeightInsideValue: lintelHeightInsideOver1m ? lintelHeightInsideValue : null,
-      lintelHeightOutsideValue: lintelHeightOutsideOver1m ? lintelHeightOutsideValue : null,
+      lintelHeightInsideValue:
+          lintelHeightInsideOver1m ? lintelHeightInsideValue : null,
+      lintelHeightOutsideValue:
+          lintelHeightOutsideOver1m ? lintelHeightOutsideValue : null,
       manufactureYear: manufactureYear,
       fsaDriveAcceptanceDate: fsaDriveAcceptanceDate,
       notes: notesController.text,
@@ -692,15 +746,20 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     final currentId = _activeDoor?.id ?? widget.door?.id;
     final existingDoor = widget.isManagerMode
-        ? await DatabaseService.findDoorByBarcode(barcodeToTest, excludeDoorId: currentId)
-        : await LocalDatabaseService.findDoorByBarcode(barcodeToTest, excludeDoorId: currentId);
+        ? await DatabaseService.findDoorByBarcode(barcodeToTest,
+            excludeDoorId: currentId)
+        : await LocalDatabaseService.findDoorByBarcode(barcodeToTest,
+            excludeDoorId: currentId);
 
     if (existingDoor != null) {
       if (mounted) {
-        final doorDesc = existingDoor.doorNumber.isNotEmpty ? existingDoor.doorNumber : 'Pos. ${existingDoor.pos}';
+        final doorDesc = existingDoor.doorNumber.isNotEmpty
+            ? existingDoor.doorNumber
+            : 'Pos. ${existingDoor.pos}';
         final locationInfo = [
           if (existingDoor.floor.isNotEmpty) existingDoor.floor,
-          if (existingDoor.roomDesignation.isNotEmpty) existingDoor.roomDesignation,
+          if (existingDoor.roomDesignation.isNotEmpty)
+            existingDoor.roomDesignation,
         ].join(', ');
         final locationText = locationInfo.isNotEmpty ? ' ($locationInfo)' : '';
 
@@ -737,21 +796,24 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       if (_isFormReadOnly) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Gesperrte Inspektionen können vom Inspektor nicht bearbeitet oder gespeichert werden.'),
+            content: Text(
+                'Gesperrte Inspektionen können vom Inspektor nicht bearbeitet oder gespeichert werden.'),
             backgroundColor: Colors.orange,
           ),
         );
       } else if (properFunction && _openErrorCount > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Funktion steht auf "Ja", aber es sind noch $_openErrorCount offene Mängel vorhanden. Bitte offene Mängel als "Gelöst" markieren oder Funktion auf "Nein" setzen.'),
+            content: Text(
+                'Funktion steht auf "Ja", aber es sind noch $_openErrorCount offene Mängel vorhanden. Bitte offene Mängel als "Gelöst" markieren oder Funktion auf "Nein" setzen.'),
             backgroundColor: Colors.red,
           ),
         );
       } else if (!properFunction && _openErrorCount == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Wenn Bewertung auf "Nein" steht, muss mindestens ein offener Mangel über "Fehler verwalten" erfasst werden.'),
+            content: Text(
+                'Wenn Bewertung auf "Nein" steht, muss mindestens ein offener Mangel über "Fehler verwalten" erfasst werden.'),
             backgroundColor: Colors.red,
           ),
         );
@@ -764,7 +826,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
 
     final door = buildDoor();
-    
+
     // Save Inspection Metadata first
     final Map<String, dynamic> inspectionData = {
       'clientName': customerNameController.text,
@@ -777,7 +839,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       'jobNumber': jobNumberController.text,
       'projectNumber': projectNumberController.text,
     };
-    
+
     if (currentInspectionId != null) {
       inspectionData['inspectionId'] = currentInspectionId;
     }
@@ -847,11 +909,14 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   List<String> _getDropdownItems(String key, String? currentValue) {
     final list = DoorOptionsService.getStringOptions(key);
-    if (currentValue != null && currentValue.isNotEmpty && !list.contains(currentValue)) {
+    if (currentValue != null &&
+        currentValue.isNotEmpty &&
+        !list.contains(currentValue)) {
       list.add(currentValue);
     }
     if (key.startsWith('lintelHeight')) {
-      list.removeWhere((e) => e == '0,5' || e == '0.5' || e == '0,5m' || e == '0.5m');
+      list.removeWhere(
+          (e) => e == '0,5' || e == '0.5' || e == '0,5m' || e == '0.5m');
       list.sort(DoorOptionsService.compareOptions);
     }
     return list;
@@ -875,7 +940,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return list.contains(currentValue) ? currentValue : null;
   }
 
-  List<Map<String, String>> _getMapDropdownItems(String key, String? currentValue) {
+  List<Map<String, String>> _getMapDropdownItems(
+      String key, String? currentValue) {
     final list = DoorOptionsService.getMapOptions(key);
     if (currentValue != null && currentValue.isNotEmpty) {
       final hasValue = list.any((e) => e['value'] == currentValue);
@@ -908,7 +974,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
     final currentIndex = _propertyPhotoCounters[propertyName] ?? 1;
 
-    final String? savedPath = await PropertyPhotoHelper.captureAndSavePropertyPhoto(
+    final String? savedPath =
+        await PropertyPhotoHelper.captureAndSavePropertyPhoto(
       context: context,
       doorAlias: alias,
       propertyName: propertyName,
@@ -918,14 +985,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     if (savedPath != null) {
       setState(() {
         _propertyPhotoCounters[propertyName] = currentIndex + 1;
-        if (propertyName.toLowerCase() == 'tuer' || propertyName.toLowerCase() == 'tür') {
+        if (propertyName.toLowerCase() == 'tuer' ||
+            propertyName.toLowerCase() == 'tür') {
           _doorPhotoCount++;
         }
         onPhotoSaved?.call('Foto');
       });
 
       if (mounted) {
-        final String successMsg = (propertyName.toLowerCase() == 'tuer' || propertyName.toLowerCase() == 'tür')
+        final String successMsg = (propertyName.toLowerCase() == 'tuer' ||
+                propertyName.toLowerCase() == 'tür')
             ? 'Türfoto gespeichert unter:\n$savedPath'
             : 'Foto für $propertyName gespeichert unter:\n$savedPath';
         ScaffoldMessenger.of(context).showSnackBar(
@@ -938,7 +1007,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     }
   }
 
-  Future<String?> _showYearOnlyPickerDialog(BuildContext context, String currentYearStr) async {
+  Future<String?> _showYearOnlyPickerDialog(
+      BuildContext context, String currentYearStr) async {
     final DateTime now = DateTime.now();
     final int currentYearInt = int.tryParse(currentYearStr) ?? now.year;
     int selectedYear = currentYearInt;
@@ -1030,7 +1100,10 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                     Expanded(
                       child: Text(
                         'Gesperrte Inspektion: Im Lesemodus. Änderungen können von Inspektoren nicht gespeichert werden.',
-                        style: TextStyle(fontSize: 13, color: Colors.orange.shade900, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
@@ -1042,15 +1115,19 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _canSave ? () async {
-                      await saveDoor();
-                    } : null,
+                    onPressed: _canSave
+                        ? () async {
+                            await saveDoor();
+                          }
+                        : null,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _canSave ? Colors.orange : Colors.grey.shade400,
+                      backgroundColor:
+                          _canSave ? Colors.orange : Colors.grey.shade400,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text(_isFormReadOnly ? 'Schreibgeschützt' : 'Speichern'),
+                    child: Text(
+                        _isFormReadOnly ? 'Schreibgeschützt' : 'Speichern'),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -1065,7 +1142,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                         final Map<String, dynamic> inspectionData = {
                           'clientName': customerNameController.text,
                           'objectAddress': customerAddressController.text,
-                          'date': inspectionDate.toIso8601String().substring(0, 10),
+                          'date':
+                              inspectionDate.toIso8601String().substring(0, 10),
                           'contactPerson': contactPersonController.text,
                           'inspectorName': inspectorNameController.text,
                           'jobNumber': jobNumberController.text,
@@ -1076,9 +1154,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                         }
                         int insertedDoorId;
                         if (widget.isManagerMode) {
-                          final id = await DatabaseService.insertInspection(inspectionData);
+                          final id = await DatabaseService.insertInspection(
+                              inspectionData);
                           setState(() => currentInspectionId = id);
-                          insertedDoorId = await DatabaseService.insertDoor(door);
+                          insertedDoorId =
+                              await DatabaseService.insertDoor(door);
                           await DatabaseService.insertInspectionDoor({
                             'inspectionId': currentInspectionId,
                             'doorId': insertedDoorId,
@@ -1087,9 +1167,12 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                             'attachments': null,
                           });
                         } else {
-                          final id = await LocalDatabaseService.insertInspection(inspectionData);
+                          final id =
+                              await LocalDatabaseService.insertInspection(
+                                  inspectionData);
                           setState(() => currentInspectionId = id);
-                          insertedDoorId = await LocalDatabaseService.insertDoor(door);
+                          insertedDoorId =
+                              await LocalDatabaseService.insertDoor(door);
                           await LocalDatabaseService.insertInspectionDoor({
                             'inspectionId': currentInspectionId,
                             'doorId': insertedDoorId,
@@ -1109,7 +1192,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                           MaterialPageRoute(
                             builder: (context) => ErrorManagementPage(
                               doorId: _activeDoor!.id!,
-                              doorNumber: _activeDoor!.doorNumber.isNotEmpty ? _activeDoor!.doorNumber : doorNumberController.text,
+                              doorNumber: _activeDoor!.doorNumber.isNotEmpty
+                                  ? _activeDoor!.doorNumber
+                                  : doorNumberController.text,
                               inspectionId: currentInspectionId!,
                               isManagerMode: widget.isManagerMode,
                               isReadOnly: _isFormReadOnly,
@@ -1130,7 +1215,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             if (!_isFormReadOnly && !properFunction && _errorCount == 0) ...[
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.amber.shade50,
                   border: Border.all(color: Colors.amber.shade400),
@@ -1138,12 +1224,16 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 20),
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.amber.shade900, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Bewertung ist "Nein": Bitte fügen Sie mindestens einen Fehler über "Fehler verwalten" hinzu, um speichern zu können.',
-                        style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.w500),
                       ),
                     ),
                   ],
@@ -1153,72 +1243,86 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const SizedBox(height: 20),
 
             // Inspection Metadata Section
-            const Text("Inspektionsdaten", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Inspektionsdaten",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            
+
             // Customer name
             TextField(
               controller: customerNameController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Kundenname",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
             ),
-            
+
             // Customer address
             TextField(
               controller: customerAddressController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Kundenadresse",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
               maxLines: 2,
             ),
-            
+
             // Contact person
             TextField(
               controller: contactPersonController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Ansprechpartner",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
             ),
-            
+
             // Job number
             TextField(
               controller: jobNumberController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Auftragsnummer",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
             ),
-            
+
             // Project number
             TextField(
               controller: projectNumberController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Projektnummer",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
             ),
-            
+
             // Inspector name
             TextField(
               controller: inspectorNameController,
               enabled: widget.isManagerMode && !_isFormReadOnly,
               decoration: InputDecoration(
                 labelText: "Inspektor",
-                helperText: !widget.isManagerMode ? "Schreibgeschützt für Inspektor" : null,
+                helperText: !widget.isManagerMode
+                    ? "Schreibgeschützt für Inspektor"
+                    : null,
               ),
             ),
-            
+
             // Date Section: Exactly one date is displayed based on whether the event is a Reparatur or Wartung
-            if (orderType == 'Reparatur' || (orderType == 'Erledigt' && repairDate != null))
+            if (orderType == 'Reparatur' ||
+                (orderType == 'Erledigt' && repairDate != null))
               ListTile(
                 title: Text(
                   "Reparaturdatum: ${repairDate != null ? '${repairDate!.day.toString().padLeft(2, '0')}.${repairDate!.month.toString().padLeft(2, '0')}.${repairDate!.year}' : '-'}",
@@ -1228,7 +1332,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   ),
                 ),
                 subtitle: Text(
-                  orderType == 'Erledigt' ? "Instandsetzung abgeschlossen (Erledigt)" : "Instandsetzungsphase",
+                  orderType == 'Erledigt'
+                      ? "Instandsetzung abgeschlossen (Erledigt)"
+                      : "Instandsetzungsphase",
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.orange.shade800,
@@ -1254,21 +1360,27 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               )
             else
               ListTile(
-                title: Text("Inspektionsdatum: ${inspectionDate.day.toString().padLeft(2, '0')}.${inspectionDate.month.toString().padLeft(2, '0')}.${inspectionDate.year}"),
-                subtitle: !widget.isManagerMode ? const Text("Schreibgeschützt für Inspektor", style: TextStyle(fontSize: 12, color: Colors.grey)) : null,
+                title: Text(
+                    "Inspektionsdatum: ${inspectionDate.day.toString().padLeft(2, '0')}.${inspectionDate.month.toString().padLeft(2, '0')}.${inspectionDate.year}"),
+                subtitle: !widget.isManagerMode
+                    ? const Text("Schreibgeschützt für Inspektor",
+                        style: TextStyle(fontSize: 12, color: Colors.grey))
+                    : null,
                 trailing: IconButton(
                   icon: const Icon(Icons.calendar_today),
-                  onPressed: (widget.isManagerMode && !_isFormReadOnly) ? () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: inspectionDate,
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) {
-                      setState(() => inspectionDate = date);
-                    }
-                  } : null,
+                  onPressed: (widget.isManagerMode && !_isFormReadOnly)
+                      ? () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: inspectionDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date != null) {
+                            setState(() => inspectionDate = date);
+                          }
+                        }
+                      : null,
                 ),
               ),
 
@@ -1278,15 +1390,20 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Grundinformationen", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text("Grundinformationen",
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 OutlinedButton.icon(
                   onPressed: _isFormReadOnly
                       ? null
                       : () => _takePropertyPhoto(propertyName: 'Tuer'),
                   icon: const Icon(Icons.camera_alt, size: 18),
-                  label: Text(_doorPhotoCount > 0 ? "Türfoto ($_doorPhotoCount)" : "Türfoto aufnehmen"),
+                  label: Text(_doorPhotoCount > 0
+                      ? "Türfoto ($_doorPhotoCount)"
+                      : "Türfoto aufnehmen"),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -1294,7 +1411,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               ],
             ),
             const SizedBox(height: 10),
-            
+
             // Door number
             TextField(
               controller: doorNumberController,
@@ -1304,10 +1421,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Alias (Generated/Provisional Alias)
             TextField(
               controller: provisionalAliasController,
-              enabled: widget.isManagerMode, // Read-only for Inspector, editable for Manager
+              enabled: widget
+                  .isManagerMode, // Read-only for Inspector, editable for Manager
               decoration: InputDecoration(
                 labelText: "Alias",
-                helperText: widget.isManagerMode 
+                helperText: widget.isManagerMode
                     ? "Automatisch erzeugter Alias (vom Manager bearbeitbar)"
                     : "Automatisch erzeugter Alias (schreibgeschützt für Inspektor)",
                 prefixIcon: const Icon(Icons.pin, color: Colors.grey),
@@ -1330,9 +1448,11 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               },
               decoration: InputDecoration(
                 labelText: "Barcode",
-                helperText: "Physischer Barcode / QR-Code der Tür (jederzeit bearbeitbar)",
+                helperText:
+                    "Physischer Barcode / QR-Code der Tür (jederzeit bearbeitbar)",
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple),
+                  icon: const Icon(Icons.qr_code_scanner,
+                      color: Colors.deepPurple),
                   tooltip: "Barcode / QR-Code scannen",
                   onPressed: () async {
                     final scanned = await BarcodeScannerDialog.show(
@@ -1340,7 +1460,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                       title: 'Tür-Barcode scannen',
                     );
                     if (scanned != null && scanned.trim().isNotEmpty) {
-                      final isUnique = await _validateBarcodeUniqueness(scanned.trim());
+                      final isUnique =
+                          await _validateBarcodeUniqueness(scanned.trim());
                       if (!isUnique) return;
                       setState(() {
                         doorAliasController.text = scanned.trim();
@@ -1351,13 +1472,13 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 ),
               ),
             ),
-            
+
             // Floor
             TextField(
               controller: floorController,
               decoration: const InputDecoration(labelText: "Geschoss"),
             ),
-            
+
             // Room number
             TextField(
               controller: roomNumberController,
@@ -1373,7 +1494,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const SizedBox(height: 20),
 
             // Door Specifications Section
-            const Text("Türspezifikationen", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Türspezifikationen",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
             // Door type
@@ -1414,7 +1536,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             EditableDropdownField(
               label: "Herstellernummer",
               currentValue: manufacturerNumber,
-              options: DoorOptionsService.getStringOptions('manufacturerNumber'),
+              options:
+                  DoorOptionsService.getStringOptions('manufacturerNumber'),
               onChanged: (val) => setState(() => manufacturerNumber = val),
               onTakePhoto: () => _takePropertyPhoto(
                 propertyName: "Herstellernummer",
@@ -1425,7 +1548,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // DoP-Nummer (Leistungserklärung) - Free alphanumeric field
             TextField(
               controller: dopNumberController,
-              decoration: const InputDecoration(labelText: "DoP-Nummer (Leistungserklärung)"),
+              decoration: const InputDecoration(
+                  labelText: "DoP-Nummer (Leistungserklärung)"),
             ),
 
             // Baujahr (Year-only picker dialog)
@@ -1439,7 +1563,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                     icon: const Icon(Icons.calendar_today),
                     tooltip: 'Jahr auswählen',
                     onPressed: () async {
-                      final year = await _showYearOnlyPickerDialog(context, manufactureYear);
+                      final year = await _showYearOnlyPickerDialog(
+                          context, manufactureYear);
                       if (year != null) {
                         setState(() => manufactureYear = year);
                       }
@@ -1458,7 +1583,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Flügelanzahl"),
               initialValue: _getIntDropdownValue('wingCount', wingCount),
               items: _getIntDropdownItems('wingCount', wingCount)
-                  .map((val) => DropdownMenuItem(value: val, child: Text(val.toString())))
+                  .map((val) =>
+                      DropdownMenuItem(value: val, child: Text(val.toString())))
                   .toList(),
               onChanged: (val) => setState(() => wingCount = val ?? 1),
             ),
@@ -1476,7 +1602,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // DIN configuration
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "DIN-Konfiguration"),
-              initialValue: _getDropdownValue('dinConfiguration', dinConfiguration),
+              initialValue:
+                  _getDropdownValue('dinConfiguration', dinConfiguration),
               items: _getDropdownItems('dinConfiguration', dinConfiguration)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
@@ -1488,16 +1615,20 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               decoration: const InputDecoration(labelText: "Schließerart"),
               initialValue: _getMapDropdownValue('closerType', closerType),
               items: _getMapDropdownItems('closerType', closerType)
-                  .map((map) => DropdownMenuItem(value: map['value']!, child: Text(map['label']!)))
+                  .map((map) => DropdownMenuItem(
+                      value: map['value']!, child: Text(map['label']!)))
                   .toList(),
               onChanged: (val) => setState(() => closerType = val),
             ),
 
             // Closing sequence system
             DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: "Schließfolgesystem"),
-              initialValue: _getDropdownValue('closingSequenceSystem', closingSequenceSystem),
-              items: _getDropdownItems('closingSequenceSystem', closingSequenceSystem)
+              decoration:
+                  const InputDecoration(labelText: "Schließfolgesystem"),
+              initialValue: _getDropdownValue(
+                  'closingSequenceSystem', closingSequenceSystem),
+              items: _getDropdownItems(
+                      'closingSequenceSystem', closingSequenceSystem)
                   .map((val) => DropdownMenuItem(value: val, child: Text(val)))
                   .toList(),
               onChanged: (val) => setState(() => closingSequenceSystem = val),
@@ -1506,16 +1637,22 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             // Lock dimensions (Dynamic Combobox / Editable Dropdown)
             EditableDropdownField(
               label: "Schlossabmessungen",
-              currentValue: lockDimensionsController.text.isNotEmpty ? lockDimensionsController.text : '?',
+              currentValue: lockDimensionsController.text.isNotEmpty
+                  ? lockDimensionsController.text
+                  : '?',
               options: DoorOptionsService.getStringOptions('lockDimensions'),
-              onChanged: (val) => setState(() => lockDimensionsController.text = val),
+              onChanged: (val) =>
+                  setState(() => lockDimensionsController.text = val),
             ),
 
             // Notizen (Türspezifikation) - Pop-Up Window Integration
             const SizedBox(height: 10),
             Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.grey.shade400),
               ),
@@ -1528,21 +1665,26 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.notes, color: Theme.of(context).primaryColor, size: 20),
+                          Icon(Icons.notes,
+                              color: Theme.of(context).primaryColor, size: 20),
                           const SizedBox(width: 8),
                           const Text(
                             "Notizen & Mängelhinweise",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                         ],
                       ),
                       ElevatedButton.icon(
                         onPressed: _openNotesDialog,
                         icon: const Icon(Icons.open_in_new, size: 16),
-                        label: Text(widget.isReadOnly == true ? "Notizen ansehen" : "In Pop-Up Fenster bearbeiten"),
+                        label: Text(widget.isReadOnly == true
+                            ? "Notizen ansehen"
+                            : "In Pop-Up Fenster bearbeiten"),
                         style: ElevatedButton.styleFrom(
                           visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                         ),
                       ),
                     ],
@@ -1570,7 +1712,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                           color: notesController.text.trim().isNotEmpty
                               ? Theme.of(context).textTheme.bodyMedium?.color
                               : Colors.grey.shade600,
-                          fontStyle: notesController.text.trim().isNotEmpty ? FontStyle.normal : FontStyle.italic,
+                          fontStyle: notesController.text.trim().isNotEmpty
+                              ? FontStyle.normal
+                              : FontStyle.italic,
                         ),
                       ),
                     ),
@@ -1582,7 +1726,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const SizedBox(height: 20),
 
             // Installation Section
-            const Text("Installation", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Installation",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
             // Abnahme FSA / Antrieb (Datetime)
@@ -1598,7 +1743,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                     icon: const Icon(Icons.calendar_today),
                     tooltip: 'Datum auswählen',
                     onPressed: () async {
-                      final initial = DateTime.tryParse(fsaDriveAcceptanceDate ?? '') ?? DateTime.now();
+                      final initial =
+                          DateTime.tryParse(fsaDriveAcceptanceDate ?? '') ??
+                              DateTime.now();
                       final picked = await showDatePicker(
                         context: context,
                         initialDate: initial,
@@ -1606,16 +1753,19 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                         lastDate: DateTime(2100),
                       );
                       if (picked != null) {
-                        final formatted = "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                        final formatted =
+                            "${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
                         setState(() => fsaDriveAcceptanceDate = formatted);
                       }
                     },
                   ),
-                  if (fsaDriveAcceptanceDate != null && fsaDriveAcceptanceDate!.isNotEmpty)
+                  if (fsaDriveAcceptanceDate != null &&
+                      fsaDriveAcceptanceDate!.isNotEmpty)
                     IconButton(
                       icon: const Icon(Icons.clear),
                       tooltip: 'Datum zurücksetzen',
-                      onPressed: () => setState(() => fsaDriveAcceptanceDate = null),
+                      onPressed: () =>
+                          setState(() => fsaDriveAcceptanceDate = null),
                     ),
                 ],
               ),
@@ -1643,29 +1793,32 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 lintelHeightInsideOver1m = val;
                 if (!val) {
                   lintelHeightInsideValue = null;
-                } else if (lintelHeightInsideValue == null) {
-                  lintelHeightInsideValue = '1m';
-                }
+                } else
+                  lintelHeightInsideValue ??= '1m';
               }),
             ),
 
             // Dropdown menu for inside lintel height (visible only when lintelHeightInsideOver1m is true)
             if (lintelHeightInsideOver1m)
               Padding(
-                padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+                padding: const EdgeInsets.only(
+                    left: 16.0, right: 16.0, bottom: 12.0),
                 child: DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
                     labelText: "Sturzhöhe innen (Meter)",
                     border: OutlineInputBorder(),
                   ),
-                  value: _getDropdownValue('lintelHeightInsideValue', lintelHeightInsideValue),
-                  items: _getDropdownItems('lintelHeightInsideValue', lintelHeightInsideValue)
+                  initialValue: _getDropdownValue(
+                      'lintelHeightInsideValue', lintelHeightInsideValue),
+                  items: _getDropdownItems(
+                          'lintelHeightInsideValue', lintelHeightInsideValue)
                       .map((val) => DropdownMenuItem<String>(
                             value: val,
                             child: Text(val),
                           ))
                       .toList(),
-                  onChanged: (val) => setState(() => lintelHeightInsideValue = val),
+                  onChanged: (val) =>
+                      setState(() => lintelHeightInsideValue = val),
                 ),
               ),
 
@@ -1677,36 +1830,40 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 lintelHeightOutsideOver1m = val;
                 if (!val) {
                   lintelHeightOutsideValue = null;
-                } else if (lintelHeightOutsideValue == null) {
-                  lintelHeightOutsideValue = '1m';
-                }
+                } else
+                  lintelHeightOutsideValue ??= '1m';
               }),
             ),
 
             // Dropdown menu for outside lintel height (visible only when lintelHeightOutsideOver1m is true)
             if (lintelHeightOutsideOver1m)
               Padding(
-                padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 12.0),
+                padding: const EdgeInsets.only(
+                    left: 16.0, right: 16.0, bottom: 12.0),
                 child: DropdownButtonFormField<String>(
                   decoration: const InputDecoration(
                     labelText: "Sturzhöhe außen (Meter)",
                     border: OutlineInputBorder(),
                   ),
-                  value: _getDropdownValue('lintelHeightOutsideValue', lintelHeightOutsideValue),
-                  items: _getDropdownItems('lintelHeightOutsideValue', lintelHeightOutsideValue)
+                  initialValue: _getDropdownValue(
+                      'lintelHeightOutsideValue', lintelHeightOutsideValue),
+                  items: _getDropdownItems(
+                          'lintelHeightOutsideValue', lintelHeightOutsideValue)
                       .map((val) => DropdownMenuItem<String>(
                             value: val,
                             child: Text(val),
                           ))
                       .toList(),
-                  onChanged: (val) => setState(() => lintelHeightOutsideValue = val),
+                  onChanged: (val) =>
+                      setState(() => lintelHeightOutsideValue = val),
                 ),
               ),
 
             const SizedBox(height: 20),
 
             // Safety & Security Section
-            const Text("Sicherheit & Zugang", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Sicherheit & Zugang",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
             // Access control (Dynamic Combobox / Editable Dropdown)
@@ -1777,7 +1934,8 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             SwitchListTile(
               title: const Text("Fluchtrichtung beachtet"),
               value: escapeDirectionRespected,
-              onChanged: (val) => setState(() => escapeDirectionRespected = val),
+              onChanged: (val) =>
+                  setState(() => escapeDirectionRespected = val),
             ),
 
             // Full panic stand wing
@@ -1790,25 +1948,33 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             const SizedBox(height: 20),
 
             // Final Status Section
-            const Text("Bewertung", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Bewertung",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
 
             // Door function OK
             SwitchListTile(
-              title: const Text("Tür inkl. Komponenten in ordentlicher Funktion"),
+              title:
+                  const Text("Tür inkl. Komponenten in ordentlicher Funktion"),
               subtitle: Text(
                 properFunction
                     ? (_openErrorCount > 0
                         ? "Ja (Warnung: $_openErrorCount offene Mängel!)"
-                        : (_errorCount > 0 ? "Ja (Alle Mängel gelöst/behoben)" : "Ja (Keine Mängel)"))
+                        : (_errorCount > 0
+                            ? "Ja (Alle Mängel gelöst/behoben)"
+                            : "Ja (Keine Mängel)"))
                     : (_openErrorCount > 0
                         ? "Nein ($_openErrorCount offene Mängel)"
                         : "Nein (Mängel müssen erfasst werden)"),
                 style: TextStyle(
                   fontSize: 12,
                   color: properFunction
-                      ? (_openErrorCount > 0 ? Colors.red.shade700 : Colors.green.shade700)
-                      : (_openErrorCount > 0 ? Colors.orange.shade800 : Colors.red.shade700),
+                      ? (_openErrorCount > 0
+                          ? Colors.red.shade700
+                          : Colors.green.shade700)
+                      : (_openErrorCount > 0
+                          ? Colors.orange.shade800
+                          : Colors.red.shade700),
                 ),
               ),
               value: properFunction,
@@ -1826,7 +1992,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                   ),
                 ),
               ),
-            ] else if (!_isFormReadOnly && !properFunction && _openErrorCount == 0) ...[
+            ] else if (!_isFormReadOnly &&
+                !properFunction &&
+                _openErrorCount == 0) ...[
               Padding(
                 padding: const EdgeInsets.only(left: 16, right: 16, top: 4),
                 child: Text(
