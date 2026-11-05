@@ -314,6 +314,17 @@ class CraftnoteSyncService {
         print('[CraftnoteSyncService] 🛡️ TEST MODE GUARD: Redirecting upload from "$craftnoteProjectId" to sandbox test project "${CraftnoteCredentialsService.testProjectId}" (#${CraftnoteCredentialsService.testProjectOrderNumber}) to protect live production data.');
         targetProjectId = CraftnoteCredentialsService.testProjectId;
         wasRedirected = true;
+      } else if (!CraftnoteCredentialsService.isTestMode) {
+        // In Production Mode: Prevent export into archived projects
+        try {
+          final targetProj = await apiService.getProjectById(craftnoteProjectId);
+          if (targetProj.archived) {
+            return CraftnoteSyncResult(
+              success: false,
+              message: 'Das Ziel-Projekt "${targetProj.name}" (#${targetProj.orderNumber}) ist in Craftnote bereits archiviert. Ein Export in archivierte Projekte ist nicht möglich.',
+            );
+          }
+        } catch (_) {}
       }
 
       // 1. Resolve standard project target folders ("Wartungslisten" and "Fotomaterial")
@@ -606,6 +617,14 @@ class CraftnoteSyncService {
     String? excludeWord,
   }) async {
     try {
+      if (project.archived) {
+        return CraftnoteImportResult(
+          success: false,
+          message:
+              'Das Craftnote-Projekt "${project.name}" (#${project.orderNumber.isNotEmpty ? project.orderNumber : project.id}) ist bereits archiviert und kann nicht mehr importiert werden.',
+        );
+      }
+
       CraftnoteFile? targetPackage = preferredFile;
 
       if (targetPackage == null) {
@@ -767,12 +786,17 @@ class CraftnoteSyncService {
 
       if (jobNumber.isNotEmpty) {
         try {
-          final searchResults = await apiService.findProjects(orderNumber: jobNumber);
-          if (searchResults.isNotEmpty) {
-            matchedProject = searchResults.firstWhere(
-              (p) => p.orderNumber.trim().toLowerCase() == jobNumber.toLowerCase(),
-              orElse: () => searchResults.first,
+          final searchResult = await apiService.findProjectWithArchiveCheck(orderNumber: jobNumber);
+          if (searchResult.isArchived) {
+            final projName = searchResult.archivedProject?.name ?? jobNumber;
+            return CraftnoteSyncResult(
+              success: false,
+              message:
+                  'Das Craftnote-Projekt "$projName" (#$jobNumber) ist bereits archiviert und kann nicht mehr aktualisiert oder hochgeladen werden.\nBitte aktivieren Sie das Projekt in Craftnote, falls es erneut bearbeitet werden soll.',
             );
+          }
+          if (searchResult.activeProject != null) {
+            matchedProject = searchResult.activeProject;
             projectFoundInSearch = true;
           }
         } catch (e) {
@@ -785,6 +809,14 @@ class CraftnoteSyncService {
         try {
           matchedProject = await apiService.getProjectById(insp['craftnoteProjectId'].toString());
         } catch (_) {}
+      }
+
+      if (matchedProject != null && matchedProject.archived) {
+        return CraftnoteSyncResult(
+          success: false,
+          message:
+              'Das Craftnote-Projekt "${matchedProject.name}" (#$jobNumber) ist bereits archiviert und kann nicht mehr aktualisiert oder hochgeladen werden.\nBitte aktivieren Sie das Projekt in Craftnote, falls es erneut bearbeitet werden soll.',
+        );
       }
 
       // Fallback for Test Mode: Fallback to sandbox test project

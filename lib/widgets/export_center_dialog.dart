@@ -279,9 +279,10 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
           orderNumber:
               _targetAngebotsnummer.isNotEmpty ? _targetAngebotsnummer : null,
           name: _targetProjectName.isNotEmpty ? _targetProjectName : null,
+          status: 'active',
         );
       } else {
-        results = await service.getProjects(limit: 50);
+        results = await service.getProjects(limit: 50, status: 'active');
       }
 
       if (mounted) {

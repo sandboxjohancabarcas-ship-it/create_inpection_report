@@ -142,10 +142,13 @@ class CraftnoteApiService {
 
   /// Queries all accessible Craftnote projects for a given page.
   /// Calls GET /projects
+  /// If [status] is 'active', only active (non-archived) projects are returned.
+  /// If [status] is 'archived', only archived projects are returned.
   Future<List<CraftnoteProject>> getProjects({
     int limit = 100,
     int offset = 0,
     String? search,
+    String? status,
   }) async {
     if (CraftnoteCredentialsService.isMockMode) {
       final mockProjects = [
@@ -157,6 +160,7 @@ class CraftnoteApiService {
           zipcode: '12345',
           city: 'Musterstadt',
           clientName: 'Industrie GmbH',
+          archived: false,
         ),
         const CraftnoteProject(
           id: 'CN-PROJ-MOCK-01',
@@ -166,6 +170,7 @@ class CraftnoteApiService {
           zipcode: '20246',
           city: 'Hamburg',
           clientName: 'UKE Facility Management',
+          archived: false,
         ),
         const CraftnoteProject(
           id: 'CN-PROJ-MOCK-02',
@@ -175,6 +180,7 @@ class CraftnoteApiService {
           zipcode: '22297',
           city: 'Hamburg',
           clientName: 'Polizei Hamburg',
+          archived: false,
         ),
         const CraftnoteProject(
           id: 'CN-PROJ-MOCK-03',
@@ -184,22 +190,41 @@ class CraftnoteApiService {
           zipcode: '22043',
           city: 'Hamburg',
           clientName: 'Feuerwehr Hamburg',
+          archived: false,
+        ),
+        const CraftnoteProject(
+          id: 'CN-PROJ-MOCK-ARCHIVED-01',
+          name: 'W Ellernreihe 135 (Archiviert)',
+          orderNumber: '26-15613-AB',
+          street: 'Ellernreihe 135',
+          zipcode: '22179',
+          city: 'Hamburg',
+          clientName: 'Wohnungsbaugesellschaft Hamburg',
+          archived: true,
         ),
       ];
 
+      List<CraftnoteProject> list = mockProjects;
+      if (status == 'active') {
+        list = list.where((p) => !p.archived).toList();
+      } else if (status == 'archived') {
+        list = list.where((p) => p.archived).toList();
+      }
+
       if (search != null && search.trim().isNotEmpty) {
         final query = search.trim().toLowerCase();
-        return mockProjects.where((p) =>
+        return list.where((p) =>
             p.name.toLowerCase().contains(query) ||
             p.orderNumber.toLowerCase().contains(query) ||
             p.city.toLowerCase().contains(query)).toList();
       }
-      return mockProjects;
+      return list;
     }
 
     final queryParams = {
       'limit': '$limit',
       'offset': '$offset',
+      if (status != null && status.isNotEmpty) 'status': status,
     };
 
     final uri = Uri.parse('$_baseUrl/projects').replace(queryParameters: queryParams);
@@ -248,10 +273,13 @@ class CraftnoteApiService {
 
   /// Searches for projects across pages in Craftnote by orderNumber, name, or UUID.
   /// Paginates through GET /projects until matches are found or maxPages reached.
+  /// If [status] is 'active', only active projects are searched.
+  /// If [status] is 'archived', only archived projects are searched.
   Future<List<CraftnoteProject>> findProjects({
     String? query,
     String? orderNumber,
     String? name,
+    String? status,
     int maxPages = 25,
     int pageSize = 100,
   }) async {
@@ -264,12 +292,14 @@ class CraftnoteApiService {
     if (uuidRegex.hasMatch(cleanQuery)) {
       try {
         final proj = await getProjectById(cleanQuery);
+        if (status == 'active' && proj.archived) return [];
+        if (status == 'archived' && !proj.archived) return [];
         return [proj];
       } catch (_) {}
     }
 
     if (CraftnoteCredentialsService.isMockMode) {
-      final all = await getProjects();
+      final all = await getProjects(status: status);
       final qLower = cleanQuery.toLowerCase();
       final ordLower = cleanOrder.toLowerCase();
       final nameLower = cleanName.toLowerCase();
@@ -284,7 +314,7 @@ class CraftnoteApiService {
       }).toList();
     }
 
-    print('[CraftnoteApi] 🔍 Searching projects in Craftnote: orderNumber="$cleanOrder", name="$cleanName", query="$cleanQuery" (maxPages: $maxPages, pageSize: $pageSize)...');
+    print('[CraftnoteApi] 🔍 Searching projects in Craftnote: orderNumber="$cleanOrder", name="$cleanName", query="$cleanQuery", status="${status ?? 'all'}" (maxPages: $maxPages, pageSize: $pageSize)...');
 
     final ordLower = cleanOrder.toLowerCase();
     final nameLower = cleanName.toLowerCase();
@@ -295,10 +325,13 @@ class CraftnoteApiService {
     final limit = pageSize;
 
     for (int page = 0; page < maxPages; page++) {
-      final pageProjects = await getProjects(limit: limit, offset: offset);
+      final pageProjects = await getProjects(limit: limit, offset: offset, status: status);
       if (pageProjects.isEmpty) break;
 
       for (final p in pageProjects) {
+        if (status == 'active' && p.archived) continue;
+        if (status == 'archived' && !p.archived) continue;
+
         final pOrd = p.orderNumber.toLowerCase();
         final pName = p.name.toLowerCase();
         final pId = p.id.toLowerCase();
@@ -324,6 +357,66 @@ class CraftnoteApiService {
 
     print('[CraftnoteApi] 🔍 Project search finished. Found ${matches.length} matching project(s).');
     return matches;
+  }
+
+  /// Searches for an active project by orderNumber/query first.
+  /// If no active project is found, it automatically checks archived projects.
+  /// If found in archives, returns a result with [isArchived: true] so the caller
+  /// can only inform the user that the project is archived and cannot be processed.
+  Future<CraftnoteProjectSearchResult> findProjectWithArchiveCheck({
+    required String orderNumber,
+    String? query,
+    int maxPages = 25,
+  }) async {
+    final cleanOrder = orderNumber.trim();
+    final cleanQuery = query?.trim() ?? cleanOrder;
+
+    // 1. Search active projects ONLY
+    final activeResults = await findProjects(
+      orderNumber: cleanOrder,
+      query: cleanQuery,
+      status: 'active',
+      maxPages: maxPages,
+    );
+
+    final activeMatches = activeResults.where((p) => !p.archived).toList();
+    if (activeMatches.isNotEmpty) {
+      final match = activeMatches.firstWhere(
+        (p) => p.orderNumber.trim().toLowerCase() == cleanOrder.toLowerCase(),
+        orElse: () => activeMatches.first,
+      );
+      return CraftnoteProjectSearchResult(
+        activeProject: match,
+        isArchived: false,
+      );
+    }
+
+    // 2. If no active project was found, search in archived projects
+    final archivedResults = await findProjects(
+      orderNumber: cleanOrder,
+      query: cleanQuery,
+      status: 'archived',
+      maxPages: maxPages,
+    );
+
+    final archivedMatches = archivedResults.where((p) => p.archived).toList();
+    if (archivedMatches.isNotEmpty) {
+      final match = archivedMatches.firstWhere(
+        (p) => p.orderNumber.trim().toLowerCase() == cleanOrder.toLowerCase(),
+        orElse: () => archivedMatches.first,
+      );
+      return CraftnoteProjectSearchResult(
+        archivedProject: match,
+        isArchived: true,
+        errorMessage:
+            'Das Craftnote-Projekt "${match.name}" (#${match.orderNumber.isNotEmpty ? match.orderNumber : match.id}) ist bereits archiviert und kann nicht mehr bearbeitet oder importiert werden.\n\nBitte aktivieren Sie das Projekt in Craftnote, falls es erneut bearbeitet werden soll.',
+      );
+    }
+
+    // 3. Not found in either active or archived
+    return const CraftnoteProjectSearchResult(
+      isArchived: false,
+    );
   }
 
   /// Retrieves a single project by UUID.

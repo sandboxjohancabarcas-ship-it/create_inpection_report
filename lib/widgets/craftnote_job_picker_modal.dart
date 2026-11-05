@@ -90,17 +90,26 @@ class _CraftnoteJobPickerModalState extends State<CraftnoteJobPickerModal> {
     });
 
     try {
-      // 1. Search Craftnote for project by orderNumber / query
-      List<CraftnoteProject> results = await _apiService.findProjects(
+      // 1. Search Craftnote for active projects first, falling back to archive check
+      final searchResult = await _apiService.findProjectWithArchiveCheck(
         orderNumber: cleanInput,
         query: cleanInput,
         maxPages: 25,
       );
 
-      CraftnoteProject? matchedProject;
-      if (results.isNotEmpty) {
-        matchedProject = results.first;
-      } else if (CraftnoteCredentialsService.isTestMode &&
+      // Requirement: If project is archived, ONLY display message that it is archived and cannot be processed
+      if (searchResult.isArchived) {
+        setState(() {
+          _errorMessage = searchResult.errorMessage ??
+              'Das Craftnote-Projekt ist bereits archiviert und kann nicht mehr bearbeitet oder importiert werden.';
+          _foundProject = searchResult.archivedProject;
+        });
+        return;
+      }
+
+      CraftnoteProject? matchedProject = searchResult.activeProject;
+
+      if (matchedProject == null && CraftnoteCredentialsService.isTestMode &&
           (cleanInput == CraftnoteCredentialsService.testProjectOrderNumber ||
               cleanInput.toLowerCase().contains('industrie') ||
               cleanInput == '26-00251-AN')) {
@@ -464,27 +473,52 @@ class _CraftnoteJobPickerModalState extends State<CraftnoteJobPickerModal> {
                           margin: const EdgeInsets.only(bottom: 16),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
+                            color: _foundProject!.archived ? Colors.grey.shade100 : Colors.green.shade50,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.green.shade300),
+                            border: Border.all(
+                              color: _foundProject!.archived ? Colors.grey.shade400 : Colors.green.shade300,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
+                                  Icon(
+                                    _foundProject!.archived ? Icons.archive_outlined : Icons.check_circle,
+                                    color: _foundProject!.archived ? Colors.grey.shade700 : Colors.green.shade700,
+                                    size: 20,
+                                  ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'Zugehöriges Craftnote-Projekt gefunden:',
+                                      _foundProject!.archived
+                                          ? 'Gefundenes Craftnote-Projekt (ARCHIVIERT):'
+                                          : 'Zugehöriges Craftnote-Projekt gefunden:',
                                       style: TextStyle(
-                                        color: Colors.green.shade900,
+                                        color: _foundProject!.archived ? Colors.grey.shade900 : Colors.green.shade900,
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
                                       ),
                                     ),
                                   ),
+                                  if (_foundProject!.archived)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.red.shade300),
+                                      ),
+                                      child: Text(
+                                        'ARCHIVIERT',
+                                        style: TextStyle(
+                                          color: Colors.red.shade800,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                               const SizedBox(height: 8),

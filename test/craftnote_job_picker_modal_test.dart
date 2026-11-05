@@ -257,5 +257,62 @@ void main() {
 
       expect(find.byType(CraftnoteJobPickerModal), findsNothing);
     });
+
+    testWidgets('Inspector mode detects archived project and displays warning that it cannot be processed', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CraftnoteJobPickerModal.show(context, isManagerMode: false),
+                child: const Text('Open Inspector Modal'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Inspector Modal'));
+      await tester.pumpAndSettle();
+
+      final textField = find.byType(TextField);
+      await tester.enterText(textField, '26-15613-AB');
+      await tester.tap(find.text('Suchen & Laden'));
+
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('bereits archiviert und kann nicht mehr bearbeitet oder importiert werden'), findsOneWidget);
+      expect(find.text('ARCHIVIERT'), findsOneWidget);
+      // Ensure it did not auto-close or import
+      expect(find.byType(CraftnoteJobPickerModal), findsOneWidget);
+    });
+
+    testWidgets('Manager mode detects archived project and displays warning that it cannot be processed', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CraftnoteJobPickerModal.show(context, isManagerMode: true),
+                child: const Text('Open Manager Modal'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Manager Modal'));
+      await tester.pumpAndSettle();
+
+      final textField = find.byType(TextField);
+      await tester.enterText(textField, '26-15613-AB');
+      await tester.tap(find.text('Suchen & Laden'));
+
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('bereits archiviert und kann nicht mehr bearbeitet oder importiert werden'), findsOneWidget);
+      expect(find.text('ARCHIVIERT'), findsOneWidget);
+      expect(find.byType(CraftnoteJobPickerModal), findsOneWidget);
+    });
   });
 }

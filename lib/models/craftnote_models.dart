@@ -265,3 +265,22 @@ class CraftnoteUploadQueueItem {
     );
   }
 }
+
+/// Represents the result of an active-first project search with archive fallback.
+class CraftnoteProjectSearchResult {
+  final CraftnoteProject? activeProject;
+  final CraftnoteProject? archivedProject;
+  final bool isArchived;
+  final String? errorMessage;
+
+  const CraftnoteProjectSearchResult({
+    this.activeProject,
+    this.archivedProject,
+    this.isArchived = false,
+    this.errorMessage,
+  });
+
+  bool get hasActiveProject => activeProject != null && !isArchived;
+  bool get notFound => activeProject == null && archivedProject == null;
+}
+

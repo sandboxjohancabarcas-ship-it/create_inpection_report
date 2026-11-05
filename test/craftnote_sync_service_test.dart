@@ -567,5 +567,64 @@ void main() {
       expect(updatedInsp?['craftnoteSyncStatus'], 'synced');
       expect(updatedInsp?['craftnoteProjectId'], 'CN-PROJ-MOCK-02');
     });
+
+    test('completeAndUploadFromLocalDb rejects upload if target project is archived', () async {
+      syncService.overrideOnlineStatus = true;
+      CraftnoteCredentialsService.setTestMode(false);
+
+      final localDb = await LocalDatabaseService.getDb();
+      await localDb.insert('doors', {
+        'id': 107,
+        'doorAlias': 'ARCHIVED-DOOR-01',
+        'doorNumber': 'T-107',
+        'floor': 'Keller',
+        'doorType': 'T30',
+      });
+
+      // Inspection matching archived project 26-15613-AB (CN-PROJ-MOCK-ARCHIVED-01)
+      await localDb.insert('inspections', {
+        'inspectionId': 207,
+        'clientName': 'W Ellernreihe',
+        'jobNumber': '26-15613-AB',
+        'inspectorName': 'Prüfer Archiv',
+        'craftnoteSyncStatus': 'inProgress',
+      });
+
+      await localDb.insert('inspection_doors', {
+        'id': 307,
+        'inspectionId': 207,
+        'doorId': 107,
+        'status': 'Inspected',
+      });
+
+      final result = await syncService.completeAndUploadFromLocalDb(inspectionId: 207);
+
+      expect(result.success, isFalse);
+      expect(result.message, contains('bereits archiviert'));
+      expect(result.message, contains('26-15613-AB'));
+    });
+
+    test('importProjectJobPackage rejects import if project is marked as archived', () async {
+      const archivedProject = CraftnoteProject(
+        id: 'CN-PROJ-MOCK-ARCHIVED-01',
+        name: 'W Ellernreihe 135 (Archiviert)',
+        orderNumber: '26-15613-AB',
+        archived: true,
+      );
+
+      final resultInspector = await syncService.importProjectJobPackage(
+        project: archivedProject,
+        isManagerMode: false,
+      );
+      expect(resultInspector.success, isFalse);
+      expect(resultInspector.message, contains('bereits archiviert'));
+
+      final resultManager = await syncService.importProjectJobPackage(
+        project: archivedProject,
+        isManagerMode: true,
+      );
+      expect(resultManager.success, isFalse);
+      expect(resultManager.message, contains('bereits archiviert'));
+    });
   });
 }

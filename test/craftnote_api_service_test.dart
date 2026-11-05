@@ -74,6 +74,35 @@ void main() {
       final filtered = await service.getProjects(search: 'Polizei');
       expect(filtered.length, 1);
       expect(filtered.first.name, contains('Polizeipräsidium'));
+
+      final activeProjects = await service.getProjects(status: 'active');
+      expect(activeProjects.every((p) => !p.archived), isTrue);
+
+      final archivedProjects = await service.getProjects(status: 'archived');
+      expect(archivedProjects.isNotEmpty, isTrue);
+      expect(archivedProjects.every((p) => p.archived), isTrue);
+    });
+
+    test('findProjectWithArchiveCheck resolves active projects and identifies archived projects', () async {
+      final service = CraftnoteApiService();
+
+      // Active project test
+      final activeResult = await service.findProjectWithArchiveCheck(orderNumber: '26-15440-AB');
+      expect(activeResult.isArchived, isFalse);
+      expect(activeResult.hasActiveProject, isTrue);
+      expect(activeResult.activeProject!.name, contains('Universitätsklinikum'));
+
+      // Archived project test (26-15613-AB)
+      final archivedResult = await service.findProjectWithArchiveCheck(orderNumber: '26-15613-AB');
+      expect(archivedResult.isArchived, isTrue);
+      expect(archivedResult.hasActiveProject, isFalse);
+      expect(archivedResult.archivedProject, isNotNull);
+      expect(archivedResult.errorMessage, contains('ist bereits archiviert'));
+
+      // Non-existent project
+      final notFoundResult = await service.findProjectWithArchiveCheck(orderNumber: '99-NONEXISTENT-XX');
+      expect(notFoundResult.isArchived, isFalse);
+      expect(notFoundResult.notFound, isTrue);
     });
 
     test('getProjectFiles returns mock db and pdf documents', () async {
