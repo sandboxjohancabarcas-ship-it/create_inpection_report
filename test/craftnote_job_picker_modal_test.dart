@@ -50,7 +50,18 @@ void main() {
     await LocalDatabaseService.closeDb();
   });
 
+  Future<void> pumpUntilSettled(WidgetTester tester, {int maxRounds = 25}) async {
+    for (int i = 0; i < maxRounds; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
+    }
+    await tester.pumpAndSettle();
+  }
+
   group('CraftnoteJobPickerModal Widget Tests', () {
+    test('CraftnoteCredentialsService defaults target folder to Wartungslisten', () {
+      expect(CraftnoteCredentialsService.defaultFolder, 'Wartungslisten');
+    });
     testWidgets('Renders targeted search without browsing all projects and pre-fills test order number in test mode', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(1024, 768);
       tester.view.devicePixelRatio = 1.0;
@@ -85,6 +96,9 @@ void main() {
       expect(find.textContaining('Testumgebung aktiv: Zugriff auf Sandbox-Projekt'), findsOneWidget);
       expect(find.widgetWithText(TextField, '26-00251-AN'), findsOneWidget);
       expect(find.text('Suchen & Laden'), findsOneWidget);
+
+      // Verify settings button is HIDDEN in inspector role
+      expect(find.byTooltip('Craftnote-Einstellungen'), findsNothing);
     });
 
     testWidgets('Validates empty input and shows message', (WidgetTester tester) async {
@@ -137,7 +151,7 @@ void main() {
       final textField = find.byType(TextField);
       await tester.enterText(textField, '99-NONEXISTENT-XX');
       await tester.tap(find.text('Suchen & Laden'));
-      await tester.pumpAndSettle();
+      await pumpUntilSettled(tester);
 
       expect(find.textContaining('Kein Craftnote-Projekt mit Auftragsnummer "99-NONEXISTENT-XX" gefunden'), findsOneWidget);
     });
@@ -165,11 +179,7 @@ void main() {
       await tester.tap(find.text('Suchen & Laden'));
 
       // Pump frames for search & async mock import
-      for (int i = 0; i < 15; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
-      }
-      await tester.pumpAndSettle();
+      await pumpUntilSettled(tester, maxRounds: 30);
 
       // Modal auto-closes on successful import
       expect(find.byType(CraftnoteJobPickerModal), findsNothing);
@@ -194,6 +204,9 @@ void main() {
 
       expect(find.text('Prüfergebnis aus Craftnote importieren'), findsOneWidget);
       expect(find.textContaining('*ergebnis*.db'), findsOneWidget);
+
+      // Verify settings button is VISIBLE in manager role
+      expect(find.byTooltip('Craftnote-Einstellungen'), findsOneWidget);
     });
 
     testWidgets('Manager mode filters for ergebnis package and auto-executes import into Master DB', (WidgetTester tester) async {
@@ -276,10 +289,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final textField = find.byType(TextField);
-      await tester.enterText(textField, '26-15613-AB');
+      await tester.enterText(textField, '26-14078-AB');
       await tester.tap(find.text('Suchen & Laden'));
 
-      await tester.pumpAndSettle();
+      await pumpUntilSettled(tester);
 
       expect(find.textContaining('bereits archiviert und kann nicht mehr bearbeitet oder importiert werden'), findsOneWidget);
       expect(find.text('ARCHIVIERT'), findsOneWidget);
@@ -305,10 +318,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final textField = find.byType(TextField);
-      await tester.enterText(textField, '26-15613-AB');
+      await tester.enterText(textField, '26-14078-AB');
       await tester.tap(find.text('Suchen & Laden'));
 
-      await tester.pumpAndSettle();
+      await pumpUntilSettled(tester);
 
       expect(find.textContaining('bereits archiviert und kann nicht mehr bearbeitet oder importiert werden'), findsOneWidget);
       expect(find.text('ARCHIVIERT'), findsOneWidget);

@@ -4,11 +4,9 @@ import '../services/database_service.dart';
 import '../models/models.dart';
 import 'error_consolidation_page.dart';
 import 'door_options_manager_page.dart';
-import '../widgets/batch_migration_dialog.dart';
-import '../widgets/create_project_dialog.dart';
-import '../widgets/export_center_dialog.dart';
 import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
+import '../widgets/craftnote_settings_dialog.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -283,27 +281,23 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.domain_add, color: Colors.greenAccent),
-            tooltip: 'Neues Projekt / Leervorlage für Inspektor anlegen',
-            onPressed: () => CreateProjectDialog.show(context),
-          ),
-          IconButton(
-            icon: const Icon(Icons.drive_file_move_outlined),
-            onPressed: () => ExportCenterDialog.show(context),
-            tooltip: 'Daten Export & Bericht (Excel/PDF/DB)',
-          ),
-          IconButton(
-            icon: const Icon(Icons.drive_folder_upload),
-            onPressed: () => BatchMigrationDialog.show(context,
-                onMigrationCompleted: _loadErrors),
-            tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
-          ),
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _loadErrors,
-            tooltip: 'Aktualisieren',
-          ),
+          if (pendingCount > 0)
+            IconButton(
+              icon: Badge.count(
+                count: pendingCount,
+                backgroundColor: Colors.deepOrange,
+                child: const Icon(Icons.rule, color: Colors.deepOrange),
+              ),
+              tooltip: '$pendingCount Anfragen prüfen',
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const ErrorConsolidationPage()),
+                );
+                _loadErrors();
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.tune),
             onPressed: () {
@@ -331,6 +325,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             tooltip: 'Fehlerkatalog neu laden',
           ),
           IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadErrors,
+            tooltip: 'Aktualisieren',
+          ),
+          IconButton(
+            icon: const Icon(Icons.cloud_sync, color: Colors.blueAccent),
+            tooltip: 'Craftnote API & Cloud-Einstellungen',
+            onPressed: () => CraftnoteSettingsDialog.show(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.info_outline),
             tooltip: 'App-Info & Version',
             onPressed: () => AppVersionDialog.show(context, isManager: true),
@@ -341,6 +345,50 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ? Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (pendingCount > 0)
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.deepOrange.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.deepOrange.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.rule, color: Colors.deepOrange.shade800),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            '$pendingCount ${pendingCount == 1 ? "neue Fehler-Anfrage" : "neue Fehler-Anfragen"} ausstehend',
+                            style: TextStyle(
+                              color: Colors.deepOrange.shade900,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.deepOrange,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      const ErrorConsolidationPage()),
+                            );
+                            _loadErrors();
+                          },
+                          icon: const Icon(Icons.arrow_forward, size: 16),
+                          label: const Text('Jetzt prüfen'),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Search and filter section
                 Padding(
                   padding: EdgeInsets.all(16),
@@ -545,43 +593,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ),
               ],
             ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: "approval_workflow",
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const ErrorConsolidationPage()),
-              );
-              // Re-load errors if we returned from the consolidation page
-              _loadErrors(); // Refresh to update count and list
-            },
-            // Use a more distinct color to ensure visibility
-            backgroundColor:
-                pendingCount > 0 ? Colors.deepOrange : Colors.blueGrey.shade300,
-            icon: const Icon(Icons.rule),
-            label: Text('$pendingCount Anfragen prüfen'),
-          ),
-          SizedBox(height: 16),
-          FloatingActionButton(
-            heroTag: "batch_migration",
-            onPressed: () => BatchMigrationDialog.show(context,
-                onMigrationCompleted: _loadErrors),
-            backgroundColor: Colors.teal,
-            tooltip: 'Daten-Migration & Import',
-            child: const Icon(Icons.drive_folder_upload),
-          ),
-          SizedBox(height: 16),
-          FloatingActionButton(
-            heroTag: "add_error",
-            onPressed: () => _showEditErrorDialog(),
-            tooltip: 'Eintrag hinzufügen',
-            child: Icon(Icons.add),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: "add_error",
+        onPressed: () => _showEditErrorDialog(),
+        tooltip: 'Neuen Fehler im Katalog erstellen',
+        icon: const Icon(Icons.add),
+        label: const Text('Neuer Fehler'),
       ),
     );
   }

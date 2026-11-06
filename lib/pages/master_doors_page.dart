@@ -13,7 +13,10 @@ import '../services/app_version_service.dart';
 import '../widgets/app_version_dialog.dart';
 import '../utils/inspection_year_utils.dart';
 import '../widgets/craftnote_job_picker_modal.dart';
+import '../widgets/craftnote_settings_dialog.dart';
+import '../services/craftnote_project_cache_service.dart';
 import '../widgets/import_report_dialog.dart';
+import '../widgets/export_center_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
@@ -474,6 +477,46 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   }
 
   // ─────────────────────────────────────────────────────────────
+  Future<void> _handleSyncCraftnoteProjects() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('Synchronisiere Craftnote-Projekte...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final count = await CraftnoteProjectCacheService.syncActiveProjects();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                '$count aktive Craftnote-Projekte erfolgreich synchronisiert.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Synchronisation fehlgeschlagen: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   // PURGE ALL
   // ─────────────────────────────────────────────────────────────
 
@@ -716,14 +759,20 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           ] else if (isInspectionSelectionMode) ...[
             IconButton(
-              icon: const Icon(Icons.cloud_download, color: Colors.blueAccent),
-              tooltip: 'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
-              onPressed: _isProcessing ? null : _handleCraftnoteManagerImport,
-            ),
-            IconButton(
-              icon: const Icon(Icons.upload_file),
-              tooltip: 'Paket für Techniker exportieren',
-              onPressed: _handleExportSelectedInspections,
+              icon: Icon(_selectedInspectionIds.length == _inspections.length
+                  ? Icons.check_box
+                  : Icons.check_box_outline_blank),
+              tooltip: 'Alle auswählen',
+              onPressed: () {
+                setState(() {
+                  if (_selectedInspectionIds.length == _inspections.length) {
+                    _selectedInspectionIds.clear();
+                  } else {
+                    _selectedInspectionIds.addAll(
+                        _inspections.map((i) => i['inspectionId'] as int));
+                  }
+                });
+              },
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -742,26 +791,16 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               onPressed: _isProcessing ? null : _handleCraftnoteManagerImport,
             ),
             IconButton(
-              icon: const Icon(Icons.drive_folder_upload),
-              tooltip: 'Daten-Migration & Import (Dateien/Ordner)',
+              icon: const Icon(Icons.drive_file_move_outlined,
+                  color: Colors.indigoAccent),
+              tooltip: 'Export-Center & Berichte (PDF, Excel, Craftnote, GAEB)',
               onPressed: _isProcessing
                   ? null
-                  : () => BatchMigrationDialog.show(context,
-                      onMigrationCompleted: _loadData),
-            ),
-            IconButton(
-              icon: const Icon(Icons.published_with_changes,
-                  color: Colors.deepPurpleAccent),
-              tooltip: 'Migrations-Audit & DB-Reparatur',
-              onPressed: () => MigrationLogDialog.show(context),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_sweep_outlined),
-              tooltip: 'Alle Aufträge löschen',
-              onPressed: _isProcessing ? null : _handlePurgeAll,
+                  : () => ExportCenterDialog.show(context, isManagerMode: true),
             ),
             IconButton(
               icon: Icon(_isSearching ? Icons.close : Icons.search),
+              tooltip: _isSearching ? 'Suche schließen' : 'Suchen',
               onPressed: () {
                 setState(() {
                   _isSearching = !_isSearching;
@@ -772,10 +811,130 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 });
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              tooltip: 'App-Info & Version',
-              onPressed: () => AppVersionDialog.show(context, isManager: true),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Weitere Aktionen & Einstellungen',
+              constraints: const BoxConstraints(minWidth: 260, maxWidth: 320),
+              onSelected: (value) {
+                switch (value) {
+                  case 'craftnote_settings':
+                    CraftnoteSettingsDialog.show(context);
+                    break;
+                  case 'sync_craftnote':
+                    _handleSyncCraftnoteProjects();
+                    break;
+                  case 'batch_migration':
+                    BatchMigrationDialog.show(context,
+                        onMigrationCompleted: _loadData);
+                    break;
+                  case 'migration_audit':
+                    MigrationLogDialog.show(context);
+                    break;
+                  case 'app_info':
+                    AppVersionDialog.show(context, isManager: true);
+                    break;
+                  case 'purge_all':
+                    _handlePurgeAll();
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'craftnote_settings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.cloud_sync,
+                          size: 20, color: Colors.blueAccent),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Craftnote API-Einstellungen',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'sync_craftnote',
+                  child: Row(
+                    children: [
+                      Icon(Icons.sync, size: 20, color: Colors.teal),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Craftnote-Katalog abgleichen',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'batch_migration',
+                  child: Row(
+                    children: [
+                      Icon(Icons.drive_folder_upload, size: 20),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Daten-Migration & Import',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'migration_audit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.published_with_changes,
+                          size: 20, color: Colors.deepPurpleAccent),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Migrations-Audit & DB-Reparatur',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'app_info',
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 20),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'App-Info & Version',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'purge_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep_outlined,
+                          size: 20, color: Colors.red),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Alle Auftragsdaten löschen',
+                          style: TextStyle(color: Colors.red),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -972,6 +1131,24 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                           label: Text(
                               'Paket (${_selectedInspectionIds.length})',
                               style: const TextStyle(color: Colors.green)),
+                        ),
+                      ),
+                      const VerticalDivider(),
+                      Tooltip(
+                        message: 'Export-Center & Berichte (PDF, Excel, Craftnote)',
+                        child: TextButton.icon(
+                          onPressed: _isProcessing
+                              ? null
+                              : () => ExportCenterDialog.show(
+                                    context,
+                                    initialInspectionId:
+                                        _selectedInspectionIds.first,
+                                    isManagerMode: true,
+                                  ),
+                          icon: const Icon(Icons.drive_file_move_outlined,
+                              color: Colors.indigoAccent),
+                          label: const Text('Berichte & Export',
+                              style: TextStyle(color: Colors.indigoAccent)),
                         ),
                       ),
                     ],

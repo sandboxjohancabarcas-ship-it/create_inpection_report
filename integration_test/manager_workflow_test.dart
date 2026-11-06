@@ -13,6 +13,10 @@ import 'package:wartungstool/services/door_options_service.dart';
 import 'package:wartungstool/services/photo_export_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/utils/inspection_year_utils.dart';
+import 'package:wartungstool/models/craftnote_models.dart';
+import 'package:wartungstool/services/craftnote_api_service.dart';
+import 'package:wartungstool/services/craftnote_credentials_service.dart';
+import 'package:wartungstool/services/craftnote_sync_service.dart';
 
 Door _makeTestDoor({
   int? id,
@@ -109,6 +113,8 @@ void main() {
     await DatabaseService.clearDatabase();
     await LocalDatabaseService.clearSyncedData();
     DoorOptionsService.reset();
+    CraftnoteCredentialsService.resetToDefaults();
+    CraftnoteCredentialsService.setMockMode(true);
   });
 
   tearDown(() async {
@@ -116,7 +122,7 @@ void main() {
     await LocalDatabaseService.closeDb();
   });
 
-  group('Manager Desktop Integration Test Suite (M-UC-01 to M-UC-11)', () {
+  group('Manager Desktop Integration Test Suite (M-UC-01 to M-UC-14)', () {
     // =========================================================================
     // M-UC-01: Multi-Facility Excel Ingestion with Real-World Datasets
     // =========================================================================
@@ -657,6 +663,152 @@ void main() {
       expect(await exportedFile.length(),
           greaterThan(1000)); // Non-empty valid workbook
       await tempDir.delete(recursive: true);
+    });
+
+    // =========================================================================
+    // M-UC-12: Craftnote Active-First Project Search & Archive Enforcement Guard
+    // =========================================================================
+    testWidgets(
+        'M-UC-12 [Manager Desktop]: Search Active vs Archived Projects & Enforce Archive Block',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      final apiService = CraftnoteApiService();
+
+      // 1. Search an active project by order number
+      final activeResult = await apiService.findProjectWithArchiveCheck(
+        orderNumber: '26-15440-AB',
+      );
+      expect(activeResult.hasActiveProject, isTrue);
+      expect(activeResult.isArchived, isFalse);
+      expect(
+          activeResult.activeProject!.name, contains('Universitätsklinikum'));
+
+      // 2. Search an archived project by order number
+      final archivedResult = await apiService.findProjectWithArchiveCheck(
+        orderNumber: '26-15613-AB',
+      );
+      expect(archivedResult.isArchived, isTrue);
+      expect(archivedResult.hasActiveProject, isFalse);
+      expect(archivedResult.archivedProject!.name, contains('Archiviert'));
+      expect(archivedResult.errorMessage, contains('archiviert'));
+
+      // 3. Verify sync service export rejects the archived project in production mode
+      final syncService = CraftnoteSyncService(apiService: apiService);
+      CraftnoteCredentialsService.setTestMode(false);
+
+      final inspId = await DatabaseService.insertInspection({
+        'clientName': 'Archived Client',
+        'jobNumber': '26-15613-AB',
+        'craftnoteProjectId': archivedResult.archivedProject!.id,
+      });
+
+      final exportArchiveResult =
+          await syncService.exportInspectionFromMasterDb(
+        inspectionId: inspId,
+        craftnoteProjectId: archivedResult.archivedProject!.id,
+      );
+      expect(exportArchiveResult.success, isFalse);
+      expect(exportArchiveResult.message, contains('archiviert'));
+    });
+
+    // =========================================================================
+    // M-UC-13: Manager Export Job Package to Craftnote Project ("Wartungslisten")
+    // =========================================================================
+    testWidgets(
+        'M-UC-13 [Manager Desktop]: Export Master Job Package to Craftnote Wartungslisten Folder',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      CraftnoteCredentialsService.setTestMode(true);
+      final syncService =
+          CraftnoteSyncService(apiService: CraftnoteApiService());
+
+      final doorId = await DatabaseService.insertDoor(_makeTestDoor(
+        pos: 1,
+        doorAlias: 'MGR-CN-01',
+        doorNumber: 'T-MGR-01',
+        floor: 'EG',
+        doorFunctionOK: true,
+      ));
+
+      final inspectionId = await DatabaseService.insertInspection({
+        'clientName': 'Craftnote Manager Client',
+        'objectAddress': 'Ellernreihe 135, Hamburg',
+        'date': '2026-11-05',
+        'jobNumber': '26-15613-AA',
+        'projectNumber': 'P-002026',
+        'orderType': 'Wartung',
+      });
+
+      await DatabaseService.insertInspectionDoor({
+        'inspectionId': inspectionId,
+        'doorId': doorId,
+        'status': 'InProgress',
+      });
+
+      final exportResult = await syncService.exportInspectionFromMasterDb(
+        inspectionId: inspectionId,
+        craftnoteProjectId: 'CN-PROJ-MOCK-01',
+      );
+
+      expect(exportResult.success, isTrue);
+      expect(exportResult.uploadedDbFileId, isNotNull);
+
+      // Verify Master DB inspection updated with sync status
+      final updatedInsp = await DatabaseService.getInspectionById(inspectionId);
+      expect(updatedInsp?['craftnoteSyncStatus'], equals('synced'));
+      expect(updatedInsp?['craftnoteProjectId'],
+          equals(CraftnoteCredentialsService.testProjectId));
+    });
+
+    // =========================================================================
+    // M-UC-14: Manager Ingest Inspector Result Package (*ergebnis*.db) from Craftnote
+    // =========================================================================
+    testWidgets(
+        'M-UC-14 [Manager Desktop]: Ingest Inspector Field Result Package (*ergebnis*.db) from Craftnote',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      CraftnoteCredentialsService.setTestMode(true);
+      final syncService =
+          CraftnoteSyncService(apiService: CraftnoteApiService());
+
+      // 1. Verify discovering inspector result package in Wartungslisten
+      final project =
+          await syncService.apiService.getProjectById('CN-PROJ-MOCK-01');
+      expect(project, isNotNull);
+
+      final ergebnisFiles = await syncService.getProjectDbPackages(
+        'CN-PROJ-MOCK-01',
+        mustContainWord: 'ergebnis',
+      );
+      expect(ergebnisFiles, isNotEmpty);
+      expect(ergebnisFiles.first.name.toLowerCase(), contains('ergebnis'));
+
+      // 2. Import inspector result package into Master DB
+      final importResult = await syncService.importProjectJobPackage(
+        project: project,
+        preferredFile: ergebnisFiles.first,
+        isManagerMode: true,
+      );
+
+      expect(importResult.success, isTrue);
+      expect(importResult.report, isNotNull);
+
+      // 3. Verify archived project import guard
+      final archivedProject = const CraftnoteProject(
+        id: 'CN-ARCHIVED-01',
+        name: 'Archived Proj',
+        orderNumber: 'ARCH-01',
+        archived: true,
+      );
+      final archiveImportResult = await syncService.importProjectJobPackage(
+        project: archivedProject,
+        isManagerMode: true,
+      );
+      expect(archiveImportResult.success, isFalse);
+      expect(archiveImportResult.message, contains('archiviert'));
     });
   });
 }

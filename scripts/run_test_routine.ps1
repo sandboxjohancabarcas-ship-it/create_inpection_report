@@ -153,7 +153,7 @@ if ($File) {
 # ------------------------------------------------------------------------------
 if (-not $Quick -and -not $File) {
     Write-Host "`n[Stage 3] Executing Manager Desktop Integration Test Suite..." -ForegroundColor Yellow
-    Write-Host "Running 11 Manager Use Cases (M-UC-01 to M-UC-11) on Windows Desktop..." -ForegroundColor DarkGray
+    Write-Host "Running 14 Manager Use Cases (M-UC-01 to M-UC-14) on Windows Desktop..." -ForegroundColor DarkGray
     
     flutter test integration_test/manager_workflow_test.dart -d windows
     if ($LASTEXITCODE -ne 0) {
@@ -181,7 +181,7 @@ if ($Full) {
     }
     
     Write-Host "-> Target Android Device: $DeviceSerial" -ForegroundColor Green
-    Write-Host "Executing Inspector Mobile Integration Tests (I-UC-01 to I-UC-07) on device..." -ForegroundColor DarkGray
+    Write-Host "Executing Inspector Mobile Integration Tests (I-UC-01 to I-UC-10) on device..." -ForegroundColor DarkGray
     
     flutter test integration_test/inspector_device_test.dart -d $DeviceSerial
     if ($LASTEXITCODE -ne 0) {
@@ -200,11 +200,11 @@ if ($Full) {
 
         # Attempt pull via run-as or direct pull
         adb -s $DeviceSerial exec-out run-as com.cabarcas.wartungstool cat databases/inspektion_ergebnis_guard_test.db > $pulledPackagePath 2>$null
-        if (-not (Test-Path $pulledPackagePath) -or (Get-Item $pulledPackagePath).Length -eq 0) {
+        if (-not (Test-Path $pulledPackagePath) -or ((Test-Path $pulledPackagePath) -and (Get-Item $pulledPackagePath).Length -eq 0)) {
             adb -s $DeviceSerial pull $deviceSourcePath $pulledPackagePath 2>$null
         }
 
-        if (Test-Path $pulledPackagePath -and (Get-Item $pulledPackagePath).Length -gt 0) {
+        if ((Test-Path $pulledPackagePath) -and (Get-Item $pulledPackagePath).Length -gt 0) {
             $bytes = (Get-Item $pulledPackagePath).Length
             Write-Host "-> Successfully pulled and validated return package ($bytes bytes)." -ForegroundColor Green
         } else {

@@ -6,6 +6,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/services/craftnote_api_service.dart';
+import 'package:wartungstool/services/craftnote_credentials_service.dart';
+import 'package:wartungstool/services/craftnote_sync_service.dart';
 
 Door _makeTestDoor({
   int? id,
@@ -96,6 +99,9 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    CraftnoteCredentialsService.resetToDefaults();
+    CraftnoteCredentialsService.setMockMode(true);
+
     // Reset local database tables on the Android device before each test
     await LocalDatabaseService.closeDb();
     final db = await LocalDatabaseService.getDb();
@@ -104,14 +110,17 @@ void main() {
     await db.delete('inspections');
     await db.delete('doors');
     await db.delete('error_catalog');
+    await db.delete('craftnote_upload_queue');
   });
 
-  group('Inspector Android Device Integration Test Suite (I-UC-01 to I-UC-07)', () {
-
+  group('Inspector Android Device Integration Test Suite (I-UC-01 to I-UC-10)',
+      () {
     // =========================================================================
     // I-UC-01: Checkout & Ingest Job Package with Auto Safety Backup
     // =========================================================================
-    testWidgets('I-UC-01 [Android Device]: Checkout Assigned Job Package to Local Tablet DB & Verify Safety Backup', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-01 [Android Device]: Checkout Assigned Job Package to Local Tablet DB & Verify Safety Backup',
+        (WidgetTester tester) async {
       await DatabaseService.insertErrorCatalog(ErrorCatalog(
         code: 'M-01',
         description: 'Türschließer defekt',
@@ -159,18 +168,22 @@ void main() {
         'orderType': 'Wartung',
       });
 
-      await DatabaseService.insertInspectionDoor({'inspectionId': inspectionId, 'doorId': d1, 'status': 'InProgress'});
+      await DatabaseService.insertInspectionDoor(
+          {'inspectionId': inspectionId, 'doorId': d1, 'status': 'InProgress'});
 
       // Download package onto local device database
-      await LocalDatabaseService.downloadJobPackage(inspectionIds: [inspectionId]);
+      await LocalDatabaseService.downloadJobPackage(
+          inspectionIds: [inspectionId]);
 
       // Assert local tablet DB received data
-      final localDoors = await LocalDatabaseService.getDoorsByInspectionId(inspectionId);
+      final localDoors =
+          await LocalDatabaseService.getDoorsByInspectionId(inspectionId);
       expect(localDoors.length, equals(1));
       expect(localDoors.first.doorNumber, equals('T-101'));
 
       // Verify Safety Backup creation
-      final backup = await LocalDatabaseService.createSafetyBackup(tag: 'test_safety');
+      final backup =
+          await LocalDatabaseService.createSafetyBackup(tag: 'test_safety');
       expect(backup, isNotNull);
       expect(await backup!.exists(), isTrue);
     });
@@ -178,7 +191,9 @@ void main() {
     // =========================================================================
     // I-UC-02: Barcode / QR Door Identification & Duplicate Barcode Guard
     // =========================================================================
-    testWidgets('I-UC-02 [Android Device]: Barcode Lookup & Duplicate Barcode Detection Guard', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-02 [Android Device]: Barcode Lookup & Duplicate Barcode Detection Guard',
+        (WidgetTester tester) async {
       final door1Id = await LocalDatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'BARCODE-DOOR-A',
@@ -212,13 +227,16 @@ void main() {
       ));
 
       // 1. Verify resolving door by barcode / alias
-      final foundDoor = await LocalDatabaseService.findDoorByBarcode('BARCODE-DOOR-A');
+      final foundDoor =
+          await LocalDatabaseService.findDoorByBarcode('BARCODE-DOOR-A');
       expect(foundDoor, isNotNull);
       expect(foundDoor!.id, equals(door1Id));
       expect(foundDoor.doorNumber, equals('T-101'));
 
       // 2. Guard: Attempting to assign existing barcode 'BARCODE-DOOR-A' to door 2 must detect duplicate
-      final collision = await LocalDatabaseService.findDoorByBarcode('BARCODE-DOOR-A', excludeDoorId: door2Id);
+      final collision = await LocalDatabaseService.findDoorByBarcode(
+          'BARCODE-DOOR-A',
+          excludeDoorId: door2Id);
       expect(collision, isNotNull);
       expect(collision!.id, equals(door1Id));
       expect(collision.id, isNot(equals(door2Id)));
@@ -227,7 +245,9 @@ void main() {
     // =========================================================================
     // I-UC-03: Door Technical Specifications Audit in Field
     // =========================================================================
-    testWidgets('I-UC-03 [Android Device]: Inspect Technical Attributes, Lintel Height & Closer Location', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-03 [Android Device]: Inspect Technical Attributes, Lintel Height & Closer Location',
+        (WidgetTester tester) async {
       final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'SPEC-DOOR-01',
@@ -267,7 +287,9 @@ void main() {
     // =========================================================================
     // I-UC-04: Record Defect & Photo Documentation
     // =========================================================================
-    testWidgets('I-UC-04 [Android Device]: Record Defect & Photo Attachment During Site Visit', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-04 [Android Device]: Record Defect & Photo Attachment During Site Visit',
+        (WidgetTester tester) async {
       final localDb = await LocalDatabaseService.getDb();
       await localDb.insert('error_catalog', {
         'errorId': 1,
@@ -323,9 +345,11 @@ void main() {
         'notes': 'Recorded on physical Android device',
       });
 
-      final mockPhotoBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      final mockPhotoBase64 =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
-      final defectId = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final defectId = await LocalDatabaseService.insertInspectionDoorError(
+          InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: 1,
         errorCode: 'M-01',
@@ -336,7 +360,9 @@ void main() {
       ));
 
       expect(defectId, isNotNull);
-      final errors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      final errors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       expect(errors.length, equals(1));
       expect(errors.first['code'], equals('M-01'));
       expect(errors.first['attachments'], equals(mockPhotoBase64));
@@ -345,7 +371,9 @@ void main() {
     // =========================================================================
     // I-UC-05: Propose Uncatalogued Defect from Device
     // =========================================================================
-    testWidgets('I-UC-05 [Android Device]: Propose New Uncatalogued Defect (Pending Proposal)', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-05 [Android Device]: Propose New Uncatalogued Defect (Pending Proposal)',
+        (WidgetTester tester) async {
       final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'FIELD-PROP-01',
@@ -398,7 +426,8 @@ void main() {
       );
 
       final localDb = await LocalDatabaseService.getDb();
-      final catalogRows = await localDb.query('error_catalog', where: 'description = ?', whereArgs: ['Schlossfalle gebrochen']);
+      final catalogRows = await localDb.query('error_catalog',
+          where: 'description = ?', whereArgs: ['Schlossfalle gebrochen']);
       expect(catalogRows.length, equals(1));
       expect(catalogRows.first['status'], equals('Pending'));
     });
@@ -406,7 +435,9 @@ void main() {
     // =========================================================================
     // I-UC-06: Defect Rectification / Repair Visit Lifecycle (orderType: Reparatur)
     // =========================================================================
-    testWidgets('I-UC-06 [Android Device]: Rectify Defect during Repair Visit (orderType: Reparatur)', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-06 [Android Device]: Rectify Defect during Repair Visit (orderType: Reparatur)',
+        (WidgetTester tester) async {
       final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
         pos: 1,
         doorAlias: 'REPAIR-DOOR-01',
@@ -438,7 +469,8 @@ void main() {
         'status': 'Defective',
       });
 
-      final errorId = await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+      final errorId = await LocalDatabaseService.insertInspectionDoorError(
+          InspectionDoorError(
         inspectionDoorId: inspDoorId,
         errorId: 1,
         errorCode: 'M-01',
@@ -452,7 +484,10 @@ void main() {
       final localDb = await LocalDatabaseService.getDb();
       await localDb.update(
         'inspection_door_errors',
-        {'resolutionStatus': 'Behoben', 'notes': 'Schließer ausgetauscht und neu justiert.'},
+        {
+          'resolutionStatus': 'Behoben',
+          'notes': 'Schließer ausgetauscht und neu justiert.'
+        },
         where: 'id = ?',
         whereArgs: [errorId],
       );
@@ -463,20 +498,25 @@ void main() {
         doorId: doorId,
         status: 'Passed',
       );
-      await localDb.update('doors', {'doorFunctionOK': 1}, where: 'id = ?', whereArgs: [doorId]);
+      await localDb.update('doors', {'doorFunctionOK': 1},
+          where: 'id = ?', whereArgs: [doorId]);
 
       // Verify
       final updatedDoor = await LocalDatabaseService.getDoorById(doorId);
       expect(updatedDoor!.doorFunctionOK, isTrue);
 
-      final updatedErrors = await LocalDatabaseService.getDetailedErrorsForInspectionDoor(inspDoorId);
+      final updatedErrors =
+          await LocalDatabaseService.getDetailedErrorsForInspectionDoor(
+              inspDoorId);
       expect(updatedErrors.first['resolutionStatus'], equals('Behoben'));
     });
 
     // =========================================================================
     // I-UC-07: Unprocessed Doors Warning Guard & Selective Export
     // =========================================================================
-    testWidgets('I-UC-07 [Android Device]: Validate Incomplete Doors Guard & Selective Package Export', (WidgetTester tester) async {
+    testWidgets(
+        'I-UC-07 [Android Device]: Validate Incomplete Doors Guard & Selective Package Export',
+        (WidgetTester tester) async {
       final door1 = _makeTestDoor(
         pos: 1,
         doorAlias: 'EXPORT-T1',
@@ -518,8 +558,13 @@ void main() {
         'jobNumber': 'JOB-GUARD-07',
       });
 
-      await LocalDatabaseService.insertInspectionDoor({'inspectionId': inspectionId, 'doorId': d1Id, 'status': 'Passed'});
-      await LocalDatabaseService.insertInspectionDoor({'inspectionId': inspectionId, 'doorId': d2Id, 'status': null}); // Uninspected
+      await LocalDatabaseService.insertInspectionDoor(
+          {'inspectionId': inspectionId, 'doorId': d1Id, 'status': 'Passed'});
+      await LocalDatabaseService.insertInspectionDoor({
+        'inspectionId': inspectionId,
+        'doorId': d2Id,
+        'status': null
+      }); // Uninspected
 
       // 1. Verify detection of unprocessed doors
       final doors = [door1.copyWith(id: d1Id), door2.copyWith(id: d2Id)];
@@ -535,9 +580,11 @@ void main() {
 
       // 2. Perform selective export of door 1
       final tempDir = await getDatabasesPath();
-      final targetExportPath = p.join(tempDir, 'inspektion_ergebnis_guard_test.db');
+      final targetExportPath =
+          p.join(tempDir, 'inspektion_ergebnis_guard_test.db');
 
-      await LocalDatabaseService.exportSelectiveJobPackage([d1Id], targetExportPath);
+      await LocalDatabaseService.exportSelectiveJobPackage(
+          [d1Id], targetExportPath);
 
       final exportedFile = File(targetExportPath);
       expect(await exportedFile.exists(), isTrue);
@@ -551,5 +598,212 @@ void main() {
       await exportedFile.delete();
     });
 
+    // =========================================================================
+    // I-UC-08: Inspector Targeted Order Search & Archive Guard
+    // =========================================================================
+    testWidgets(
+        'I-UC-08 [Android Device]: Targeted Order Search (Auftragsnummer) & Archive Guard Enforcement',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      final apiService = CraftnoteApiService();
+
+      // 1. Search an active project by orderNumber: returns active project
+      final activeResult = await apiService.findProjectWithArchiveCheck(
+        orderNumber: '26-15440-AB',
+      );
+      expect(activeResult.hasActiveProject, isTrue);
+      expect(activeResult.isArchived, isFalse);
+      expect(
+          activeResult.activeProject!.name, contains('Universitätsklinikum'));
+
+      // 2. Search an archived project: returns archived alert and blocks acquisition
+      final archivedResult = await apiService.findProjectWithArchiveCheck(
+        orderNumber: '26-15613-AB',
+      );
+      expect(archivedResult.isArchived, isTrue);
+      expect(archivedResult.hasActiveProject, isFalse);
+      expect(archivedResult.archivedProject!.name, contains('Archiviert'));
+      expect(archivedResult.errorMessage, contains('archiviert'));
+
+      // 3. Verify sync service upload blocks export if project is archived
+      final syncService = CraftnoteSyncService(apiService: apiService);
+      CraftnoteCredentialsService.setTestMode(false);
+
+      final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
+        pos: 1,
+        doorAlias: 'ARCHIVE-CHECK-DOOR',
+        doorNumber: 'T-ARCH-01',
+        doorFunctionOK: true,
+      ));
+      final inspId = await LocalDatabaseService.insertInspection({
+        'clientName': 'Archived Client',
+        'jobNumber': '26-15613-AB',
+        'craftnoteProjectId': archivedResult.archivedProject!.id,
+      });
+      await LocalDatabaseService.insertInspectionDoor({
+        'inspectionId': inspId,
+        'doorId': doorId,
+        'status': 'Passed',
+      });
+
+      final uploadResult = await syncService.completeAndUploadFromLocalDb(
+        inspectionId: inspId,
+      );
+      expect(uploadResult.success, isFalse);
+      expect(uploadResult.message, contains('archiviert'));
+    });
+
+    // =========================================================================
+    // I-UC-09: Inspector Inspection Completion & Direct Cloud Export
+    // =========================================================================
+    testWidgets(
+        'I-UC-09 [Android Device]: Complete Inspection & Upload Result DB (*ergebnis*.db) and Photos',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      CraftnoteCredentialsService.setTestMode(true);
+      final syncService =
+          CraftnoteSyncService(apiService: CraftnoteApiService());
+
+      final localDb = await LocalDatabaseService.getDb();
+      await localDb.insert('error_catalog', {
+        'errorId': 1,
+        'code': 'M-01',
+        'description': 'Türschließer undicht',
+        'category': 'Schließer',
+        'severity': 'high',
+        'status': 'Approved',
+      });
+
+      final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
+        pos: 1,
+        doorAlias: 'CLOUD-DOOR-01',
+        doorNumber: 'T-01',
+        floor: 'EG',
+        roomDesignation: 'Eingang',
+        doorType: 'T30',
+        doorFunctionOK: false,
+      ));
+
+      final inspectionId = await LocalDatabaseService.insertInspection({
+        'clientName': 'Craftnote Cloud Field Client',
+        'objectAddress': 'Ellernreihe 135, Hamburg',
+        'date': '2026-11-05',
+        'jobNumber': '26-15440-AB',
+        'craftnoteProjectId': 'CN-PROJ-MOCK-01',
+        'craftnoteSyncStatus': 'downloaded',
+      });
+
+      final inspDoorId = await LocalDatabaseService.insertInspectionDoor({
+        'inspectionId': inspectionId,
+        'doorId': doorId,
+        'status': 'Defective',
+      });
+
+      // Attach defect photo
+      const mockPhotoBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      await LocalDatabaseService.insertInspectionDoorError(InspectionDoorError(
+        inspectionDoorId: inspDoorId,
+        errorId: 1,
+        errorCode: 'M-01',
+        quantity: 1,
+        severity: 'high',
+        notes: 'Ölaustritt vor Ort fotografiert',
+        attachments: mockPhotoBase64,
+      ));
+
+      // Execute complete and upload from local device DB
+      final uploadResult = await syncService.completeAndUploadFromLocalDb(
+        inspectionId: inspectionId,
+      );
+
+      expect(uploadResult.success, isTrue);
+      expect(uploadResult.isQueuedOffline, isFalse);
+      expect(uploadResult.uploadedDbFileId, isNotNull);
+      expect(uploadResult.uploadedPhotos, greaterThanOrEqualTo(1));
+
+      // Verify local inspection record updated to synced
+      final updatedInsp =
+          await LocalDatabaseService.getInspectionById(inspectionId);
+      expect(updatedInsp?['craftnoteSyncStatus'], equals('synced'));
+    });
+
+    // =========================================================================
+    // I-UC-10: Inspector Offline Queue Enqueueing & Reconnection Retry
+    // =========================================================================
+    testWidgets(
+        'I-UC-10 [Android Device]: Offline Queue Fallback & Automatic Retry on Reconnection',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      CraftnoteCredentialsService.setMockMode(true);
+      CraftnoteCredentialsService.setTestMode(true);
+      final syncService =
+          CraftnoteSyncService(apiService: CraftnoteApiService());
+
+      final doorId = await LocalDatabaseService.insertDoor(_makeTestDoor(
+        pos: 1,
+        doorAlias: 'OFFLINE-QUEUE-DOOR',
+        doorNumber: 'T-OFF-01',
+        floor: 'UG',
+        roomDesignation: 'Keller',
+        doorFunctionOK: true,
+      ));
+
+      final inspectionId = await LocalDatabaseService.insertInspection({
+        'clientName': 'Offline Underground Client',
+        'objectAddress': 'Kellerweg 1, Hamburg',
+        'date': '2026-11-05',
+        'jobNumber': '26-15440-AB',
+        'craftnoteProjectId': 'CN-PROJ-MOCK-01',
+        'craftnoteSyncStatus': 'downloaded',
+      });
+
+      await LocalDatabaseService.insertInspectionDoor({
+        'inspectionId': inspectionId,
+        'doorId': doorId,
+        'status': 'Passed',
+      });
+
+      // 1. Device is offline (no signal in basement)
+      syncService.overrideOnlineStatus = false;
+
+      final offlineResult = await syncService.completeAndUploadFromLocalDb(
+        inspectionId: inspectionId,
+      );
+
+      expect(offlineResult.success, isTrue);
+      expect(offlineResult.isQueuedOffline, isTrue);
+      expect(offlineResult.queueId, isNotNull);
+
+      // Verify inspection status marked as 'queued'
+      final queuedInsp =
+          await LocalDatabaseService.getInspectionById(inspectionId);
+      expect(queuedInsp?['craftnoteSyncStatus'], equals('queued'));
+
+      // Verify item in craftnote_upload_queue
+      final pendingQueue =
+          await LocalDatabaseService.getPendingCraftnoteUploads();
+      expect(pendingQueue.length, equals(1));
+      expect(pendingQueue.first.inspectionId, equals(inspectionId));
+
+      // 2. Device reconnects to network (emerges from basement)
+      syncService.overrideOnlineStatus = true;
+      final queueReport = await syncService.processPendingUploadQueue();
+
+      expect(queueReport.processed, equals(1));
+      expect(queueReport.succeeded, equals(1));
+      expect(queueReport.failed, equals(0));
+
+      // Verify queue is now empty and inspection marked as 'synced'
+      final emptyQueue =
+          await LocalDatabaseService.getPendingCraftnoteUploads();
+      expect(emptyQueue, isEmpty);
+
+      final syncedInsp =
+          await LocalDatabaseService.getInspectionById(inspectionId);
+      expect(syncedInsp?['craftnoteSyncStatus'], equals('synced'));
+    });
   });
 }

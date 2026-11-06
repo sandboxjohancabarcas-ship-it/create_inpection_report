@@ -149,6 +149,7 @@ class CraftnoteApiService {
     int offset = 0,
     String? search,
     String? status,
+    String? startAfter,
   }) async {
     if (CraftnoteCredentialsService.isMockMode) {
       final mockProjects = [
@@ -202,6 +203,16 @@ class CraftnoteApiService {
           clientName: 'Wohnungsbaugesellschaft Hamburg',
           archived: true,
         ),
+        const CraftnoteProject(
+          id: '10eebf30-d4e1-4937-9312-43a2ef840ef8',
+          name: 'W Hammerbrookstraße 63 / 65, 20097 Hamburg',
+          orderNumber: '26-14078-AB',
+          street: 'Hammerbrookstraße 63 / 65',
+          zipcode: '20097',
+          city: 'Hamburg',
+          clientName: 'Gottsberg Sonnentau',
+          archived: true,
+        ),
       ];
 
       List<CraftnoteProject> list = mockProjects;
@@ -223,7 +234,12 @@ class CraftnoteApiService {
 
     final queryParams = {
       'limit': '$limit',
-      'offset': '$offset',
+      if (startAfter != null && startAfter.isNotEmpty) ...{
+        'paginationMode': 'token',
+        'startAfter': startAfter,
+      } else ...{
+        'offset': '$offset',
+      },
       if (status != null && status.isNotEmpty) 'status': status,
     };
 
@@ -232,7 +248,7 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 60));
       sw.stop();
       _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
@@ -514,7 +530,7 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 20));
+      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 60));
       sw.stop();
       _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
 

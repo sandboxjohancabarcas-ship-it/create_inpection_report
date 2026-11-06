@@ -252,7 +252,7 @@ class CraftnoteApiService {
   * Inputs for:
     * `Craftnote API Key` (Password masked with reveal toggle).
     * `Craftnote Client ID`.
-    * Default folder name in Craftnote (e.g. `01_Wartungsberichte`).
+    * Default folder name in Craftnote (e.g. `Wartungslisten`).
     * "Verbindung testen" button displaying user name and company name upon successful test.
 
 ### 5.4 Inspector Mobile UI Extensions

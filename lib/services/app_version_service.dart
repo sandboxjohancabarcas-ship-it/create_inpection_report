@@ -5,13 +5,13 @@ class AppVersionService {
   static const String version = '1.0.0';
 
   /// Build number suffix
-  static const String buildNumber = '1';
+  static const String buildNumber = '2';
 
   /// Full version string (e.g., "1.0.0+1")
   static String get fullVersion => '$version+$buildNumber';
 
   /// Build Date (YYYY-MM-DD)
-  static const String buildDate = '2026-11-04';
+  static const String buildDate = '2026-11-06';
 
   /// Returns target platform name ('Windows' for Manager, 'Android' for Inspector/Techniker)
   static String getPlatformName({bool isManager = false}) {
@@ -27,14 +27,14 @@ class AppVersionService {
   }
 
   /// Formatted full version text with platform and build date
-  /// e.g. "Windows Build v1.0.0+1 (Build-Datum: 2026-11-04)"
+  /// e.g. "Windows Build v1.0.0+1 (Build-Datum: 2026-11-06)"
   static String getFullVersionInfo({bool isManager = false}) {
     final platform = getPlatformName(isManager: isManager);
     return '$platform Build v$fullVersion (Build-Datum: $buildDate)';
   }
 
   /// Compact version text for AppBars or Subtitles
-  /// e.g. "Windows v1.0.0+1 (2026-11-04)"
+  /// e.g. "Windows v1.0.0+1 (2026-11-06)"
   static String getCompactVersionInfo({bool isManager = false}) {
     final platform = getPlatformName(isManager: isManager);
     return '$platform v$fullVersion ($buildDate)';

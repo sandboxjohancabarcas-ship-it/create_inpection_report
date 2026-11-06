@@ -13,7 +13,6 @@ import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
 import '../widgets/create_project_dialog.dart';
 import '../widgets/craftnote_job_picker_modal.dart';
-import '../widgets/craftnote_settings_dialog.dart';
 import '../services/craftnote_sync_service.dart';
 import 'inspection_doors_page.dart';
 import 'package:intl/intl.dart';
@@ -665,11 +664,6 @@ class _DoorListPageState extends State<DoorListPage> {
                   icon: const Icon(Icons.file_open),
                   tooltip: 'Paket importieren',
                   onPressed: _isSyncing ? null : _handleImportPaket,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings),
-                  tooltip: 'Craftnote-Einstellungen',
-                  onPressed: () => CraftnoteSettingsDialog.show(context),
                 ),
                 IconButton(
                   icon: const Icon(Icons.info_outline),

@@ -3,6 +3,7 @@ import 'package:wartungstool/models/craftnote_models.dart';
 import 'package:wartungstool/services/craftnote_api_service.dart';
 import 'package:wartungstool/services/craftnote_credentials_service.dart';
 import 'package:wartungstool/services/craftnote_sync_service.dart';
+import 'package:wartungstool/services/craftnote_project_cache_service.dart';
 import 'package:wartungstool/widgets/craftnote_settings_dialog.dart';
 
 /// Modal dialog allowing inspectors and managers to input an Auftragsnummer (OrderNumber),
@@ -69,6 +70,41 @@ class _CraftnoteJobPickerModalState extends State<CraftnoteJobPickerModal> {
     super.dispose();
   }
 
+  Future<void> _syncActiveProjects() async {
+    setState(() {
+      _isSearching = true;
+      _errorMessage = null;
+      _statusMessage = 'Gleiche aktive Craftnote-Projekte mit lokalem Katalog ab...';
+    });
+
+    try {
+      final count = await CraftnoteProjectCacheService.syncActiveProjects(
+        apiService: _apiService,
+        onProgress: (msg) {
+          if (mounted) setState(() => _statusMessage = msg);
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$count aktive Craftnote-Projekte erfolgreich aktualisiert.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Fehler beim Synchronisieren: $e';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSearching = false);
+      }
+    }
+  }
+
   Future<void> _searchAndImportProject() async {
     final rawInput = _orderNumberController.text.trim();
     final cleanInput = rawInput.replaceAll('#', '').trim();
@@ -90,11 +126,13 @@ class _CraftnoteJobPickerModalState extends State<CraftnoteJobPickerModal> {
     });
 
     try {
-      // 1. Search Craftnote for active projects first, falling back to archive check
-      final searchResult = await _apiService.findProjectWithArchiveCheck(
-        orderNumber: cleanInput,
-        query: cleanInput,
-        maxPages: 25,
+      // 1. Instant < 5ms local index lookup with on-demand cloud fallback
+      final searchResult = await CraftnoteProjectCacheService.findProject(
+        cleanInput,
+        apiService: _apiService,
+        onProgress: (msg) {
+          if (mounted) setState(() => _statusMessage = msg);
+        },
       );
 
       // Requirement: If project is archived, ONLY display message that it is archived and cannot be processed
@@ -304,23 +342,33 @@ class _CraftnoteJobPickerModalState extends State<CraftnoteJobPickerModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.settings, size: 20),
-                    tooltip: 'Craftnote-Einstellungen',
-                    onPressed: _isSearching || _isImporting
-                        ? null
-                        : () async {
-                            final changed = await CraftnoteSettingsDialog.show(context);
-                            if (changed == true && mounted) {
-                              setState(() {
-                                if (CraftnoteCredentialsService.isTestMode &&
-                                    _orderNumberController.text.trim().isEmpty) {
-                                  _orderNumberController.text =
-                                      CraftnoteCredentialsService.testProjectOrderNumber;
-                                }
-                              });
-                            }
-                          },
+                    icon: const Icon(Icons.sync, size: 20),
+                    tooltip: 'Aktive Projekte aus Craftnote synchronisieren',
+                    onPressed: _isSearching || _isImporting ? null : _syncActiveProjects,
                   ),
+                  if (widget.isManagerMode)
+                    IconButton(
+                      icon: const Icon(Icons.settings, size: 20),
+                      tooltip: 'Craftnote-Einstellungen',
+                      onPressed: _isSearching || _isImporting
+                          ? null
+                          : () async {
+                              final changed =
+                                  await CraftnoteSettingsDialog.show(context);
+                              if (changed == true && mounted) {
+                                setState(() {
+                                  if (CraftnoteCredentialsService.isTestMode &&
+                                      _orderNumberController.text
+                                          .trim()
+                                          .isEmpty) {
+                                    _orderNumberController.text =
+                                        CraftnoteCredentialsService
+                                            .testProjectOrderNumber;
+                                  }
+                                });
+                              }
+                            },
+                    ),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: _isSearching || _isImporting

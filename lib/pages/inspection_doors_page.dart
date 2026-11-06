@@ -953,31 +953,21 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
             tooltip: 'Barcode / QR-Code scannen',
             onPressed: _handleScanBarcode,
           ),
-          IconButton(
-            icon: const Icon(Icons.edit_note),
-            tooltip: widget.isManagerMode
-                ? 'Auftrags-Metadaten & Sperrstatus bearbeiten'
-                : 'Schreibgeschützt für Inspektor',
-            onPressed: () async {
-              if (!widget.isManagerMode) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Inspektionsdaten können nur vom Manager bearbeitet werden.'),
-                    backgroundColor: Colors.orange,
-                  ),
+          if (widget.isManagerMode)
+            IconButton(
+              icon: const Icon(Icons.edit_note),
+              tooltip: 'Auftrags-Metadaten & Sperrstatus bearbeiten',
+              onPressed: () async {
+                final updated = await EditInspectionDialog.show(
+                  context,
+                  inspectionId: widget.inspectionId,
+                  isManagerMode: widget.isManagerMode,
                 );
-                return;
-              }
-              final updated = await EditInspectionDialog.show(
-                context,
-                inspectionId: widget.inspectionId,
-                isManagerMode: widget.isManagerMode,
-              );
-              if (updated == true && mounted) {
-                _loadDoors();
-              }
-            },
-          ),
+                if (updated == true && mounted) {
+                  _loadDoors();
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.photo_library_outlined, color: Colors.purple),
             tooltip: 'Alle Fotos dieses Auftrags exportieren',
@@ -1018,7 +1008,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               tooltip: 'Inspektion abschließen & an Craftnote senden',
               onPressed: _isSyncing ? null : _handleCompleteAndUploadToCraftnote,
             ),
-          const MasterPortalHomeButton(),
+          MasterPortalHomeButton(isManagerMode: widget.isManagerMode),
         ],
         leading: isSelectionMode ? IconButton(
           icon: const Icon(Icons.close),
@@ -1457,29 +1447,24 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                         if (door.notes.isNotEmpty)
                                           IconButton(
                                             icon: const Icon(Icons.note_alt_outlined, color: Colors.blue, size: 20),
-                                            tooltip: 'Notizen & Mängel im Pop-Up Fenster öffnen',
+                                            tooltip: 'Notizen & Mängel anzeigen',
                                             onPressed: () => _showDoorNotesPopUp(door),
                                           ),
-                                        IconButton(
-                                          icon: const Icon(Icons.history_edu, color: Colors.blueGrey, size: 20),
-                                          tooltip: 'Tür-Akte & Historie',
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => DoorHistoryPage(
-                                                  doorId: door.id,
-                                                  doorAlias: door.doorAlias,
+                                        PopupMenuButton<String>(
+                                          icon: const Icon(Icons.more_vert, size: 20, color: Colors.grey),
+                                          tooltip: 'Weitere Optionen',
+                                          onSelected: (value) async {
+                                            if (value == 'history') {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) => DoorHistoryPage(
+                                                    doorId: door.id,
+                                                    doorAlias: door.doorAlias,
+                                                  ),
                                                 ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                        if (_isEditable)
-                                          IconButton(
-                                            icon: const Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 20),
-                                            tooltip: 'Barcode scannen & Alias zuweisen',
-                                            onPressed: () async {
+                                              );
+                                            } else if (value == 'barcode' && _isEditable) {
                                               final scanned = await BarcodeScannerDialog.show(
                                                 context,
                                                 title: 'Neuen Barcode für Tür ${door.doorNumber} scannen',
@@ -1487,9 +1472,33 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
                                               if (scanned != null && scanned.isNotEmpty && mounted) {
                                                 await _updateDoorAlias(door, scanned);
                                               }
-                                            },
-                                          ),
-                                        Icon(_isEditable ? Icons.edit_note : Icons.visibility, color: _isEditable ? null : Colors.grey),
+                                            }
+                                          },
+                                          itemBuilder: (context) => [
+                                            const PopupMenuItem(
+                                              value: 'history',
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.history_edu, color: Colors.blueGrey, size: 18),
+                                                  SizedBox(width: 8),
+                                                  Text('Tür-Akte & Historie'),
+                                                ],
+                                              ),
+                                            ),
+                                            if (_isEditable)
+                                              const PopupMenuItem(
+                                                value: 'barcode',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.qr_code_scanner, color: Colors.deepPurple, size: 18),
+                                                    SizedBox(width: 8),
+                                                    Text('Barcode scannen & zuweisen'),
+                                                  ],
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
                                       ],
                                     ),
                               onTap: () async {

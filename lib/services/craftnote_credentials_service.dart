@@ -11,7 +11,7 @@ class CraftnoteCredentialsService {
   static const String defaultPlaceholderApiKey = defaultApiKey;
   static const String defaultPlaceholderClientId = defaultClientId;
   static const String defaultLiveBaseUrl = 'https://europe-west1-craftnote-live.cloudfunctions.net/api/v1';
-  static const String defaultFolder = '01_Wartungsberichte';
+  static const String defaultFolder = 'Wartungslisten';
 
   /// Sandbox test project definition in Craftnote
   static const String testProjectId = '0bcce8b1-bb9b-4d67-b41e-f700d3a57bfd';

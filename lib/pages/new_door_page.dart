@@ -1075,7 +1075,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 );
               },
             ),
-          const MasterPortalHomeButton(),
+          MasterPortalHomeButton(isManagerMode: widget.isManagerMode),
         ],
       ),
       body: SingleChildScrollView(

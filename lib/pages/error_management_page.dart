@@ -1942,7 +1942,7 @@ class _ErrorManagementPageState extends State<ErrorManagementPage> {
             icon: const Icon(Icons.refresh),
             onPressed: () => _loadData(syncWithMain: true),
           ),
-          const MasterPortalHomeButton(),
+          MasterPortalHomeButton(isManagerMode: widget.isManagerMode),
         ],
       ),
       body: isLoading

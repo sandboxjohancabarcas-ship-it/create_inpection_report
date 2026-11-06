@@ -268,7 +268,7 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
                   controller: _folderController,
                   decoration: const InputDecoration(
                     labelText: 'Standard-Zielordner in Craftnote',
-                    hintText: '02_Berichte',
+                    hintText: 'Wartungslisten',
                     border: OutlineInputBorder(),
                   ),
                 ),
