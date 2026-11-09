@@ -11,6 +11,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 
 class LocalDatabaseService {
+  /// Canonical Local Database Schema Version (Single Source of Truth).
+  /// Increment this ONLY when modifying schema tables/columns and adding onUpgrade handlers.
+  static const int currentDatabaseVersion = 18;
+
   static Database? _db;
 
   static Future<String> _getWorkingDbPath() async {
@@ -38,8 +42,7 @@ class LocalDatabaseService {
 
     _db = await openDatabase(
       path,
-      version:
-          18, // v18: Added Craftnote cloud integration columns + craftnote_upload_queue table
+      version: currentDatabaseVersion,
       onCreate: (db, version) async {
         // Doors table (local copy for current inspection)
         await db.execute('''
@@ -612,6 +615,10 @@ class LocalDatabaseService {
         await txn.delete('doors');
 
         // 3. Populate local Inspections from the downloaded package
+        final localInspCols = await _getTableColumns(txn, 'inspections');
+        final localDoorCols = await _getTableColumns(txn, 'doors');
+        final localJunctionCols = await _getTableColumns(txn, 'inspection_doors');
+
         for (var insp in selectedInspections) {
           final Map<String, dynamic> data = Map<String, dynamic>.from(insp);
           // Ensure legacy packages are mapped to new English keys
@@ -620,6 +627,7 @@ class LocalDatabaseService {
             data['jobNumber'] = data['auftragsnummer'];
           }
           data.remove('doorCount');
+          data.removeWhere((key, _) => !localInspCols.contains(key));
           await txn.insert('inspections', data,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
@@ -629,12 +637,15 @@ class LocalDatabaseService {
               Map<String, dynamic>.from(junction);
           // New exported packages start in Pending (Offen) state for inspector
           jData['status'] = 'Pending';
+          jData.removeWhere((key, _) => !localJunctionCols.contains(key));
           await txn.insert('inspection_doors', jData,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         for (var door in doorList) {
-          await txn.insert('doors', door.toMap(),
+          final dData = door.toMap();
+          dData.removeWhere((key, _) => !localDoorCols.contains(key));
+          await txn.insert('doors', dData,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
@@ -2340,7 +2351,7 @@ class LocalDatabaseService {
           packageVersion = (verResult.first.values.first as num?)?.toInt() ?? 0;
         }
       } catch (_) {}
-      const int targetVersion = 17;
+      const int targetVersion = currentDatabaseVersion;
 
       final Set<String> packageDoorCols =
           await _getTableColumns(packageDb, 'doors');

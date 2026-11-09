@@ -16,6 +16,10 @@ import '../utils/file_export_helper.dart';
 /// Master Database Service (Manager Role)
 /// This is a stub to allow the project to compile for Windows.
 class DatabaseService {
+  /// Canonical Master Database Schema Version (Single Source of Truth).
+  /// Increment this ONLY when modifying schema tables/columns and adding onUpgrade handlers.
+  static const int currentDatabaseVersion = 28;
+
   static Database? _db;
 
   static Future<Database> getDb() async {
@@ -27,8 +31,7 @@ class DatabaseService {
 
     _db = await openDatabase(
       path,
-      version:
-          28, // v28: Added Craftnote cloud integration columns (craftnoteProjectId, craftnoteFileId, craftnoteSyncStatus, craftnoteLastSyncTime)
+      version: currentDatabaseVersion,
       onCreate: (db, version) async {
         // Doors table
         await db.execute('''
@@ -2714,7 +2717,7 @@ class DatabaseService {
           packageVersion = (verResult.first.values.first as num?)?.toInt() ?? 0;
         }
       } catch (_) {}
-      const int targetVersion = 27;
+      const int targetVersion = currentDatabaseVersion;
 
       final Set<String> packageDoorCols =
           await _getTableColumns(packageDb, 'doors');

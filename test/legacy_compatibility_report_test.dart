@@ -86,7 +86,7 @@ void main() {
       final audit = report.legacyAudit;
       expect(audit, isNotNull);
       expect(audit!.packageVersion, equals(16));
-      expect(audit.targetVersion, equals(27));
+      expect(audit.targetVersion, equals(DatabaseService.currentDatabaseVersion));
       expect(audit.jobNumber.isNotEmpty, isTrue);
       expect(audit.defaultOrderType, equals('Wartung'));
       expect(audit.newFeatures.isNotEmpty, isTrue);
@@ -98,7 +98,7 @@ void main() {
       // Verify the generated report text contains all essential sections
       final text = audit.generateFormattedReportText();
       expect(text, contains('ALTDATEN-KOMPATIBILITÄTS- & MIGRATIONSBERICHT'));
-      expect(text, contains('v16 (Legacy) ➔ Ziel-Version: v27 (Aktuell)'));
+      expect(text, contains('v16 (Legacy) ➔ Ziel-Version: v${DatabaseService.currentDatabaseVersion} (Aktuell)'));
       expect(text, contains('Auftrag: ${audit.jobNumber}'));
       expect(text, contains('Standard-Auftragsphase: Wartung'));
       expect(text, contains('1. NEUE FUNKTIONEN DER AKTUELLEN VERSION'));
@@ -130,7 +130,7 @@ void main() {
       expect(report.totalErrorsImported, equals(17));
       expect(report.hasLegacyAudit, isTrue);
       expect(report.legacyAudit!.packageVersion, equals(16));
-      expect(report.legacyAudit!.targetVersion, equals(17));
+      expect(report.legacyAudit!.targetVersion, equals(LocalDatabaseService.currentDatabaseVersion));
 
       final localDb = await LocalDatabaseService.getDb();
       final localInspections = await localDb.query('inspections',

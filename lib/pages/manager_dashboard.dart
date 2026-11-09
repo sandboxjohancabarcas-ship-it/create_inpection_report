@@ -234,6 +234,78 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
+  Future<void> _confirmAndReloadCatalog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 8),
+            Text('Fehlerkatalog neu laden?'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Achtung: Dieser Vorgang liest den Fehlerkatalog aus der Vorlage (error_catalog.json) neu ein.\n',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '• Alle Standard-Fehlerbeschreibungen, Kategorien und Normverweise werden auf die Standardwerte zurückgesetzt.\n'
+              '• Eigene Textanpassungen an Standardfehlern werden dabei überschrieben.\n'
+              '• Bestehende Prüfungen, Mängelfotos und selbst erstellte Fehlercodes bleiben erhalten.\n\n'
+              'Möchten Sie den Katalog wirklich auf die Standardwerte zurücksetzen?',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.restore_page, size: 18),
+            label: const Text('Auf Standard zurücksetzen'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade800,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => isLoading = true);
+    try {
+      await DatabaseService.checkAndInitializeCatalog(force: true);
+      await _loadErrors();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fehlerkatalog erfolgreich auf Standardwerte zurückgesetzt.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Neuladen: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   String _getSeverityDisplay(String severity) {
     switch (severity) {
       case 'low':
@@ -311,18 +383,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ),
           IconButton(
             icon: const Icon(Icons.storage),
-            onPressed: () async {
-              setState(() => isLoading = true);
-              await DatabaseService.checkAndInitializeCatalog(force: true);
-              await _loadErrors();
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Fehlerkatalog wurde neu geladen')),
-                );
-              }
-            },
-            tooltip: 'Fehlerkatalog neu laden',
+            onPressed: _confirmAndReloadCatalog,
+            tooltip: 'Fehlerkatalog auf Standard zurücksetzen',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
