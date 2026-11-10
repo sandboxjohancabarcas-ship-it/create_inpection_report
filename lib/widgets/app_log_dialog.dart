@@ -211,7 +211,7 @@ class _AppLogDialogState extends State<AppLogDialog> {
                     Expanded(
                       child: Text(
                         Platform.isAndroid
-                            ? 'Einfacher USB-Zugriff am PC: Interner Speicher > Android > data > com.cabarcas.wartungstool > files > logs\nOder unten mit 1-Klick direkt in den Download-Ordner Ihres Tablets kopieren.'
+                            ? 'Einfacher USB-Zugriff am PC: Interner Speicher > Android > data > de.gottsberg.wartungstool > files > logs\nOder unten mit 1-Klick direkt in den Download-Ordner Ihres Tablets kopieren.'
                             : 'Log-Speicherort: ${_logFilePath ?? "WartungsTool/logs"} • Direkt aufrufbar oder unten als Datei exportieren.',
                         style: const TextStyle(fontSize: 11, height: 1.25),
                       ),

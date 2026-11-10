@@ -3,7 +3,7 @@
 -dontoptimize
 
 # Preserve your MainActivity and all its members
--keep class com.cabarcas.wartungstool.MainActivity { *; }
+-keep class de.gottsberg.wartungstool.MainActivity { *; }
 
 # Preserve Flutter and its embedding classes
 -keep class io.flutter.app.** { *; }

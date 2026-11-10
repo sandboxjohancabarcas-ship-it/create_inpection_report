@@ -1,4 +1,4 @@
-package com.cabarcas.wartungstool
+package de.gottsberg.wartungstool
 
 import io.flutter.embedding.android.FlutterActivity
 

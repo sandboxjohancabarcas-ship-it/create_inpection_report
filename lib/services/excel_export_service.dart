@@ -981,8 +981,8 @@ class ExcelExportService {
 
   static List<int>? _getLogoBytes() {
     final candidatePaths = [
-      r'C:\Users\cabarcas\Projects\WartungsTool\test\test_data\GottsbergLogo.png',
       'test/test_data/GottsbergLogo.png',
+      p.join(Directory.current.path, 'test', 'test_data', 'GottsbergLogo.png'),
     ];
     for (final p in candidatePaths) {
       try {
