@@ -13,6 +13,8 @@ import '../utils/file_export_helper.dart';
 import '../utils/error_log_export_helper.dart';
 import '../widgets/create_project_dialog.dart';
 import '../widgets/craftnote_job_picker_modal.dart';
+import '../widgets/craftnote_test_mode_switch.dart';
+import '../widgets/app_log_dialog.dart';
 import '../services/craftnote_sync_service.dart';
 import 'inspection_doors_page.dart';
 import 'package:intl/intl.dart';
@@ -655,6 +657,10 @@ class _DoorListPageState extends State<DoorListPage> {
                       ),
                     ],
                   ),
+                CraftnoteTestModeSwitch(
+                  compact: true,
+                  onChanged: (_) => setState(() {}),
+                ),
                 IconButton(
                   icon: const Icon(Icons.cloud_download, color: Colors.blue),
                   tooltip: 'Aus Craftnote laden',
@@ -664,6 +670,11 @@ class _DoorListPageState extends State<DoorListPage> {
                   icon: const Icon(Icons.file_open),
                   tooltip: 'Paket importieren',
                   onPressed: _isSyncing ? null : _handleImportPaket,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  tooltip: 'Anwendungsprotokoll (Log) anzeigen & herunterladen',
+                  onPressed: () => AppLogDialog.show(context),
                 ),
                 IconButton(
                   icon: const Icon(Icons.info_outline),
@@ -854,6 +865,10 @@ class _DoorListPageState extends State<DoorListPage> {
                     onPressed: _isSyncing ? null : _handleCraftnoteExport,
                     icon: const Icon(Icons.cloud_upload),
                     label: const Text('An Craftnote senden'),
+                  ),
+                  CraftnoteTestModeSwitch(
+                    compact: true,
+                    onChanged: (_) => setState(() {}),
                   ),
                 ],
               ),

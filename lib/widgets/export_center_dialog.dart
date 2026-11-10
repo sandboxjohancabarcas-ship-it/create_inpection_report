@@ -452,12 +452,50 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
               ? '\n• Modus: 🛡️ Test-Modus aktiv (Gespeichert im Sandbox-Testprojekt #${CraftnoteCredentialsService.testProjectOrderNumber})'
               : '\n• Modus: ⚠️ Produktiv-Modus (Gespeichert in ${_selectedCraftnoteProject!.name})';
 
-          _exportSuccessPath = 'Erfolgreich nach Craftnote übertragen:\n'
+          final formattedSummary = 'Erfolgreich nach Craftnote übertragen:\n'
               '• Zielprojekt: ${_selectedCraftnoteProject!.name} (#${_selectedCraftnoteProject!.orderNumber})'
               '$modeNote\n'
               '• Wartungsliste (.db): Gespeichert in Ordner "Wartungslisten"$photoSummary\n\n'
               '${syncResult.message}';
-          targetPath = 'craftnote:${_selectedCraftnoteProject!.id}';
+          _exportSuccessPath = formattedSummary;
+          targetPath = formattedSummary;
+
+          if (mounted) {
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(
+                      syncResult.isQueuedOffline
+                          ? Icons.cloud_queue
+                          : (syncResult.success
+                              ? Icons.cloud_done
+                              : Icons.error_outline),
+                      color: syncResult.isQueuedOffline
+                          ? Colors.orange
+                          : (syncResult.success ? Colors.green : Colors.red),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      syncResult.isQueuedOffline
+                          ? 'Offline eingereiht'
+                          : (syncResult.success
+                              ? 'Export erfolgreich'
+                              : 'Export fehlgeschlagen'),
+                    ),
+                  ],
+                ),
+                content: SelectableText(syncResult.message),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
         }
       } else if (_selectedScope == ExportScope.clientAudit) {
         if (_selectedClient == null || _selectedClient!.isEmpty) {
@@ -537,9 +575,31 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
         _exportSuccessPath = targetPath;
       });
     } catch (e) {
+      final errorMsg = e.toString().replaceFirst('Exception: ', '');
       setState(() {
-        _errorMessage = 'Export fehlgeschlagen: $e';
+        _errorMessage = 'Export fehlgeschlagen: $errorMsg';
       });
+      if (_selectedFormat == ExportFormat.craftnote && mounted) {
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Row(
+              children: const [
+                Icon(Icons.error_outline, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Export fehlgeschlagen'),
+              ],
+            ),
+            content: SelectableText(errorMsg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
     } finally {
       setState(() => _isExporting = false);
     }
@@ -803,20 +863,7 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
                               onSelected: (val) => setState(
                                   () => _selectedFormat = ExportFormat.excel),
                             ),
-                            ChoiceChip(
-                              label: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(Icons.picture_as_pdf,
-                                      color: Colors.red, size: 18),
-                                  SizedBox(width: 8),
-                                  Text('PDF (.pdf)'),
-                                ],
-                              ),
-                              selected: _selectedFormat == ExportFormat.pdf,
-                              onSelected: (val) => setState(
-                                  () => _selectedFormat = ExportFormat.pdf),
-                            ),
+                            // Note: PDF export is currently out of scope and hidden from Export Center
                             ChoiceChip(
                               label: Row(
                                 mainAxisSize: MainAxisSize.min,

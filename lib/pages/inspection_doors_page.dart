@@ -12,6 +12,7 @@ import '../widgets/barcode_scanner_dialog.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../services/photo_export_service.dart';
 import '../services/craftnote_sync_service.dart';
+import '../widgets/craftnote_test_mode_switch.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
@@ -1002,12 +1003,17 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
               }
             },
           ),
-          if (!widget.isManagerMode)
+          if (!widget.isManagerMode) ...[
+            CraftnoteTestModeSwitch(
+              compact: true,
+              onChanged: (_) => setState(() {}),
+            ),
             IconButton(
               icon: const Icon(Icons.cloud_upload, color: Colors.blue),
               tooltip: 'Inspektion abschließen & an Craftnote senden',
               onPressed: _isSyncing ? null : _handleCompleteAndUploadToCraftnote,
             ),
+          ],
           MasterPortalHomeButton(isManagerMode: widget.isManagerMode),
         ],
         leading: isSelectionMode ? IconButton(

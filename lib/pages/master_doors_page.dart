@@ -14,7 +14,10 @@ import '../widgets/app_version_dialog.dart';
 import '../utils/inspection_year_utils.dart';
 import '../widgets/craftnote_job_picker_modal.dart';
 import '../widgets/craftnote_settings_dialog.dart';
+import '../widgets/craftnote_test_mode_switch.dart';
+import '../widgets/app_log_dialog.dart';
 import '../services/craftnote_project_cache_service.dart';
+import '../services/craftnote_sync_service.dart';
 import '../widgets/import_report_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import 'inspection_doors_page.dart';
@@ -52,6 +55,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   final Set<int> _selectedInspectionIds = {};
 
   final KinchiApiService _apiService = KinchiApiService();
+  final CraftnoteSyncService _craftnoteSyncService = CraftnoteSyncService();
 
   @override
   void initState() {
@@ -179,6 +183,86 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           SnackBar(
               content: Text('Export fehlgeschlagen: $e'),
               backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  /// Exports selected inspection job package(s) directly to Craftnote with full feedback window.
+  Future<void> _handleCraftnoteExportToCloud() async {
+    if (_selectedInspectionIds.isEmpty) return;
+
+    setState(() => _isProcessing = true);
+    final results = <CraftnoteSyncResult>[];
+    try {
+      for (final id in _selectedInspectionIds) {
+        final res = await _craftnoteSyncService.exportInspectionFromMasterDb(
+          inspectionId: id,
+          syncPhotos: true,
+        );
+        results.add(res);
+      }
+
+      if (mounted) {
+        setState(() => _selectedInspectionIds.clear());
+        await _loadData();
+        if (!mounted) return;
+
+        if (results.length == 1) {
+          final res = results.first;
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    res.isQueuedOffline
+                        ? Icons.cloud_queue
+                        : (res.success ? Icons.cloud_done : Icons.error_outline),
+                    color: res.isQueuedOffline
+                        ? Colors.orange
+                        : (res.success ? Colors.green : Colors.red),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    res.isQueuedOffline
+                        ? 'Offline eingereiht'
+                        : (res.success ? 'Export erfolgreich' : 'Export fehlgeschlagen'),
+                  ),
+                ],
+              ),
+              content: SelectableText(res.message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          final succeeded = results.where((r) => r.success && !r.isQueuedOffline).length;
+          final queued = results.where((r) => r.isQueuedOffline).length;
+          final failed = results.where((r) => !r.success).length;
+          final summary = '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(summary),
+              backgroundColor: failed == 0 ? Colors.green : Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fehler beim Export nach Craftnote: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -799,6 +883,12 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   : () => ExportCenterDialog.show(context, isManagerMode: true),
             ),
             IconButton(
+              icon: const Icon(Icons.receipt_long_outlined,
+                  color: Colors.tealAccent),
+              tooltip: 'Anwendungsprotokoll (Log) anzeigen & herunterladen',
+              onPressed: () => AppLogDialog.show(context),
+            ),
+            IconButton(
               icon: Icon(_isSearching ? Icons.close : Icons.search),
               tooltip: _isSearching ? 'Suche schließen' : 'Suchen',
               onPressed: () {
@@ -829,6 +919,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     break;
                   case 'migration_audit':
                     MigrationLogDialog.show(context);
+                    break;
+                  case 'app_logs':
+                    AppLogDialog.show(context);
                     break;
                   case 'app_info':
                     AppVersionDialog.show(context, isManager: true);
@@ -895,6 +988,21 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       Expanded(
                         child: Text(
                           'Migrations-Audit & DB-Reparatur',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'app_logs',
+                  child: Row(
+                    children: [
+                      Icon(Icons.receipt_long, size: 20, color: Colors.teal),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Anwendungsprotokoll (Log)',
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1121,21 +1229,24 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       ),
                       const VerticalDivider(),
                       Tooltip(
-                        message: 'Paket für Techniker exportieren',
+                        message: 'Paket an Craftnote übertragen',
                         child: TextButton.icon(
                           onPressed: _isProcessing
                               ? null
-                              : _handleExportSelectedInspections,
-                          icon: const Icon(Icons.upload_file,
-                              color: Colors.green),
-                          label: Text(
-                              'Paket (${_selectedInspectionIds.length})',
-                              style: const TextStyle(color: Colors.green)),
+                              : _handleCraftnoteExportToCloud,
+                          icon: const Icon(Icons.cloud_upload,
+                              color: Colors.orange),
+                          label: const Text('An Craftnote senden',
+                              style: TextStyle(color: Colors.orange)),
                         ),
+                      ),
+                      CraftnoteTestModeSwitch(
+                        compact: true,
+                        onChanged: (_) => setState(() {}),
                       ),
                       const VerticalDivider(),
                       Tooltip(
-                        message: 'Export-Center & Berichte (PDF, Excel, Craftnote)',
+                        message: 'Export-Center & Berichte (Excel, Craftnote)',
                         child: TextButton.icon(
                           onPressed: _isProcessing
                               ? null

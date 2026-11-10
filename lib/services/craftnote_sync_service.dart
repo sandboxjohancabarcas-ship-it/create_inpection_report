@@ -9,6 +9,7 @@ import 'package:wartungstool/services/craftnote_credentials_service.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/photo_export_service.dart';
+import 'package:wartungstool/services/app_logger.dart';
 import 'package:wartungstool/utils/file_export_helper.dart';
 
 /// Standard project target folders used by the automated Craftnote sync.
@@ -29,8 +30,10 @@ class CraftnoteProjectStandardFolders {
   bool get hasFotomaterial => fotomaterialFolderId != null;
 
   String formatFolderInfo() {
-    final wInfo = wartungslistenPath ?? (hasWartungslisten ? 'Wartungslisten' : 'Root');
-    final fInfo = fotomaterialPath ?? (hasFotomaterial ? 'Fotomaterial' : 'Root');
+    final wInfo =
+        wartungslistenPath ?? (hasWartungslisten ? 'Wartungslisten' : 'Root');
+    final fInfo =
+        fotomaterialPath ?? (hasFotomaterial ? 'Fotomaterial' : 'Root');
     return 'Wartungslisten: $wInfo | Fotomaterial: $fInfo';
   }
 }
@@ -160,7 +163,8 @@ class CraftnoteSyncService {
   }
 
   /// Resolves the standard folders "Wartungslisten" and "Fotomaterial" for a given Craftnote project.
-  Future<CraftnoteProjectStandardFolders> resolveProjectStandardFolders(String projectId) async {
+  Future<CraftnoteProjectStandardFolders> resolveProjectStandardFolders(
+      String projectId) async {
     try {
       final files = await apiService.getProjectFiles(projectId);
       final folders = files.where((f) => f.isFolder).toList();
@@ -183,7 +187,9 @@ class CraftnoteSyncService {
         final lower = f.name.trim().toLowerCase();
         if (lower == 'wartungslisten' || lower.contains('wartungsliste')) {
           wartungslistenFolder = f;
-        } else if (lower == 'fotomaterial' || lower.contains('fotomaterial') || lower == 'fotos') {
+        } else if (lower == 'fotomaterial' ||
+            lower.contains('fotomaterial') ||
+            lower == 'fotos') {
           fotomaterialFolder = f;
         }
       }
@@ -191,8 +197,11 @@ class CraftnoteSyncService {
       return CraftnoteProjectStandardFolders(
         wartungslistenFolderId: wartungslistenFolder?.id,
         fotomaterialFolderId: fotomaterialFolder?.id,
-        wartungslistenPath: wartungslistenFolder != null ? buildPath(wartungslistenFolder) : null,
-        fotomaterialPath: fotomaterialFolder != null ? buildPath(fotomaterialFolder) : null,
+        wartungslistenPath: wartungslistenFolder != null
+            ? buildPath(wartungslistenFolder)
+            : null,
+        fotomaterialPath:
+            fotomaterialFolder != null ? buildPath(fotomaterialFolder) : null,
       );
     } catch (e) {
       print('[CraftnoteSyncService] Error resolving standard folders: $e');
@@ -209,7 +218,8 @@ class CraftnoteSyncService {
   }) async {
     // Safety Sandbox Guard: Redirect to testProjectId if test mode is active
     String targetProjectId = craftnoteProjectId;
-    if (CraftnoteCredentialsService.isTestMode && craftnoteProjectId != CraftnoteCredentialsService.testProjectId) {
+    if (CraftnoteCredentialsService.isTestMode &&
+        craftnoteProjectId != CraftnoteCredentialsService.testProjectId) {
       targetProjectId = CraftnoteCredentialsService.testProjectId;
     }
 
@@ -221,7 +231,8 @@ class CraftnoteSyncService {
         isManagerMode: isManagerMode,
       );
 
-      if (photoResult.totalPhotos == 0 || photoResult.exportedFileNames.isEmpty) {
+      if (photoResult.totalPhotos == 0 ||
+          photoResult.exportedFileNames.isEmpty) {
         return const CraftnotePhotoSyncResult(
           totalFound: 0,
           uploadedCount: 0,
@@ -232,7 +243,10 @@ class CraftnoteSyncService {
       // Query existing files in Craftnote project
       final projectFiles = await apiService.getProjectFiles(targetProjectId);
       final existingNames = projectFiles
-          .where((f) => !f.isFolder && (fotomaterialFolderId == null || f.folderId == fotomaterialFolderId))
+          .where((f) =>
+              !f.isFolder &&
+              (fotomaterialFolderId == null ||
+                  f.folderId == fotomaterialFolderId))
           .map((f) => f.name.toLowerCase().trim())
           .toSet();
 
@@ -242,7 +256,8 @@ class CraftnoteSyncService {
       for (final fileName in photoResult.exportedFileNames) {
         final lowerName = fileName.toLowerCase().trim();
         if (existingNames.contains(lowerName)) {
-          print('[CraftnoteSyncService] ⏩ Photo "$fileName" already exists in Fotomaterial, skipping upload.');
+          print(
+              '[CraftnoteSyncService] ⏩ Photo "$fileName" already exists in Fotomaterial, skipping upload.');
           skipped.add(fileName);
           continue;
         }
@@ -250,7 +265,8 @@ class CraftnoteSyncService {
         final photoFile = File(p.join(tempDir.path, fileName));
         if (!await photoFile.exists()) continue;
 
-        print('[CraftnoteSyncService] ⬆️ Uploading photo "$fileName" to Fotomaterial...');
+        print(
+            '[CraftnoteSyncService] ⬆️ Uploading photo "$fileName" to Fotomaterial...');
         await apiService.uploadFile(
           projectId: targetProjectId,
           file: photoFile,
@@ -258,7 +274,8 @@ class CraftnoteSyncService {
           folderId: fotomaterialFolderId,
         );
         uploaded.add(fileName);
-        existingNames.add(lowerName); // prevent double upload if same filename in batch
+        existingNames
+            .add(lowerName); // prevent double upload if same filename in batch
       }
 
       return CraftnotePhotoSyncResult(
@@ -292,7 +309,7 @@ class CraftnoteSyncService {
   /// uploads it directly to the designated Craftnote project, and posts a project message.
   Future<CraftnoteSyncResult> exportInspectionFromMasterDb({
     required int inspectionId,
-    required String craftnoteProjectId,
+    String? craftnoteProjectId,
     String? targetFolderId,
     String? pdfReportPath,
     bool postChatMessage = false,
@@ -303,36 +320,89 @@ class CraftnoteSyncService {
       if (insp == null) {
         return CraftnoteSyncResult(
           success: false,
-          message: 'Auftrag mit ID $inspectionId wurde nicht in der Master-Datenbank gefunden.',
+          message:
+              'Auftrag mit ID $inspectionId wurde nicht in der Master-Datenbank gefunden.',
         );
       }
 
-      // Safety Sandbox Guard: Redirect to testProjectId if test mode is active
-      String targetProjectId = craftnoteProjectId;
+      String targetProjectId = (craftnoteProjectId ?? '').trim();
       bool wasRedirected = false;
-      if (CraftnoteCredentialsService.isTestMode && craftnoteProjectId != CraftnoteCredentialsService.testProjectId) {
-        print('[CraftnoteSyncService] 🛡️ TEST MODE GUARD: Redirecting upload from "$craftnoteProjectId" to sandbox test project "${CraftnoteCredentialsService.testProjectId}" (#${CraftnoteCredentialsService.testProjectOrderNumber}) to protect live production data.');
+
+      if (targetProjectId.isEmpty) {
+        final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '')
+            .toString()
+            .trim();
+        if (jobNum.isNotEmpty) {
+          try {
+            final searchResult = await apiService.findProjectWithArchiveCheck(
+                orderNumber: jobNum);
+            if (searchResult.isArchived) {
+              final projName = searchResult.archivedProject?.name ?? jobNum;
+              return CraftnoteSyncResult(
+                success: false,
+                message:
+                    'Das Craftnote-Projekt "$projName" (#$jobNum) ist in Craftnote bereits archiviert. Ein Export in archivierte Projekte ist nicht möglich.',
+              );
+            }
+            if (searchResult.activeProject != null) {
+              targetProjectId = searchResult.activeProject!.id;
+            }
+          } catch (e) {
+            print(
+                '[CraftnoteSyncService] Warning finding project for $jobNum: $e');
+          }
+        }
+
+        // Fallback: Check if inspection already has a linked craftnoteProjectId
+        if (targetProjectId.isEmpty &&
+            insp['craftnoteProjectId']?.toString().isNotEmpty == true) {
+          targetProjectId = insp['craftnoteProjectId'].toString();
+        }
+
+        // Fallback for Test Mode:
+        if (targetProjectId.isEmpty) {
+          if (CraftnoteCredentialsService.isTestMode) {
+            targetProjectId = CraftnoteCredentialsService.testProjectId;
+          } else {
+            return CraftnoteSyncResult(
+              success: false,
+              message:
+                  'Kein passendes aktives Projekt in Craftnote für Auftragsnummer "$jobNum" gefunden.',
+            );
+          }
+        }
+      }
+
+      // Safety Sandbox Guard: Redirect to testProjectId if test mode is active
+      if (CraftnoteCredentialsService.isTestMode &&
+          targetProjectId != CraftnoteCredentialsService.testProjectId) {
+        print(
+            '[CraftnoteSyncService] 🛡️ TEST MODE GUARD: Redirecting upload from "$targetProjectId" to sandbox test project "${CraftnoteCredentialsService.testProjectId}" (#${CraftnoteCredentialsService.testProjectOrderNumber}) to protect live production data.');
         targetProjectId = CraftnoteCredentialsService.testProjectId;
         wasRedirected = true;
       } else if (!CraftnoteCredentialsService.isTestMode) {
         // In Production Mode: Prevent export into archived projects
         try {
-          final targetProj = await apiService.getProjectById(craftnoteProjectId);
+          final targetProj = await apiService.getProjectById(targetProjectId);
           if (targetProj.archived) {
             return CraftnoteSyncResult(
               success: false,
-              message: 'Das Ziel-Projekt "${targetProj.name}" (#${targetProj.orderNumber}) ist in Craftnote bereits archiviert. Ein Export in archivierte Projekte ist nicht möglich.',
+              message:
+                  'Das Ziel-Projekt "${targetProj.name}" (#${targetProj.orderNumber}) ist in Craftnote bereits archiviert. Ein Export in archivierte Projekte ist nicht möglich.',
             );
           }
         } catch (_) {}
       }
 
       // 1. Resolve standard project target folders ("Wartungslisten" and "Fotomaterial")
-      final standardFolders = await resolveProjectStandardFolders(targetProjectId);
-      final effectiveWartungslistenId = targetFolderId ?? standardFolders.wartungslistenFolderId;
+      final standardFolders =
+          await resolveProjectStandardFolders(targetProjectId);
+      final effectiveWartungslistenId =
+          targetFolderId ?? standardFolders.wartungslistenFolderId;
 
       // 2. Generate package file (.db)
-      final packagePath = await DatabaseService.exportJobPackage([inspectionId]);
+      final packagePath =
+          await DatabaseService.exportJobPackage([inspectionId]);
       final packageFile = File(packagePath);
       if (!await packageFile.exists()) {
         return const CraftnoteSyncResult(
@@ -361,7 +431,8 @@ class CraftnoteSyncService {
       }
 
       // 5. Upload inspection photos into "Fotomaterial" with deduplication
-      CraftnotePhotoSyncResult photoSync = const CraftnotePhotoSyncResult(totalFound: 0, uploadedCount: 0, skippedCount: 0);
+      CraftnotePhotoSyncResult photoSync = const CraftnotePhotoSyncResult(
+          totalFound: 0, uploadedCount: 0, skippedCount: 0);
       if (syncPhotos) {
         photoSync = await syncInspectionPhotos(
           inspectionId: inspectionId,
@@ -375,17 +446,22 @@ class CraftnoteSyncService {
       String? messageWarning;
       if (postChatMessage) {
         try {
-          final jobNum = insp['jobNumber'] ?? insp['auftragsnummer'] ?? '$inspectionId';
+          final jobNum =
+              insp['jobNumber'] ?? insp['auftragsnummer'] ?? '$inspectionId';
           final client = insp['clientName'] ?? insp['customerName'] ?? '';
           final address = insp['objectAddress'] ?? '';
-          final buffer = StringBuffer('📦 [WartungsTool] Neuer Wartungsauftrag übertragen:\n');
+          final buffer = StringBuffer(
+              '📦 [WartungsTool] Neuer Wartungsauftrag übertragen:\n');
           buffer.writeln('• Auftrag: #$jobNum');
           if (client.toString().isNotEmpty) buffer.writeln('• Kunde: $client');
-          if (address.toString().isNotEmpty) buffer.writeln('• Objekt: $address');
-          buffer.writeln('• Paketdatei: ${p.basename(packagePath)} (${standardFolders.wartungslistenPath ?? "Wartungslisten"})');
+          if (address.toString().isNotEmpty)
+            buffer.writeln('• Objekt: $address');
+          buffer.writeln(
+              '• Paketdatei: ${p.basename(packagePath)} (${standardFolders.wartungslistenPath ?? "Wartungslisten"})');
           if (pdfUpload != null) buffer.writeln('• PDF-Bericht beigelegt');
           if (photoSync.totalFound > 0) {
-            buffer.writeln('• Fotos: ${photoSync.uploadedCount} neu übertragen, ${photoSync.skippedCount} übersprungen (${standardFolders.fotomaterialPath ?? "Fotomaterial"})');
+            buffer.writeln(
+                '• Fotos: ${photoSync.uploadedCount} neu übertragen, ${photoSync.skippedCount} übersprungen (${standardFolders.fotomaterialPath ?? "Fotomaterial"})');
           }
 
           await apiService.postMessage(
@@ -393,7 +469,8 @@ class CraftnoteSyncService {
             buffer.toString().trim(),
           );
         } catch (e) {
-          messageWarning = 'Chat-Nachricht konnte nicht gesendet werden (erfordert Craftnote Advanced API: $e)';
+          messageWarning =
+              'Chat-Nachricht konnte nicht gesendet werden (erfordert Craftnote Advanced API: $e)';
           print('[CraftnoteSyncService] ⚠️ $messageWarning');
         }
       }
@@ -407,20 +484,27 @@ class CraftnoteSyncService {
         lastSyncTime: DateTime.now().toIso8601String(),
       );
 
-      final buffer = StringBuffer('Auftrag erfolgreich nach Craftnote exportiert.\n');
+      final buffer =
+          StringBuffer('Auftrag erfolgreich nach Craftnote exportiert.\n');
       if (wasRedirected) {
-        buffer.writeln('🛡️ [Testumgebung aktiv] Upload wurde sicher in das Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}) geleitet, um Produktivdaten zu schützen.');
+        buffer.writeln(
+            '🛡️ [Testumgebung aktiv] Upload wurde sicher in das Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}) geleitet, um Produktivdaten zu schützen.');
       }
-      buffer.writeln('• Job-Paket abgelegt in: ${standardFolders.wartungslistenPath ?? "Wartungslisten"}');
+      buffer.writeln(
+          '• Job-Paket abgelegt in: ${standardFolders.wartungslistenPath ?? "Wartungslisten"}');
       if (photoSync.totalFound > 0) {
-        buffer.writeln('• Fotos: ${photoSync.uploadedCount} hochgeladen, ${photoSync.skippedCount} bereits vorhanden (übersprungen) in: ${standardFolders.fotomaterialPath ?? "Fotomaterial"}');
+        buffer.writeln(
+            '• Fotos: ${photoSync.uploadedCount} hochgeladen, ${photoSync.skippedCount} bereits vorhanden (übersprungen) in: ${standardFolders.fotomaterialPath ?? "Fotomaterial"}');
       } else {
-        buffer.writeln('• Fotos: Keine Mängelfotos in dieser Inspektion enthalten.');
+        buffer.writeln(
+            '• Fotos: Keine Mängelfotos in dieser Inspektion enthalten.');
       }
       if (messageWarning != null) {
         buffer.writeln('\n(Hinweis: $messageWarning)');
       }
 
+      AppLogger.info('CraftnoteSync',
+          'Erfolgreich nach Craftnote exportiert: Inspektion #$inspectionId -> Projekt $targetProjectId');
       return CraftnoteSyncResult(
         success: true,
         message: buffer.toString().trim(),
@@ -432,7 +516,12 @@ class CraftnoteSyncService {
         wartungslistenFolderId: effectiveWartungslistenId,
         fotomaterialFolderId: standardFolders.fotomaterialFolderId,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error(
+          'CraftnoteSync',
+          'Fehler beim Export für Inspektion #$inspectionId nach Craftnote: $e',
+          e,
+          stack);
       return CraftnoteSyncResult(
         success: false,
         message: 'Fehler beim Export nach Craftnote: $e',
@@ -456,7 +545,8 @@ class CraftnoteSyncService {
       if (!file.isSqliteDatabase && !file.name.toLowerCase().endsWith('.db')) {
         return CraftnoteImportResult(
           success: false,
-          message: 'Die ausgewählte Datei "${file.name}" ist keine SQLite-Paketdatenbank (.db).',
+          message:
+              'Die ausgewählte Datei "${file.name}" ist keine SQLite-Paketdatenbank (.db).',
         );
       }
 
@@ -473,7 +563,8 @@ class CraftnoteSyncService {
       );
 
       final downloadedFile = File(tempPath);
-      if (!await downloadedFile.exists() || await downloadedFile.length() == 0) {
+      if (!await downloadedFile.exists() ||
+          await downloadedFile.length() == 0) {
         return const CraftnoteImportResult(
           success: false,
           message: 'Heruntergeladene Datei ist leer oder existiert nicht.',
@@ -487,8 +578,11 @@ class CraftnoteSyncService {
         // Update Craftnote linkage on Master DB inspections matching this project or filename
         final masterInspections = await DatabaseService.getAllInspections();
         for (final insp in masterInspections) {
-          final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '').toString().trim();
-          if (jobNum.isNotEmpty && (jobNum == project.orderNumber || file.name.contains(jobNum))) {
+          final jobNum = (insp['jobNumber'] ?? insp['auftragsnummer'] ?? '')
+              .toString()
+              .trim();
+          if (jobNum.isNotEmpty &&
+              (jobNum == project.orderNumber || file.name.contains(jobNum))) {
             final inspId = insp['inspectionId'] as int;
             await DatabaseService.updateInspectionCraftnoteStatus(
               inspId,
@@ -509,12 +603,14 @@ class CraftnoteSyncService {
 
         return CraftnoteImportResult(
           success: true,
-          message: 'Prüfergebnis erfolgreich aus Craftnote importiert (${report.newDoorsCount} Türen neu, ${report.updatedDoorsCount} aktualisiert).',
+          message:
+              'Prüfergebnis erfolgreich aus Craftnote importiert (${report.newDoorsCount} Türen neu, ${report.updatedDoorsCount} aktualisiert).',
           report: report,
         );
       } else {
         // Merge into local working database
-        final report = await LocalDatabaseService.importAndMergePackage(tempPath);
+        final report =
+            await LocalDatabaseService.importAndMergePackage(tempPath);
 
         // Link newly imported inspection(s) to this Craftnote project
         final localInspections = await LocalDatabaseService.getAllInspections();
@@ -538,7 +634,8 @@ class CraftnoteSyncService {
 
         return CraftnoteImportResult(
           success: true,
-          message: 'Auftrag erfolgreich aus Craftnote importiert (${report.newDoorsCount} Türen neu, ${report.updatedDoorsCount} aktualisiert).',
+          message:
+              'Auftrag erfolgreich aus Craftnote importiert (${report.newDoorsCount} Türen neu, ${report.updatedDoorsCount} aktualisiert).',
           report: report,
         );
       }
@@ -628,7 +725,8 @@ class CraftnoteSyncService {
       CraftnoteFile? targetPackage = preferredFile;
 
       if (targetPackage == null) {
-        final filterWord = mustContainWord ?? (isManagerMode ? 'ergebnis' : null);
+        final filterWord =
+            mustContainWord ?? (isManagerMode ? 'ergebnis' : null);
         final exclude = excludeWord ?? (isManagerMode ? null : 'ergebnis');
         var packages = await getProjectDbPackages(
           project.id,
@@ -654,13 +752,16 @@ class CraftnoteSyncService {
             }).toList();
             if (matching.isNotEmpty) {
               packages = matching;
-              effectiveProject = await apiService.getProjectById(CraftnoteCredentialsService.testProjectId);
+              effectiveProject = await apiService
+                  .getProjectById(CraftnoteCredentialsService.testProjectId);
             }
           } catch (_) {}
         }
 
         if (packages.isEmpty) {
-          final typeDesc = isManagerMode ? 'Prüfergebnis-Paket (*ergebnis*.db)' : 'Wartungspaket (.db)';
+          final typeDesc = isManagerMode
+              ? 'Prüfergebnis-Paket (*ergebnis*.db)'
+              : 'Wartungspaket (.db)';
           return CraftnoteImportResult(
             success: false,
             message:
@@ -708,41 +809,51 @@ class CraftnoteSyncService {
       if (insp == null) {
         return CraftnoteSyncResult(
           success: false,
-          message: 'Auftrag mit ID $inspectionId wurde nicht in der lokalen Datenbank gefunden.',
+          message:
+              'Auftrag mit ID $inspectionId wurde nicht in der lokalen Datenbank gefunden.',
         );
       }
 
-      final jobNumber = (insp['jobNumber']?.toString().trim().isNotEmpty == true)
-          ? insp['jobNumber'].toString().trim()
-          : (insp['auftragsnummer']?.toString().trim() ?? '');
+      final jobNumber =
+          (insp['jobNumber']?.toString().trim().isNotEmpty == true)
+              ? insp['jobNumber'].toString().trim()
+              : (insp['auftragsnummer']?.toString().trim() ?? '');
 
-      if (jobNumber.isEmpty && (insp['craftnoteProjectId'] == null || insp['craftnoteProjectId'].toString().trim().isEmpty)) {
+      if (jobNumber.isEmpty &&
+          (insp['craftnoteProjectId'] == null ||
+              insp['craftnoteProjectId'].toString().trim().isEmpty)) {
         return const CraftnoteSyncResult(
           success: false,
-          message: 'Keine Auftragsnummer (orderNumber) für diesen Auftrag hinterlegt. Das zugehörige Craftnote-Projekt kann nicht ermittelt werden.',
+          message:
+              'Keine Auftragsnummer (orderNumber) für diesen Auftrag hinterlegt. Das zugehörige Craftnote-Projekt kann nicht ermittelt werden.',
         );
       }
 
       // Retrieve doors associated with this inspection
-      final doors = await LocalDatabaseService.getDoorsByInspectionId(inspectionId);
+      final doors =
+          await LocalDatabaseService.getDoorsByInspectionId(inspectionId);
       final doorIds = doors.map((d) => d.id!).whereType<int>().toList();
       if (doorIds.isEmpty) {
         return const CraftnoteSyncResult(
           success: false,
-          message: 'Keine Türen in diesem Auftrag vorhanden. Export abgebrochen.',
+          message:
+              'Keine Türen in diesem Auftrag vorhanden. Export abgebrochen.',
         );
       }
 
       // Generate selective job package to documents directory
       final docDir = await getApplicationDocumentsDirectory();
       final fileName = FileExportHelper.buildPackageFileName(
-        jobNumber: jobNumber.isNotEmpty ? jobNumber : insp['jobNumber']?.toString(),
+        jobNumber:
+            jobNumber.isNotEmpty ? jobNumber : insp['jobNumber']?.toString(),
         projectNumber: insp['projectNumber']?.toString(),
-        objectAddress: insp['objectAddress']?.toString() ?? insp['clientName']?.toString(),
+        objectAddress:
+            insp['objectAddress']?.toString() ?? insp['clientName']?.toString(),
         packageType: 'inspektion_ergebnis',
       );
       final exportPackagePath = p.join(docDir.path, fileName);
-      await LocalDatabaseService.exportSelectiveJobPackage(doorIds, exportPackagePath);
+      await LocalDatabaseService.exportSelectiveJobPackage(
+          doorIds, exportPackagePath);
 
       final isOnline = await hasInternetConnection();
 
@@ -750,25 +861,32 @@ class CraftnoteSyncService {
       // OFFLINE HANDLING: Enqueue in SQLite offline queue
       // ─────────────────────────────────────────────────────────────
       if (!isOnline) {
-        final targetProj = (insp['craftnoteProjectId']?.toString().isNotEmpty == true)
-            ? insp['craftnoteProjectId']!.toString()
-            : (CraftnoteCredentialsService.isTestMode
-                ? CraftnoteCredentialsService.testProjectId
-                : jobNumber);
+        final targetProj =
+            (insp['craftnoteProjectId']?.toString().isNotEmpty == true)
+                ? insp['craftnoteProjectId']!.toString()
+                : (CraftnoteCredentialsService.isTestMode
+                    ? CraftnoteCredentialsService.testProjectId
+                    : jobNumber);
 
         final queueItem = CraftnoteUploadQueueItem(
           inspectionId: inspectionId,
           craftnoteProjectId: targetProj,
           packageFilePath: exportPackagePath,
-          pdfFilePath: (pdfReportPath != null && await File(pdfReportPath).exists()) ? pdfReportPath : null,
+          pdfFilePath:
+              (pdfReportPath != null && await File(pdfReportPath).exists())
+                  ? pdfReportPath
+                  : null,
           queuedAt: DateTime.now().toIso8601String(),
         );
-        final queueId = await LocalDatabaseService.enqueueCraftnoteUpload(queueItem);
+        final queueId =
+            await LocalDatabaseService.enqueueCraftnoteUpload(queueItem);
         await LocalDatabaseService.updateInspectionCraftnoteStatus(
           inspectionId,
           syncStatus: 'queued',
         );
 
+        AppLogger.info('CraftnoteSync',
+            'Offline-Modus: Auftrag $jobNumber (#$inspectionId) in Offline-Warteschlange eingereiht.');
         return CraftnoteSyncResult(
           success: true,
           isQueuedOffline: true,
@@ -786,7 +904,8 @@ class CraftnoteSyncService {
 
       if (jobNumber.isNotEmpty) {
         try {
-          final searchResult = await apiService.findProjectWithArchiveCheck(orderNumber: jobNumber);
+          final searchResult = await apiService.findProjectWithArchiveCheck(
+              orderNumber: jobNumber);
           if (searchResult.isArchived) {
             final projName = searchResult.archivedProject?.name ?? jobNumber;
             return CraftnoteSyncResult(
@@ -800,14 +919,17 @@ class CraftnoteSyncService {
             projectFoundInSearch = true;
           }
         } catch (e) {
-          print('[CraftnoteSyncService] Warning finding project for $jobNumber: $e');
+          print(
+              '[CraftnoteSyncService] Warning finding project for $jobNumber: $e');
         }
       }
 
       // Fallback: If not found by jobNumber, check if craftnoteProjectId was already linked
-      if (matchedProject == null && insp['craftnoteProjectId']?.toString().isNotEmpty == true) {
+      if (matchedProject == null &&
+          insp['craftnoteProjectId']?.toString().isNotEmpty == true) {
         try {
-          matchedProject = await apiService.getProjectById(insp['craftnoteProjectId'].toString());
+          matchedProject = await apiService
+              .getProjectById(insp['craftnoteProjectId'].toString());
         } catch (_) {}
       }
 
@@ -823,11 +945,14 @@ class CraftnoteSyncService {
       if (matchedProject == null) {
         if (CraftnoteCredentialsService.isTestMode) {
           try {
-            final testResults = await apiService.findProjects(orderNumber: CraftnoteCredentialsService.testProjectOrderNumber);
+            final testResults = await apiService.findProjects(
+                orderNumber:
+                    CraftnoteCredentialsService.testProjectOrderNumber);
             if (testResults.isNotEmpty) {
               matchedProject = testResults.first;
             } else {
-              matchedProject = await apiService.getProjectById(CraftnoteCredentialsService.testProjectId);
+              matchedProject = await apiService
+                  .getProjectById(CraftnoteCredentialsService.testProjectId);
             }
           } catch (_) {
             matchedProject = const CraftnoteProject(
@@ -840,7 +965,8 @@ class CraftnoteSyncService {
           // In production mode, we cannot upload if project is not found
           return CraftnoteSyncResult(
             success: false,
-            message: 'Kein passendes Projekt in Craftnote für Auftragsnummer "$jobNumber" gefunden. Bitte prüfen Sie die Auftragsnummer.',
+            message:
+                'Kein passendes Projekt in Craftnote für Auftragsnummer "$jobNumber" gefunden. Bitte prüfen Sie die Auftragsnummer.',
           );
         }
       }
@@ -848,14 +974,17 @@ class CraftnoteSyncService {
       // Safety Sandbox Guard: Redirect to testProjectId if test mode is active
       String targetProjectId = matchedProject.id;
       bool wasRedirected = false;
-      if (CraftnoteCredentialsService.isTestMode && targetProjectId != CraftnoteCredentialsService.testProjectId) {
-        print('[CraftnoteSyncService] 🛡️ TEST MODE GUARD (Inspector): Redirecting upload from "$targetProjectId" to sandbox test project "${CraftnoteCredentialsService.testProjectId}" (#${CraftnoteCredentialsService.testProjectOrderNumber}) to protect live production data.');
+      if (CraftnoteCredentialsService.isTestMode &&
+          targetProjectId != CraftnoteCredentialsService.testProjectId) {
+        print(
+            '[CraftnoteSyncService] 🛡️ TEST MODE GUARD (Inspector): Redirecting upload from "$targetProjectId" to sandbox test project "${CraftnoteCredentialsService.testProjectId}" (#${CraftnoteCredentialsService.testProjectOrderNumber}) to protect live production data.');
         targetProjectId = CraftnoteCredentialsService.testProjectId;
         wasRedirected = true;
       }
 
       // Resolve standard project target folders ("Wartungslisten" and "Fotomaterial")
-      final standardFolders = await resolveProjectStandardFolders(targetProjectId);
+      final standardFolders =
+          await resolveProjectStandardFolders(targetProjectId);
       final effectiveWartungslistenId = standardFolders.wartungslistenFolderId;
       final effectiveFotomaterialId = standardFolders.fotomaterialFolderId;
 
@@ -891,13 +1020,17 @@ class CraftnoteSyncService {
         // 4. Optionally post chat message
         try {
           final inspector = insp['inspectorName'] ?? 'Techniker';
-          final buffer = StringBuffer('✅ [WartungsTool] Wartungsergebnis hochgeladen von $inspector:\n');
-          buffer.writeln('• Auftrag: #${matchedProject.orderNumber.isNotEmpty ? matchedProject.orderNumber : jobNumber}');
+          final buffer = StringBuffer(
+              '✅ [WartungsTool] Wartungsergebnis hochgeladen von $inspector:\n');
+          buffer.writeln(
+              '• Auftrag: #${matchedProject.orderNumber.isNotEmpty ? matchedProject.orderNumber : jobNumber}');
           buffer.writeln('• ${doorIds.length} Tür(en) geprüft');
-          buffer.writeln('• Ergebnis-Paket: ${p.basename(exportPackagePath)} (${standardFolders.wartungslistenPath ?? "Wartungslisten"})');
+          buffer.writeln(
+              '• Ergebnis-Paket: ${p.basename(exportPackagePath)} (${standardFolders.wartungslistenPath ?? "Wartungslisten"})');
           if (pdfUpload != null) buffer.writeln('• PDF-Prüfbericht angehängt');
           if (photoSync.totalFound > 0) {
-            buffer.writeln('• Mängelfotos: ${photoSync.uploadedCount} neu übertragen, ${photoSync.skippedCount} übersprungen (${standardFolders.fotomaterialPath ?? "Fotomaterial"})');
+            buffer.writeln(
+                '• Mängelfotos: ${photoSync.uploadedCount} neu übertragen, ${photoSync.skippedCount} übersprungen (${standardFolders.fotomaterialPath ?? "Fotomaterial"})');
           }
 
           await apiService.postMessage(
@@ -916,20 +1049,30 @@ class CraftnoteSyncService {
         );
 
         // 6. Build inspector feedback confirmation message
-        final buffer = StringBuffer('Wartungsauftrag erfolgreich zu Craftnote exportiert!\n\n');
-        buffer.writeln('• Projekt: ${matchedProject.name} (#${matchedProject.orderNumber.isNotEmpty ? matchedProject.orderNumber : jobNumber})');
+        final buffer = StringBuffer(
+            'Wartungsauftrag erfolgreich zu Craftnote exportiert!\n\n');
+        buffer.writeln(
+            '• Projekt: ${matchedProject.name} (#${matchedProject.orderNumber.isNotEmpty ? matchedProject.orderNumber : jobNumber})');
         if (wasRedirected) {
-          buffer.writeln('🛡️ [Testmodus aktiv]: Uploads wurden sicher in das Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}) übertragen, um Produktivdaten zu schützen.');
-        } else if (!projectFoundInSearch && CraftnoteCredentialsService.isTestMode) {
-          buffer.writeln('🛡️ [Testmodus aktiv]: Auftragsnummer nicht in Craftnote gefunden; Fallback auf Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}).');
+          buffer.writeln(
+              '🛡️ [Testmodus aktiv]: Uploads wurden sicher in das Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}) übertragen, um Produktivdaten zu schützen.');
+        } else if (!projectFoundInSearch &&
+            CraftnoteCredentialsService.isTestMode) {
+          buffer.writeln(
+              '🛡️ [Testmodus aktiv]: Auftragsnummer nicht in Craftnote gefunden; Fallback auf Sandbox-Testprojekt (#${CraftnoteCredentialsService.testProjectOrderNumber}).');
         }
-        buffer.writeln('• Paketdatei: ${p.basename(exportPackagePath)} in "${standardFolders.wartungslistenPath ?? "Wartungslisten"}"');
+        buffer.writeln(
+            '• Paketdatei: ${p.basename(exportPackagePath)} in "${standardFolders.wartungslistenPath ?? "Wartungslisten"}"');
         if (photoSync.totalFound > 0) {
-          buffer.writeln('• Fotos: ${photoSync.uploadedCount} neu hochgeladen, ${photoSync.skippedCount} bereits vorhanden (übersprungen) in "${standardFolders.fotomaterialPath ?? "Fotomaterial"}"');
+          buffer.writeln(
+              '• Fotos: ${photoSync.uploadedCount} neu hochgeladen, ${photoSync.skippedCount} bereits vorhanden (übersprungen) in "${standardFolders.fotomaterialPath ?? "Fotomaterial"}"');
         } else {
-          buffer.writeln('• Fotos: Keine Mängelfotos in diesem Auftrag vorhanden.');
+          buffer.writeln(
+              '• Fotos: Keine Mängelfotos in diesem Auftrag vorhanden.');
         }
 
+        AppLogger.info('CraftnoteSync',
+            'Techniker: Auftrag $jobNumber (#$inspectionId) erfolgreich nach Craftnote übertragen.');
         return CraftnoteSyncResult(
           success: true,
           isQueuedOffline: false,
@@ -943,16 +1086,22 @@ class CraftnoteSyncService {
           message: buffer.toString().trim(),
         );
       } catch (uploadError) {
+        AppLogger.warn('CraftnoteSync',
+            'Techniker: Upload-Verbindung unterbrochen ($uploadError), Auftrag $jobNumber (#$inspectionId) wird in Offline-Queue gespeichert.');
         // Fallback to offline queue if upload fails unexpectedly
         final queueItem = CraftnoteUploadQueueItem(
           inspectionId: inspectionId,
           craftnoteProjectId: targetProjectId,
           packageFilePath: exportPackagePath,
-          pdfFilePath: (pdfReportPath != null && await File(pdfReportPath).exists()) ? pdfReportPath : null,
+          pdfFilePath:
+              (pdfReportPath != null && await File(pdfReportPath).exists())
+                  ? pdfReportPath
+                  : null,
           queuedAt: DateTime.now().toIso8601String(),
           lastError: uploadError.toString(),
         );
-        final queueId = await LocalDatabaseService.enqueueCraftnoteUpload(queueItem);
+        final queueId =
+            await LocalDatabaseService.enqueueCraftnoteUpload(queueItem);
         await LocalDatabaseService.updateInspectionCraftnoteStatus(
           inspectionId,
           syncStatus: 'queued',
@@ -967,7 +1116,12 @@ class CraftnoteSyncService {
           error: uploadError,
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error(
+          'CraftnoteSync',
+          'Techniker: Schwerwiegender Fehler beim Exportieren von Auftrag #$inspectionId: $e',
+          e,
+          stack);
       return CraftnoteSyncResult(
         success: false,
         message: 'Fehler beim Abschließen der Inspektion: $e',
@@ -993,7 +1147,8 @@ class CraftnoteSyncService {
       );
     }
 
-    final pendingItems = await LocalDatabaseService.getPendingCraftnoteUploads();
+    final pendingItems =
+        await LocalDatabaseService.getPendingCraftnoteUploads();
     if (pendingItems.isEmpty) {
       return const SyncQueueReport(
         processed: 0,
@@ -1011,21 +1166,25 @@ class CraftnoteSyncService {
       final pkgFile = File(item.packageFilePath);
       if (!await pkgFile.exists()) {
         failed++;
-        final err = 'Paketdatei ${item.packageFilePath} nicht mehr auf dem Gerät vorhanden.';
+        final err =
+            'Paketdatei ${item.packageFilePath} nicht mehr auf dem Gerät vorhanden.';
         errorMessages.add(err);
-        await LocalDatabaseService.incrementCraftnoteUploadAttempt(item.id!, error: err);
+        await LocalDatabaseService.incrementCraftnoteUploadAttempt(item.id!,
+            error: err);
         continue;
       }
 
       try {
         // Determine target project and enforce Test Mode guard
         String targetProjectId = item.craftnoteProjectId;
-        if (CraftnoteCredentialsService.isTestMode && targetProjectId != CraftnoteCredentialsService.testProjectId) {
+        if (CraftnoteCredentialsService.isTestMode &&
+            targetProjectId != CraftnoteCredentialsService.testProjectId) {
           targetProjectId = CraftnoteCredentialsService.testProjectId;
         }
 
         // Resolve standard folders ("Wartungslisten" and "Fotomaterial")
-        final standardFolders = await resolveProjectStandardFolders(targetProjectId);
+        final standardFolders =
+            await resolveProjectStandardFolders(targetProjectId);
 
         // Upload .db package to Wartungslisten folder
         final dbUpload = await apiService.uploadFile(
@@ -1036,7 +1195,8 @@ class CraftnoteSyncService {
         );
 
         // Upload PDF if present
-        if (item.pdfFilePath != null && await File(item.pdfFilePath!).exists()) {
+        if (item.pdfFilePath != null &&
+            await File(item.pdfFilePath!).exists()) {
           await apiService.uploadFile(
             projectId: targetProjectId,
             file: File(item.pdfFilePath!),
@@ -1077,8 +1237,10 @@ class CraftnoteSyncService {
         succeeded++;
       } catch (e) {
         failed++;
-        errorMessages.add('Fehler bei Upload für Projekt ${item.craftnoteProjectId}: $e');
-        await LocalDatabaseService.incrementCraftnoteUploadAttempt(item.id!, error: e.toString());
+        errorMessages.add(
+            'Fehler bei Upload für Projekt ${item.craftnoteProjectId}: $e');
+        await LocalDatabaseService.incrementCraftnoteUploadAttempt(item.id!,
+            error: e.toString());
       }
     }
 

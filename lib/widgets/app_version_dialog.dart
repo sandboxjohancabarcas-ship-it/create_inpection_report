@@ -6,6 +6,7 @@ import '../services/app_version_service.dart';
 import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../utils/file_export_helper.dart';
+import 'app_log_dialog.dart';
 
 class AppVersionDialog extends StatefulWidget {
   final bool isManager;
@@ -305,6 +306,36 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
                   ],
                 ),
               ],
+              const SizedBox(height: 18),
+              Text(
+                'Diagnose & Protokollierung',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Das Anwendungsprotokoll erfasst Systemereignisse, Craftnote-Synchronisierungen und Fehlerdiagnosen.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => AppLogDialog.show(context),
+                  icon: const Icon(Icons.receipt_long, size: 18),
+                  label: const Text('Anwendungsprotokoll (Log) anzeigen & herunterladen'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal.shade800,
+                    side: BorderSide(color: Colors.teal.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

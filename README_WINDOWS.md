@@ -17,7 +17,7 @@ Bei Windows-Builds treten häufig Dateisperren auf, wenn die App bereits im Hint
 1. Öffnen Sie ein PowerShell-Terminal im Projektverzeichnis.
 2. Führen Sie das Windows-spezifische Rebuild-Skript aus:
    ```powershell
-   ./rebuild_windows.ps1
+   ./scripts/rebuild_windows.ps1
    ```
 3. Das Build-Ergebnis befindet sich unter:
    `build\windows\runner\Release\`
