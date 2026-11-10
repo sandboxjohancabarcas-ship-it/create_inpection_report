@@ -84,11 +84,11 @@ if (-not $SkipSync -and [string]::IsNullOrWhiteSpace($DeviceSerial) -eq $false) 
 
     try {
         $pulledPackagePath = [System.IO.Path]::Combine($tempDir, "field_return_package.db")
-        $deviceSourcePath = "/data/user/0/com.cabarcas.wartungstool/databases/inspektion_ergebnis_guard_test.db"
+        $deviceSourcePath = "/data/user/0/de.gottsberg.wartungstool/databases/inspektion_ergebnis_guard_test.db"
 
         Write-Host "Pulling inspector return package from Android device via run-as..." -ForegroundColor Yellow
         # Use run-as or adb pull depending on app debug permissions
-        $pullResult = adb -s $DeviceSerial exec-out run-as com.cabarcas.wartungstool cat databases/inspektion_ergebnis_guard_test.db > $pulledPackagePath 2>$null
+        $pullResult = adb -s $DeviceSerial exec-out run-as de.gottsberg.wartungstool cat databases/inspektion_ergebnis_guard_test.db > $pulledPackagePath 2>$null
 
         if (-not (Test-Path $pulledPackagePath) -or (Get-Item $pulledPackagePath).Length -eq 0) {
             # Fallback direct adb pull
@@ -100,6 +100,18 @@ if (-not $SkipSync -and [string]::IsNullOrWhiteSpace($DeviceSerial) -eq $false) 
             Write-Host "-> Successfully pulled field return package ($fileSize bytes) from Android device." -ForegroundColor Green
         } else {
             Write-Host "-> Notice: Field package not yet exported or device path not found directly." -ForegroundColor Yellow
+        }
+
+        # Also pull and verify the application log file from the Android device
+        $pulledLogPath = [System.IO.Path]::Combine($tempDir, "app_usage.log")
+        Write-Host "Checking application log file on Android device..." -ForegroundColor Yellow
+        adb -s $DeviceSerial exec-out run-as de.gottsberg.wartungstool cat files/logs/app_usage.log > $pulledLogPath 2>$null
+        if (-not (Test-Path $pulledLogPath) -or ((Get-Item $pulledLogPath).Length -eq 0)) {
+            adb -s $DeviceSerial pull "/sdcard/Android/data/de.gottsberg.wartungstool/files/logs/app_usage.log" $pulledLogPath 2>$null
+        }
+        if ((Test-Path $pulledLogPath) -and ((Get-Item $pulledLogPath).Length -gt 0)) {
+            $logSize = (Get-Item $pulledLogPath).Length
+            Write-Host "-> Successfully verified application log ($logSize bytes) from Android device (de.gottsberg.wartungstool)." -ForegroundColor Green
         }
     } finally {
         if (Test-Path $tempDir) {

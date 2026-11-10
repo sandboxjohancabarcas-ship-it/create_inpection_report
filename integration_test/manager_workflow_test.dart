@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
@@ -17,6 +18,9 @@ import 'package:wartungstool/models/craftnote_models.dart';
 import 'package:wartungstool/services/craftnote_api_service.dart';
 import 'package:wartungstool/services/craftnote_credentials_service.dart';
 import 'package:wartungstool/services/craftnote_sync_service.dart';
+import 'package:wartungstool/services/app_logger.dart';
+import 'package:wartungstool/widgets/app_log_dialog.dart';
+import 'package:wartungstool/widgets/craftnote_test_mode_switch.dart';
 
 Door _makeTestDoor({
   int? id,
@@ -122,7 +126,7 @@ void main() {
     await LocalDatabaseService.closeDb();
   });
 
-  group('Manager Desktop Integration Test Suite (M-UC-01 to M-UC-14)', () {
+  group('Manager Desktop Integration Test Suite (M-UC-01 to M-UC-16)', () {
     // =========================================================================
     // M-UC-01: Multi-Facility Excel Ingestion with Real-World Datasets
     // =========================================================================
@@ -809,6 +813,84 @@ void main() {
       );
       expect(archiveImportResult.success, isFalse);
       expect(archiveImportResult.message, contains('archiviert'));
+    });
+
+    // =========================================================================
+    // M-UC-15: Manager AppLogger Diagnostics & In-App Log Viewer
+    // =========================================================================
+    testWidgets(
+        'M-UC-15 [Manager Desktop]: AppLogger Diagnostics & In-App Log Viewer Access',
+        (WidgetTester tester) async {
+      await AppLogger.instance.init();
+      AppLogger.info('ManagerTest', 'Manager workflow test started');
+      AppLogger.warn('ManagerTest', 'Simulated low disk warning');
+
+      // Allow async file write to flush
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final logs = await AppLogger.instance.readAllLogs();
+      expect(logs, contains('Manager workflow test started'));
+      expect(logs, contains('[WARN]'));
+      expect(AppLogger.instance.recentEntries.any((e) => e.tag == 'ManagerTest'), isTrue);
+
+      // Render In-App Log Viewer dialog in test harness
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppLogDialog(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Anwendungsprotokoll (Log-Datei)'), findsOneWidget);
+      expect(find.text('In Downloads ablegen'), findsOneWidget);
+      expect(find.text('Speichern unter...'), findsOneWidget);
+      expect(find.text('Protokoll leeren'), findsOneWidget);
+    });
+
+    // =========================================================================
+    // M-UC-16: Manager Craftnote Test Mode Switch & Export Feedback
+    // =========================================================================
+    testWidgets(
+        'M-UC-16 [Manager Desktop]: Craftnote Test Mode Switch & Safe Redirection Verification',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+
+      // Test Mode toggling
+      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+      CraftnoteCredentialsService.setTestMode(false);
+      expect(CraftnoteCredentialsService.isTestMode, isFalse);
+      CraftnoteCredentialsService.setTestMode(true);
+      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+
+      // Verify Test Mode Widget toggle rendering
+      bool toggled = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CraftnoteTestModeSwitch(
+              compact: true,
+              onChanged: (val) => toggled = val,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CraftnoteTestModeSwitch), findsOneWidget);
+      expect(find.textContaining('Test'), findsOneWidget);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      expect(toggled, isFalse);
+      expect(CraftnoteCredentialsService.isTestMode, isFalse);
+      expect(find.textContaining('Live'), findsOneWidget);
+
+      // Reset back to test mode for safety
+      CraftnoteCredentialsService.setTestMode(true);
     });
   });
 }

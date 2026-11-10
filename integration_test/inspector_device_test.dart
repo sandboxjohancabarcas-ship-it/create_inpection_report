@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
@@ -9,6 +10,9 @@ import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/craftnote_api_service.dart';
 import 'package:wartungstool/services/craftnote_credentials_service.dart';
 import 'package:wartungstool/services/craftnote_sync_service.dart';
+import 'package:wartungstool/services/app_logger.dart';
+import 'package:wartungstool/widgets/app_log_dialog.dart';
+import 'package:wartungstool/widgets/craftnote_test_mode_switch.dart';
 
 Door _makeTestDoor({
   int? id,
@@ -113,7 +117,7 @@ void main() {
     await db.delete('craftnote_upload_queue');
   });
 
-  group('Inspector Android Device Integration Test Suite (I-UC-01 to I-UC-10)',
+  group('Inspector Android Device Integration Test Suite (I-UC-01 to I-UC-12)',
       () {
     // =========================================================================
     // I-UC-01: Checkout & Ingest Job Package with Auto Safety Backup
@@ -804,6 +808,77 @@ void main() {
       final syncedInsp =
           await LocalDatabaseService.getInspectionById(inspectionId);
       expect(syncedInsp?['craftnoteSyncStatus'], equals('synced'));
+    });
+
+    // =========================================================================
+    // I-UC-11: Inspector AppLogger Diagnostics & In-App Log Viewer
+    // =========================================================================
+    testWidgets(
+        'I-UC-11 [Android Device]: AppLogger Diagnostics & 1-Click Export to Downloads',
+        (WidgetTester tester) async {
+      await AppLogger.instance.init();
+      AppLogger.info('InspectorTest', 'Inspector workflow started on Android device');
+      AppLogger.warn('InspectorTest', 'Simulated door inspection warning note');
+
+      // Allow async file write to flush
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      final logs = await AppLogger.instance.readAllLogs();
+      expect(logs, contains('Inspector workflow started on Android device'));
+      expect(logs, contains('[WARN]'));
+      expect(AppLogger.instance.recentEntries.any((e) => e.tag == 'InspectorTest'), isTrue);
+
+      // Render In-App Log Viewer dialog in test harness
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppLogDialog(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Anwendungsprotokoll (Log-Datei)'), findsOneWidget);
+      expect(find.text('In Downloads ablegen'), findsOneWidget);
+      expect(find.text('Speichern unter...'), findsOneWidget);
+      expect(find.text('Protokoll leeren'), findsOneWidget);
+    });
+
+    // =========================================================================
+    // I-UC-12: Inspector Craftnote Test Mode Switch & Redirection Protection
+    // =========================================================================
+    testWidgets(
+        'I-UC-12 [Android Device]: Craftnote Test Mode Switch & Safe Sandbox Guard',
+        (WidgetTester tester) async {
+      CraftnoteCredentialsService.resetToDefaults();
+      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+
+      bool switchTriggered = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CraftnoteTestModeSwitch(
+              compact: true,
+              onChanged: (val) => switchTriggered = val,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CraftnoteTestModeSwitch), findsOneWidget);
+      expect(find.textContaining('Test'), findsOneWidget);
+
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+
+      expect(switchTriggered, isFalse);
+      expect(CraftnoteCredentialsService.isTestMode, isFalse);
+      expect(find.textContaining('Live'), findsOneWidget);
+
+      // Return to safe Test Mode
+      CraftnoteCredentialsService.setTestMode(true);
     });
   });
 }

@@ -61,6 +61,7 @@ class AppLogger {
   File? _activeLogFile;
   bool _isInitializing = false;
   Completer<void>? _initCompleter;
+  Future<void> _writeQueue = Future.value();
   final StreamController<LogEntry> _entryStreamController =
       StreamController<LogEntry>.broadcast();
 
@@ -182,8 +183,10 @@ class AppLogger {
       debugPrint(entry.format());
     }
 
-    // Persist to file asynchronously
-    _appendToFile(entry);
+    // Persist to file through sequential queue to prevent concurrent race conditions
+    _writeQueue = _writeQueue.then((_) => _appendToFile(entry)).catchError((e) {
+      debugPrint('[AppLogger] File write error: $e');
+    });
   }
 
   Future<void> _appendToFile(LogEntry entry) async {
@@ -206,7 +209,7 @@ class AppLogger {
       }
 
       final line = '${entry.format()}\n';
-      await _activeLogFile!.writeAsString(line, mode: FileMode.append, flush: false);
+      await _activeLogFile!.writeAsString(line, mode: FileMode.append, flush: true);
     } catch (e) {
       debugPrint('[AppLogger] File write notice: $e');
     }
@@ -214,6 +217,8 @@ class AppLogger {
 
   /// Reads the entire active log file text.
   Future<String> readAllLogs() async {
+    // Wait for any pending write operations to flush
+    await _writeQueue;
     try {
       if (_activeLogFile == null) await init();
       if (_activeLogFile != null && await _activeLogFile!.exists()) {
@@ -234,6 +239,7 @@ class AppLogger {
 
   /// Returns the current log file size in bytes.
   Future<int> getLogFileSize() async {
+    await _writeQueue;
     try {
       if (_activeLogFile == null) await init();
       if (_activeLogFile != null && await _activeLogFile!.exists()) {
@@ -245,6 +251,7 @@ class AppLogger {
 
   /// Clears the active log file and in-memory buffer.
   Future<void> clearLogs() async {
+    await _writeQueue;
     _recentEntries.clear();
     try {
       if (_activeLogFile == null) await init();
