@@ -47,7 +47,6 @@
   "manufacturer": {
     "options": [
       "?",
-      "Foto",
       "Schüco",
       "Schüco ADS 80",
       "Schüco ADS 65.Ni SP",
@@ -295,15 +294,13 @@
   },
   "approvalNumber": {
     "options": [
-      "?",
-      "Foto"
+      "?"
     ],
     "default": "?"
   },
   "manufacturerNumber": {
     "options": [
-      "?",
-      "Foto"
+      "?"
     ],
     "default": "?"
   },

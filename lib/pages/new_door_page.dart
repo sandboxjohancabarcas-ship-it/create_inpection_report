@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/local_database_service.dart';
 import '../services/database_service.dart';
 import '../services/door_options_service.dart';
@@ -6,6 +9,7 @@ import '../models/models.dart';
 import '../widgets/master_portal_home_button.dart';
 import '../widgets/editable_dropdown_field.dart';
 import '../widgets/barcode_scanner_dialog.dart';
+import '../widgets/full_screen_photo_viewer.dart';
 import 'error_management_page.dart';
 import 'door_history_page.dart';
 import '../utils/inspection_year_utils.dart';
@@ -67,6 +71,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     'Tuer': 1,
   };
   int _doorPhotoCount = 0;
+  List<String> _doorPhotos = [];
 
   // Boolean states
   bool escapeSignage = false;
@@ -362,7 +367,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
       final junctionResults = await db.query(
         'inspection_doors',
-        columns: ['id'],
+        columns: ['id', 'attachments'],
         where: 'doorId = ? AND inspectionId = ?',
         whereArgs: [doorId, currentInspectionId!],
         limit: 1,
@@ -373,6 +378,18 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           : await LocalDatabaseService.getAllErrorCatalog();
 
       if (junctionResults.isNotEmpty) {
+        final rawAtt = (junctionResults.first['attachments'] ?? '').toString();
+        final loadedPhotos = rawAtt
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (mounted) {
+          setState(() {
+            _doorPhotos = loadedPhotos;
+            _doorPhotoCount = loadedPhotos.length;
+          });
+        }
         final junctionId = junctionResults.first['id'] as int;
         final errors = widget.isManagerMode
             ? await DatabaseService.getDetailedErrorsForInspectionDoor(
@@ -857,7 +874,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           'doorId': insertedDoorId,
           'status': 'Inspected',
           'notes': notesController.text,
-          'attachments': null,
+          'attachments': _doorPhotos.isNotEmpty ? _doorPhotos.join(',') : null,
         });
       } else {
         final updatedDoor = door.copyWith(id: _activeDoor!.id);
@@ -868,6 +885,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             doorId: updatedDoor.id!,
             status: 'Inspected',
             notes: notesController.text,
+            attachments: _doorPhotos.isNotEmpty ? _doorPhotos.join(',') : null,
           );
         }
       }
@@ -883,7 +901,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           'doorId': insertedDoorId,
           'status': 'Inspected',
           'notes': notesController.text,
-          'attachments': null,
+          'attachments': _doorPhotos.isNotEmpty ? _doorPhotos.join(',') : null,
         });
       } else {
         final updatedDoor = door.copyWith(id: _activeDoor!.id);
@@ -894,6 +912,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
             doorId: updatedDoor.id!,
             status: 'Inspected',
             notes: notesController.text,
+            attachments: _doorPhotos.isNotEmpty ? _doorPhotos.join(',') : null,
           );
         }
       }
@@ -958,10 +977,7 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
     return hasValue ? currentValue : null;
   }
 
-  Future<void> _takePropertyPhoto({
-    required String propertyName,
-    ValueChanged<String>? onPhotoSaved,
-  }) async {
+  Future<void> _takeDoorPhoto() async {
     if (_isFormReadOnly) return;
 
     String alias = doorAliasController.text.trim();
@@ -972,31 +988,50 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
       alias = _activeDoor?.doorAlias ?? widget.door?.doorAlias ?? 'Tuer';
     }
 
-    final currentIndex = _propertyPhotoCounters[propertyName] ?? 1;
+    final String jobNum = jobNumberController.text.trim().isNotEmpty
+        ? jobNumberController.text.trim()
+        : (currentInspectionId != null
+            ? 'Auftrag_$currentInspectionId'
+            : 'Auftrag');
 
-    final String? savedPath =
-        await PropertyPhotoHelper.captureAndSavePropertyPhoto(
+    final result = await PropertyPhotoHelper.capturePropertyPhoto(
       context: context,
       doorAlias: alias,
-      propertyName: propertyName,
-      indexNumber: currentIndex,
+      propertyName: 'Tuer',
+      indexNumber: _doorPhotos.length + 1,
+      jobNumber: jobNum,
     );
 
-    if (savedPath != null) {
+    if (result != null) {
+      final timeStr = DateFormat('yyyyMMdd_HHmmss').format(result.timestamp);
+      final photoEntry = '$timeStr#${result.base64Data}';
+
       setState(() {
-        _propertyPhotoCounters[propertyName] = currentIndex + 1;
-        if (propertyName.toLowerCase() == 'tuer' ||
-            propertyName.toLowerCase() == 'tür') {
-          _doorPhotoCount++;
-        }
-        onPhotoSaved?.call('Foto');
+        _doorPhotos.add(photoEntry);
+        _doorPhotoCount = _doorPhotos.length;
       });
 
+      if (currentInspectionId != null && _activeDoor?.id != null) {
+        final atts = _doorPhotos.join(',');
+        if (widget.isManagerMode) {
+          await DatabaseService.updateInspectionDoorAttachments(
+            inspectionId: currentInspectionId!,
+            doorId: _activeDoor!.id!,
+            attachments: atts,
+          );
+        } else {
+          await LocalDatabaseService.updateInspectionDoorAttachments(
+            inspectionId: currentInspectionId!,
+            doorId: _activeDoor!.id!,
+            attachments: atts,
+          );
+        }
+      }
+
       if (mounted) {
-        final String successMsg = (propertyName.toLowerCase() == 'tuer' ||
-                propertyName.toLowerCase() == 'tür')
-            ? 'Türfoto gespeichert unter:\n$savedPath'
-            : 'Foto für $propertyName gespeichert unter:\n$savedPath';
+        final successMsg = result.savedPath != null
+            ? 'Türfoto gespeichert unter:\n${result.savedPath}'
+            : 'Türfoto erfolgreich aufgenommen.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(successMsg),
@@ -1004,6 +1039,173 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _deleteDoorPhoto(int index) async {
+    if (index >= 0 && index < _doorPhotos.length) {
+      setState(() {
+        _doorPhotos.removeAt(index);
+        _doorPhotoCount = _doorPhotos.length;
+      });
+
+      if (currentInspectionId != null && _activeDoor?.id != null) {
+        final atts = _doorPhotos.isNotEmpty ? _doorPhotos.join(',') : null;
+        if (widget.isManagerMode) {
+          await DatabaseService.updateInspectionDoorAttachments(
+            inspectionId: currentInspectionId!,
+            doorId: _activeDoor!.id!,
+            attachments: atts,
+          );
+        } else {
+          await LocalDatabaseService.updateInspectionDoorAttachments(
+            inspectionId: currentInspectionId!,
+            doorId: _activeDoor!.id!,
+            attachments: atts,
+          );
+        }
+      }
+    }
+  }
+
+  void _showDoorPhotosDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Türfotos (${_doorPhotos.length})'),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(dialogCtx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: _doorPhotos.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('Keine Türfotos vorhanden.'),
+                      )
+                    : GridView.builder(
+                        shrinkWrap: true,
+                        itemCount: _doorPhotos.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: 1.0,
+                        ),
+                        itemBuilder: (ctx, idx) {
+                          final photoEntry = _doorPhotos[idx];
+                          String rawData = photoEntry;
+                          if (photoEntry.contains('#')) {
+                            rawData =
+                                photoEntry.split('#').sublist(1).join('#');
+                          }
+                          Uint8List? bytes;
+                          try {
+                            bytes = base64Decode(rawData);
+                          } catch (_) {}
+
+                          return Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: bytes != null
+                                    ? InkWell(
+                                        onTap: () {
+                                          final allBase64 =
+                                              _doorPhotos.map((p) {
+                                            return p.contains('#')
+                                                ? p
+                                                    .split('#')
+                                                    .sublist(1)
+                                                    .join('#')
+                                                : p;
+                                          }).toList();
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  FullScreenPhotoGalleryViewer(
+                                                photos: allBase64,
+                                                initialIndex: idx,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        child: Image.memory(
+                                          bytes,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : const Icon(Icons.broken_image),
+                              ),
+                              if (!_isFormReadOnly)
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: Colors.black54,
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      iconSize: 16,
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.white),
+                                      onPressed: () async {
+                                        await _deleteDoorPhoto(idx);
+                                        setDialogState(() {});
+                                        if (_doorPhotos.isEmpty) {
+                                          Navigator.pop(dialogCtx);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                if (!_isFormReadOnly)
+                  TextButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(dialogCtx);
+                      await _takeDoorPhoto();
+                    },
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text('Neues Foto aufnehmen'),
+                  ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Schließen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _takePropertyPhoto({
+    required String propertyName,
+    ValueChanged<String>? onPhotoSaved,
+  }) async {
+    if (propertyName.toLowerCase() == 'tuer' ||
+        propertyName.toLowerCase() == 'tür') {
+      await _takeDoorPhoto();
+      return;
     }
   }
 
@@ -1164,7 +1366,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                             'doorId': insertedDoorId,
                             'status': 'Pending',
                             'notes': notesController.text,
-                            'attachments': null,
+                            'attachments': _doorPhotos.isNotEmpty
+                                ? _doorPhotos.join(',')
+                                : null,
                           });
                         } else {
                           final id =
@@ -1178,7 +1382,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                             'doorId': insertedDoorId,
                             'status': 'Pending',
                             'notes': notesController.text,
-                            'attachments': null,
+                            'attachments': _doorPhotos.isNotEmpty
+                                ? _doorPhotos.join(',')
+                                : null,
                           });
                         }
                         setState(() {
@@ -1396,7 +1602,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 OutlinedButton.icon(
                   onPressed: _isFormReadOnly
                       ? null
-                      : () => _takePropertyPhoto(propertyName: 'Tuer'),
+                      : () => _doorPhotos.isEmpty
+                          ? _takeDoorPhoto()
+                          : _showDoorPhotosDialog(),
                   icon: const Icon(Icons.camera_alt, size: 18),
                   label: Text(_doorPhotoCount > 0
                       ? "Türfoto ($_doorPhotoCount)"
@@ -1514,10 +1722,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               currentValue: approvalNumber,
               options: DoorOptionsService.getStringOptions('approvalNumber'),
               onChanged: (val) => setState(() => approvalNumber = val),
-              onTakePhoto: () => _takePropertyPhoto(
-                propertyName: "Zulassungsnummer",
-                onPhotoSaved: (val) => approvalNumber = val,
-              ),
             ),
 
             // Hersteller (Manufacturer - Custom drop-down)
@@ -1526,10 +1730,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               currentValue: manufacturer,
               options: DoorOptionsService.getStringOptions('manufacturer'),
               onChanged: (val) => setState(() => manufacturer = val),
-              onTakePhoto: () => _takePropertyPhoto(
-                propertyName: "Hersteller",
-                onPhotoSaved: (val) => manufacturer = val,
-              ),
             ),
 
             // Herstellernummer (Manufacturer number - Placed directly below Hersteller)
@@ -1539,10 +1739,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
               options:
                   DoorOptionsService.getStringOptions('manufacturerNumber'),
               onChanged: (val) => setState(() => manufacturerNumber = val),
-              onTakePhoto: () => _takePropertyPhoto(
-                propertyName: "Herstellernummer",
-                onPhotoSaved: (val) => manufacturerNumber = val,
-              ),
             ),
 
             // DoP-Nummer (Leistungserklärung) - Free alphanumeric field

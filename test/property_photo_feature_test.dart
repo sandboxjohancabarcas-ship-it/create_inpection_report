@@ -141,14 +141,14 @@ void main() {
       expect(find.byIcon(Icons.arrow_drop_down), findsOneWidget);
     });
 
-    testWidgets('Includes "Foto" in dropdown popup menu options when onTakePhoto is provided', (WidgetTester tester) async {
+    testWidgets('Does not include "Foto" in dropdown popup menu options even if in options list', (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: EditableDropdownField(
               label: 'Hersteller',
               currentValue: '?',
-              options: const ['?', 'Hörmann', 'Schüco'],
+              options: const ['?', 'Hörmann', 'Schüco', 'Foto'],
               onChanged: (_) {},
               onTakePhoto: () {},
             ),
@@ -161,8 +161,8 @@ void main() {
       await tester.tap(dropdownArrowFinder);
       await tester.pumpAndSettle();
 
-      // Verify "Foto" is an option in the menu
-      expect(find.text('Foto'), findsWidgets);
+      // Verify "Foto" is NOT an option in the menu
+      expect(find.text('Foto'), findsNothing);
     });
 
     test('formatDoorPhotoName constructs alias_Tuer_indexNumber.jpg correctly', () {

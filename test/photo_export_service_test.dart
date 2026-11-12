@@ -70,14 +70,19 @@ void main() {
         notes: '',
       ));
 
+      // 3. Create sample base64 images
+      final dummyBytesGeneral = Uint8List.fromList([11, 12, 13, 14, 15]);
+      final b64_general = base64Encode(dummyBytesGeneral);
+      final generalTimestamp = '20261112_083526';
+
       final junction1Id = await DatabaseService.insertInspectionDoor({
         'inspectionId': inspId,
         'doorId': door1Id,
         'status': 'Inspected',
         'notes': '',
+        'attachments': '$generalTimestamp#$b64_general',
       });
 
-      // 3. Create sample base64 images
       final dummyBytes1 = Uint8List.fromList([1, 2, 3, 4, 5]);
       final dummyBytes2 = Uint8List.fromList([6, 7, 8, 9, 10]);
       final b64_1 = base64Encode(dummyBytes1);
@@ -101,14 +106,18 @@ void main() {
         isManagerMode: true,
       );
 
-      expect(result.totalPhotos, equals(2));
+      expect(result.totalPhotos, equals(3));
+      expect(result.exportedFileNames, contains('000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg'));
       expect(result.exportedFileNames, contains('000331-1-EG-101_Fehler_1.1.1_1.jpg'));
       expect(result.exportedFileNames, contains('000331-1-EG-101_Fehler_1.1.1_2.jpg'));
 
+      final generalFile = File('${tempDir.path}/000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg');
       final file1 = File('${tempDir.path}/000331-1-EG-101_Fehler_1.1.1_1.jpg');
       final file2 = File('${tempDir.path}/000331-1-EG-101_Fehler_1.1.1_2.jpg');
+      expect(generalFile.existsSync(), isTrue);
       expect(file1.existsSync(), isTrue);
       expect(file2.existsSync(), isTrue);
+      expect(generalFile.readAsBytesSync(), equals(dummyBytesGeneral));
       expect(file1.readAsBytesSync(), equals(dummyBytes1));
       expect(file2.readAsBytesSync(), equals(dummyBytes2));
     } finally {

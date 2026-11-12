@@ -32,9 +32,9 @@ void main() {
       expect(DoorOptionsService.getDefault('doorType'), equals('?'));
       expect(DoorOptionsService.getDefault('wingCount'), equals(1));
 
-      expect(DoorOptionsService.getStringOptions('approvalNumber'), contains('Foto'));
-      expect(DoorOptionsService.getStringOptions('manufacturer'), contains('Foto'));
-      expect(DoorOptionsService.getStringOptions('manufacturerNumber'), contains('Foto'));
+      expect(DoorOptionsService.getStringOptions('approvalNumber'), isNot(contains('Foto')));
+      expect(DoorOptionsService.getStringOptions('manufacturer'), isNot(contains('Foto')));
+      expect(DoorOptionsService.getStringOptions('manufacturerNumber'), isNot(contains('Foto')));
     });
 
     test('Supports mocking configuration data', () {

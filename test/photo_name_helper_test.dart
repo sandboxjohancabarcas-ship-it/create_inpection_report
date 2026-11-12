@@ -110,5 +110,23 @@ void main() {
       );
       expect(propPhotoUmlaut, equals('Tuer-05_Tuer_1.jpg'));
     });
+
+    test('formatGeneralDoorPhotoName correctly constructs [door alias]_[Auftragsnummer]_allgemein_[timeStamp].jpg', () {
+      final fixedDate = DateTime(2026, 11, 12, 8, 35, 26);
+      final generalPhoto = PhotoNameHelper.formatGeneralDoorPhotoName(
+        doorAlias: '000100-1-EG-21.2',
+        jobNumber: '26-14078-AB',
+        timestamp: fixedDate,
+      );
+      expect(generalPhoto, equals('000100-1-EG-21.2_26-14078-AB_allgemein_20261112_083526.jpg'));
+
+      final generalPhotoMultiple = PhotoNameHelper.formatGeneralDoorPhotoName(
+        doorAlias: '000100-1-EG-21.2',
+        jobNumber: '26-14078-AB',
+        timestamp: fixedDate,
+        photoIndex: 2,
+      );
+      expect(generalPhotoMultiple, equals('000100-1-EG-21.2_26-14078-AB_allgemein_20261112_083526_2.jpg'));
+    });
   });
 }

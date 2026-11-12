@@ -14,10 +14,11 @@ Um die Anwendung zu kompilieren, muss Ihre Entwicklungsumgebung folgende Anforde
 Wir stellen ein automatisiertes Skript zur Verfügung, das das Prozessmanagement und das Löschen des Caches übernimmt, um einen sauberen Build zu gewährleisten.
 
 1. Öffnen Sie ein PowerShell-Terminal im Projektverzeichnis.
-2. Führen Sie das Rebuild-Skript aus:
+2. Führen Sie das Android-Rebuild-Skript aus:
    ```powershell
-   ./rebuild.ps1
+   ./scripts/rebuild_android.ps1
    ```
+   *(Optional können Sie mit `-Install` die APK direkt auf ein per USB angeschlossenes Tablet installieren lassen: `./scripts/rebuild_android.ps1 -Install`)*
 3. Nach Abschluss befindet sich die Installationsdatei unter:
    `build\app\outputs\flutter-apk\app-release.apk`
 

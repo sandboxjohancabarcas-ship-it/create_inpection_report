@@ -25,7 +25,7 @@ class DoorOptionsService {
       "default": "?"
     },
     "manufacturer": {
-      "options": ["?", "Foto", "Schüco", "Schüco ADS 80", "Schüco ADS 65.Ni SP", "Hueck-Alu", "Schüco Jansen-Stahl", "Forster Fuego-St.", "Forster Presto-St.", "MBB-Stahl", "RP-Stahl", "Hörmann-St.", "Teckentrup-St.", "Novoferm-St.", "Schörghuber-Holz", "Herholz-Holz", "Specht-Holz", "Schwarze-Stahl", "Hoba-Holz"],
+      "options": ["?", "Schüco", "Schüco ADS 80", "Schüco ADS 65.Ni SP", "Hueck-Alu", "Schüco Jansen-Stahl", "Forster Fuego-St.", "Forster Presto-St.", "MBB-Stahl", "RP-Stahl", "Hörmann-St.", "Teckentrup-St.", "Novoferm-St.", "Schörghuber-Holz", "Herholz-Holz", "Specht-Holz", "Schwarze-Stahl", "Hoba-Holz"],
       "default": "?"
     },
     "dinConfiguration": {
@@ -116,11 +116,11 @@ class DoorOptionsService {
       "default": "Nein"
     },
     "approvalNumber": {
-      "options": ["?", "Foto"],
+      "options": ["?"],
       "default": "?"
     },
     "manufacturerNumber": {
-      "options": ["?", "Foto"],
+      "options": ["?"],
       "default": "?"
     },
     "lintelHeightValue": {
@@ -250,6 +250,15 @@ class DoorOptionsService {
       list.removeWhere((e) =>
           e.toString().trim() == 'Schloßmaße/Stulp' ||
           e.toString().trim() == 'DM/Abst./Nuß-Stulp');
+    }
+
+    // Remove legacy 'Foto' from approvalNumber, manufacturer, manufacturerNumber
+    const photoKeys = ['approvalNumber', 'manufacturer', 'manufacturerNumber'];
+    for (final k in photoKeys) {
+      if (_options.containsKey(k) && _options[k]['options'] is List) {
+        final list = _options[k]['options'] as List;
+        list.removeWhere((e) => e.toString().trim().toLowerCase() == 'foto');
+      }
     }
   }
 
@@ -444,7 +453,7 @@ class DoorOptionsService {
         return (e['value'] ?? e['label'] ?? '').toString();
       }
       return e.toString();
-    }).toList();
+    }).where((s) => s.toLowerCase() != 'foto').toList();
   }
 
   /// Helper to get options as a list of integers.
@@ -491,7 +500,7 @@ class DoorOptionsService {
 
     for (final entry in dropdownValues.entries) {
       final val = entry.value.trim();
-      if (val.isNotEmpty && val != '?' && val.toLowerCase() != 'nein' && val != '(leer)') {
+      if (val.isNotEmpty && val != '?' && val.toLowerCase() != 'nein' && val != '(leer)' && val.toLowerCase() != 'foto') {
         addOption(entry.key, val);
       }
     }

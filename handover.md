@@ -94,7 +94,14 @@ To compile the release version for Android tablets:
 1. Open a PowerShell terminal.
 2. Run the automated clean-and-rebuild script (which handles file locking and Gradle cache transform cleanups):
    ```powershell
-   ./rebuild.ps1
+   ./scripts/rebuild_android.ps1
    ```
 3. The built APK will be located at:
    `build\app\outputs\flutter-apk\app-release.apk`
+
+### Build Windows Application
+To compile the release version for Windows desktop:
+1. Run the Windows rebuild script:
+   ```powershell
+   ./scripts/rebuild_windows.ps1
+   ```

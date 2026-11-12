@@ -51,12 +51,11 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
 
   @override
   Widget build(BuildContext context) {
-    // Unique list of options, ensuring '?' is included first, followed by 'Foto' if photo feature is available
-    final bool hasFoto = widget.onTakePhoto != null || widget.options.contains('Foto');
+    // Unique list of options, ensuring '?' is included first, and 'Foto' is never included
     final List<String> allOptions = [
       '?',
-      if (hasFoto) 'Foto',
-      ...widget.options.where((o) => o != '?' && o != 'Foto'),
+      ...widget.options
+          .where((o) => o != '?' && o.trim().toLowerCase() != 'foto'),
     ];
 
     return Padding(
@@ -69,7 +68,9 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
             return allOptions;
           }
           return allOptions.where((String option) {
-            return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+            return option
+                .toLowerCase()
+                .contains(textEditingValue.text.toLowerCase());
           });
         },
         onSelected: (String selection) {
@@ -116,7 +117,8 @@ class _EditableDropdownFieldState extends State<EditableDropdownField> {
             decoration: InputDecoration(
               labelText: widget.label,
               border: const OutlineInputBorder(),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               suffixIcon: suffix,
             ),
             onChanged: widget.onChanged,

@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 /// Helper utility for generating standardized inspection photo filenames.
 /// 
 /// Format: [door alias]_Fehler_[error code]_[number of picture].jpg
@@ -70,14 +72,51 @@ class PhotoNameHelper {
     return '${cleanAlias}_${cleanProp}_$indexNum.$ext';
   }
 
+  /// Generates the standardized photo filename for a general door photo ("allgemein").
+  /// Format: [door alias]_[Auftragsnummer]_allgemein_[timeStamp].jpg
+  /// Example: 000100-1-EG-21.2_26-14078-AB_allgemein_20261112_083526.jpg
+  static String formatGeneralDoorPhotoName({
+    required String doorAlias,
+    required String jobNumber,
+    DateTime? timestamp,
+    String? timestampStr,
+    int? photoIndex,
+    String extension = 'jpg',
+  }) {
+    final cleanAlias = sanitizeForFilename(doorAlias.trim().isNotEmpty ? doorAlias.trim() : 'Door');
+    final cleanJob = sanitizeForFilename(jobNumber.trim().isNotEmpty ? jobNumber.trim() : 'Auftrag');
+    final cleanExt = extension.startsWith('.') ? extension.substring(1) : extension;
+
+    final timeFormatted = timestampStr ??
+        (timestamp != null
+            ? DateFormat('yyyyMMdd_HHmmss').format(timestamp)
+            : DateFormat('yyyyMMdd_HHmmss').format(DateTime.now()));
+
+    final baseName = '${cleanAlias}_${cleanJob}_allgemein_$timeFormatted';
+    final suffix = (photoIndex != null && photoIndex > 1) ? '_$photoIndex' : '';
+    return cleanExt.isNotEmpty ? '$baseName$suffix.$cleanExt' : '$baseName$suffix';
+  }
+
   /// Generates the standardized photo filename for a door photo in "Grundinformationen".
-  /// Format: [alias]_Tuer_[indexNumber].jpg
-  /// Example: 000100-1-EG-21.2_Tuer_1.jpg
+  /// If [jobNumber] is provided, uses the general door photo format:
+  /// [door alias]_[Auftragsnummer]_allgemein_[timeStamp].jpg
+  /// Otherwise falls back to [alias]_Tuer_[indexNumber].jpg for backward compatibility.
   static String formatDoorPhotoName({
     required String doorAlias,
     required int indexNumber,
+    String? jobNumber,
+    DateTime? timestamp,
     String extension = 'jpg',
   }) {
+    if (jobNumber != null && jobNumber.isNotEmpty) {
+      return formatGeneralDoorPhotoName(
+        doorAlias: doorAlias,
+        jobNumber: jobNumber,
+        timestamp: timestamp,
+        photoIndex: indexNumber > 1 ? indexNumber : null,
+        extension: extension,
+      );
+    }
     return formatPropertyPhotoName(
       doorAlias: doorAlias,
       propertyName: 'Tuer',

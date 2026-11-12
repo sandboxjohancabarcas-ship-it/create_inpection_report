@@ -42,10 +42,10 @@ class PhotoExportService {
   }
 
   /// Exports all photos associated with a specific inspection ID.
-  /// 
+  ///
   /// Photos are named using the standardized format:
   /// [door alias]_Fehler_[error code]_[index].jpg
-  /// 
+  ///
   /// If [destinationDir] is provided, photos are saved there; otherwise a folder in the
   /// default export directory is created (e.g. `Fotos_[jobNumber]_[timestamp]`).
   static Future<PhotoExportResult> exportInspectionPhotos({
@@ -58,9 +58,10 @@ class PhotoExportService {
         ? await DatabaseService.getInspectionById(inspectionId)
         : await LocalDatabaseService.getInspectionById(inspectionId);
 
-    final jobStr = inspection?['jobNumber']?.toString().trim().isNotEmpty == true
-        ? inspection!['jobNumber'].toString().trim()
-        : 'Auftrag_$inspectionId';
+    final jobStr =
+        inspection?['jobNumber']?.toString().trim().isNotEmpty == true
+            ? inspection!['jobNumber'].toString().trim()
+            : 'Auftrag_$inspectionId';
     final safeJob = PhotoNameHelper.sanitizeForFilename(jobStr);
 
     // 2. Fetch doors for the inspection
@@ -78,13 +79,12 @@ class PhotoExportService {
         : [
             for (final d in doors)
               if (d.id != null)
-                await LocalDatabaseService.getInspectionDoor(inspectionId, d.id!)
+                await LocalDatabaseService.getInspectionDoor(
+                    inspectionId, d.id!)
           ].whereType<Map<String, dynamic>>().toList();
 
-    final List<int> junctionIds = junctions
-        .map((j) => j['id'] as int?)
-        .whereType<int>()
-        .toList();
+    final List<int> junctionIds =
+        junctions.map((j) => j['id'] as int?).whereType<int>().toList();
 
     final List<Map<String, dynamic>> errorRows = isManagerMode
         ? await DatabaseService.getErrorsForInspectionDoorIds(junctionIds)
@@ -108,16 +108,97 @@ class PhotoExportService {
       if (!dir.existsSync()) dir.createSync(recursive: true);
     } else {
       final now = DateTime.now();
-      final dateStr = '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final timeStr = '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}';
+      final dateStr =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final timeStr =
+          '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}';
       final timestamp = '${dateStr}_$timeStr';
-      targetDir = await getDefaultExportDirectory(subFolder: 'Fotos_${safeJob}_$timestamp');
+      targetDir = await getDefaultExportDirectory(
+          subFolder: 'Fotos_${safeJob}_$timestamp');
     }
 
     // 6. Extract photos and write to disk
     final List<String> exportedFiles = [];
     int photoCounter = 0;
 
+    // 6a. Extract general door photos ("allgemein") from inspection_doors attachments
+    for (final j in junctions) {
+      final rawDoorAttachments = (j['attachments'] ?? '').toString();
+      if (rawDoorAttachments.trim().isEmpty) continue;
+
+      final doorId = j['doorId'] as int?;
+      final door = doorId != null ? doorMap[doorId] : null;
+
+      final resolvedAlias = door?.doorAlias?.trim().isNotEmpty == true
+          ? door!.doorAlias!.trim()
+          : (door?.provisionalAlias?.trim().isNotEmpty == true
+              ? door!.provisionalAlias!.trim()
+              : (door?.doorNumber.trim().isNotEmpty == true
+                  ? door!.doorNumber.trim()
+                  : 'Tuer'));
+
+      final doorPhotos = rawDoorAttachments
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+      for (int i = 0; i < doorPhotos.length; i++) {
+        final photoEntry = doorPhotos[i];
+        String? entryTimestamp;
+        String rawData = photoEntry;
+
+        if (photoEntry.contains('#')) {
+          final parts = photoEntry.split('#');
+          entryTimestamp = parts[0];
+          rawData = parts.sublist(1).join('#');
+        }
+
+        final fileName = PhotoNameHelper.formatGeneralDoorPhotoName(
+          doorAlias: resolvedAlias,
+          jobNumber: safeJob,
+          timestampStr: entryTimestamp,
+          photoIndex: (doorPhotos.length > 1) ? (i + 1) : null,
+          extension: 'jpg',
+        );
+
+        String uniqueFileName = fileName;
+        int duplicateCounter = 1;
+        while (exportedFiles.contains(uniqueFileName)) {
+          final baseNameNoExt = fileName.endsWith('.jpg')
+              ? fileName.substring(0, fileName.length - 4)
+              : fileName;
+          uniqueFileName = '${baseNameNoExt}_$duplicateCounter.jpg';
+          duplicateCounter++;
+        }
+
+        try {
+          List<int>? bytes;
+          if (await File(rawData).exists()) {
+            bytes = await File(rawData).readAsBytes();
+          } else {
+            String cleanBase64 = rawData.trim();
+            if (cleanBase64.contains(',')) {
+              cleanBase64 = cleanBase64.split(',').last.trim();
+            }
+            bytes = base64Decode(cleanBase64);
+          }
+
+          if (bytes.isNotEmpty) {
+            final filePath = p.join(targetDir, uniqueFileName);
+            final file = File(filePath);
+            await file.writeAsBytes(bytes);
+            exportedFiles.add(uniqueFileName);
+            photoCounter++;
+          }
+        } catch (e) {
+          print(
+              '[PhotoExportService] Error saving general door photo "$uniqueFileName": $e');
+        }
+      }
+    }
+
+    // 6b. Extract defect error photos
     for (final errRow in errorRows) {
       final rawAttachments = (errRow['attachments'] ?? '').toString();
       if (rawAttachments.trim().isEmpty) continue;
@@ -129,14 +210,20 @@ class PhotoExportService {
           ? door!.doorAlias!.trim()
           : (door?.provisionalAlias?.trim().isNotEmpty == true
               ? door!.provisionalAlias!.trim()
-              : (door?.doorNumber.trim().isNotEmpty == true ? door!.doorNumber.trim() : 'Tuer'));
+              : (door?.doorNumber.trim().isNotEmpty == true
+                  ? door!.doorNumber.trim()
+                  : 'Tuer'));
 
       final String rawErrorCode = (errRow['errorCode'] ?? '').toString().trim();
       final errorCode = rawErrorCode.isNotEmpty
           ? rawErrorCode
           : (errRow['code'] ?? 'Fehler').toString();
 
-      final photos = rawAttachments.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      final photos = rawAttachments
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
 
       for (int i = 0; i < photos.length; i++) {
         final photoBase64 = photos[i];

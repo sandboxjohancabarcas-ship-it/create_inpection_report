@@ -2081,6 +2081,7 @@ class DatabaseService {
     required int doorId,
     required String status,
     String? notes,
+    String? attachments,
   }) async {
     final db = await getDb();
     final existing = await db.query(
@@ -2093,6 +2094,7 @@ class DatabaseService {
 
     final Map<String, dynamic> data = {'status': status};
     if (notes != null) data['notes'] = notes;
+    if (attachments != null) data['attachments'] = attachments;
 
     if (existing.isNotEmpty) {
       await db.update(
@@ -2105,6 +2107,30 @@ class DatabaseService {
       data['inspectionId'] = inspectionId;
       data['doorId'] = doorId;
       await db.insert('inspection_doors', data);
+    }
+  }
+
+  /// Updates only the attachments for a door in a given inspection.
+  static Future<void> updateInspectionDoorAttachments({
+    required int inspectionId,
+    required int doorId,
+    required String? attachments,
+  }) async {
+    final db = await getDb();
+    final existing = await db.query(
+      'inspection_doors',
+      columns: ['id'],
+      where: 'inspectionId = ? AND doorId = ?',
+      whereArgs: [inspectionId, doorId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      await db.update(
+        'inspection_doors',
+        {'attachments': attachments},
+        where: 'inspectionId = ? AND doorId = ?',
+        whereArgs: [inspectionId, doorId],
+      );
     }
   }
 
