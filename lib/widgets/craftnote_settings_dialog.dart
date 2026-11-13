@@ -28,7 +28,7 @@ class _CraftnoteSettingsDialogState extends State<CraftnoteSettingsDialog> {
   late TextEditingController _folderController;
 
   bool _isMockMode = false;
-  bool _isTestMode = true;
+  bool _isTestMode = false;
   bool _obscureApiKey = true;
   bool _isTesting = false;
   bool _isSaving = false;

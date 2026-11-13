@@ -852,7 +852,7 @@ void main() {
         'I-UC-12 [Android Device]: Craftnote Test Mode Switch & Safe Sandbox Guard',
         (WidgetTester tester) async {
       CraftnoteCredentialsService.resetToDefaults();
-      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+      expect(CraftnoteCredentialsService.isTestMode, isFalse);
 
       bool switchTriggered = false;
       await tester.pumpWidget(
@@ -868,17 +868,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(CraftnoteTestModeSwitch), findsOneWidget);
-      expect(find.textContaining('Test'), findsOneWidget);
+      expect(find.textContaining('Live'), findsOneWidget);
 
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
 
-      expect(switchTriggered, isFalse);
-      expect(CraftnoteCredentialsService.isTestMode, isFalse);
-      expect(find.textContaining('Live'), findsOneWidget);
+      expect(switchTriggered, isTrue);
+      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+      expect(find.textContaining('Test'), findsOneWidget);
 
-      // Return to safe Test Mode
-      CraftnoteCredentialsService.setTestMode(true);
+      // Return to default
+      CraftnoteCredentialsService.resetToDefaults();
     });
   });
 }
