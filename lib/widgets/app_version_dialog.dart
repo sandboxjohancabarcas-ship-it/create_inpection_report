@@ -7,6 +7,7 @@ import '../services/database_service.dart';
 import '../services/local_database_service.dart';
 import '../utils/file_export_helper.dart';
 import 'app_log_dialog.dart';
+import 'craftnote_test_mode_switch.dart';
 
 class AppVersionDialog extends StatefulWidget {
   final bool isManager;
@@ -335,6 +336,24 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Craftnote-Umgebung',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Umschalten zwischen Produktiv-Umgebung und Test-Sandbox.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 8),
+              CraftnoteTestModeSwitch(
+                compact: false,
+                onChanged: (_) => setState(() {}),
               ),
             ],
           ),
