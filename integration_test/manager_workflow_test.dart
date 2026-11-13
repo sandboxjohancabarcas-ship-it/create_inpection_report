@@ -858,12 +858,12 @@ void main() {
         (WidgetTester tester) async {
       CraftnoteCredentialsService.resetToDefaults();
 
-      // Test Mode toggling
-      expect(CraftnoteCredentialsService.isTestMode, isTrue);
-      CraftnoteCredentialsService.setTestMode(false);
+      // Test Mode toggling (Default is false / Production mode)
       expect(CraftnoteCredentialsService.isTestMode, isFalse);
       CraftnoteCredentialsService.setTestMode(true);
       expect(CraftnoteCredentialsService.isTestMode, isTrue);
+      CraftnoteCredentialsService.setTestMode(false);
+      expect(CraftnoteCredentialsService.isTestMode, isFalse);
 
       // Verify Test Mode Widget toggle rendering
       bool toggled = false;
@@ -880,17 +880,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(CraftnoteTestModeSwitch), findsOneWidget);
-      expect(find.textContaining('Test'), findsOneWidget);
+      expect(find.textContaining('Live'), findsOneWidget);
 
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
 
-      expect(toggled, isFalse);
-      expect(CraftnoteCredentialsService.isTestMode, isFalse);
-      expect(find.textContaining('Live'), findsOneWidget);
+      expect(toggled, isTrue);
+      expect(CraftnoteCredentialsService.isTestMode, isTrue);
+      expect(find.textContaining('Test'), findsOneWidget);
 
-      // Reset back to test mode for safety
-      CraftnoteCredentialsService.setTestMode(true);
+      // Reset back to defaults
+      CraftnoteCredentialsService.resetToDefaults();
     });
   });
 }

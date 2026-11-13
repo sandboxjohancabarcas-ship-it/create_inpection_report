@@ -23,7 +23,7 @@ class CraftnoteCredentialsService {
   static String _baseUrl = defaultLiveBaseUrl;
   static String _folder = defaultFolder;
   static bool _mockMode = false;
-  static bool _isTestMode = true;
+  static bool _isTestMode = false;
   static bool _isLoaded = false;
 
   static String get apiKey => _apiKey;
@@ -108,7 +108,7 @@ class CraftnoteCredentialsService {
         _baseUrl = map['baseUrl']?.toString() ?? defaultLiveBaseUrl;
         _folder = map['folder']?.toString() ?? defaultFolder;
         _mockMode = map['mockMode'] == true;
-        _isTestMode = map['isTestMode'] as bool? ?? true;
+        _isTestMode = map['isTestMode'] as bool? ?? false;
         _isLoaded = true;
         return;
       }
@@ -117,7 +117,7 @@ class CraftnoteCredentialsService {
     }
     _apiKey = defaultApiKey;
     _clientId = defaultClientId;
-    _isTestMode = true;
+    _isTestMode = false;
     _isLoaded = true;
   }
 
@@ -161,7 +161,7 @@ class CraftnoteCredentialsService {
     _baseUrl = defaultLiveBaseUrl;
     _folder = defaultFolder;
     _mockMode = false;
-    _isTestMode = true;
+    _isTestMode = false;
 
     try {
       final file = await _getConfigFile();
