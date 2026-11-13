@@ -98,8 +98,11 @@ Set-Content -Path $appVersionServicePath -Value $serviceCode
 # 4. Update test/app_version_test.dart
 if (Test-Path $appVersionTestPath) {
     $testCode = @"
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wartungstool/services/app_version_service.dart';
+import 'package:wartungstool/widgets/app_version_dialog.dart';
+import 'package:wartungstool/widgets/craftnote_test_mode_switch.dart';
 
 void main() {
   group('AppVersionService Tests', () {
@@ -131,6 +134,20 @@ void main() {
       expect(compactManager, contains('Windows'));
       expect(compactManager, contains('v$targetVer+$targetBuild'));
       expect(compactManager, contains('$targetDate'));
+    });
+
+    testWidgets('AppVersionDialog renders CraftnoteTestModeSwitch', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AppVersionDialog(isManager: false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CraftnoteTestModeSwitch), findsOneWidget);
+      expect(find.text('Craftnote-Umgebung'), findsOneWidget);
     });
   });
 }
