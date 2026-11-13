@@ -268,8 +268,14 @@ class ExcelExportService {
       throw Exception('Inspektionsdaten nicht gefunden.');
     }
 
-    final excel = Excel.createExcel();
     final insp = data['inspection'] as Map<String, dynamic>;
+    final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window') ||
+        (data['windows'] != null && (data['windows'] as List).isNotEmpty);
+    if (isWindow) {
+      return exportSingleWindowInspection(inspectionId, outputPath, data: data);
+    }
+
+    final excel = Excel.createExcel();
     final doors = List<Map<String, dynamic>>.from(data['doors'] as List<Map<String, dynamic>>);
 
     // Sort doors ascending by Pos. (pos)
@@ -1196,6 +1202,322 @@ class ExcelExportService {
       print('Warning: Failed to inject print header/logo: $e');
       return xlsxBytes;
     }
+  }
+
+  /// Exports a single window inspection job to an Excel workbook matching the template layout.
+  static Future<File> exportSingleWindowInspection(
+    int inspectionId,
+    String outputPath, {
+    Map<String, dynamic>? data,
+  }) async {
+    final exportData = data ?? await DatabaseService.getSingleInspectionExportData(inspectionId);
+    if (exportData.isEmpty) {
+      throw Exception('Inspektionsdaten nicht gefunden.');
+    }
+
+    final excel = Excel.createExcel();
+    final insp = exportData['inspection'] as Map<String, dynamic>;
+    final windows = List<Map<String, dynamic>>.from(exportData['windows'] as List<Map<String, dynamic>>? ?? []);
+
+    windows.sort((a, b) {
+      final numA = _cleanText(a['windowNumber']);
+      final numB = _cleanText(b['windowNumber']);
+      return numA.compareTo(numB);
+    });
+
+    final String clientName = _cleanText(insp['clientName']);
+    final String dateStr = _cleanText(insp['date']);
+    final String jobNumber = _cleanText(insp['jobNumber']);
+    final String objectAddress = _cleanText(insp['objectAddress']);
+    final String projectNumber = _cleanText(insp['projectNumber']);
+
+    final String sheetName = 'Fensterliste ${dateStr.replaceAll('-', '.')}';
+    final sheet = excel[sheetName];
+    if (excel.sheets.containsKey('Sheet1')) {
+      excel.delete('Sheet1');
+    }
+
+    // Collect all distinct defects across windows in this inspection
+    final Map<String, String> defectMap = {};
+    for (final w in windows) {
+      final errors = w['errors'] as List<Map<String, dynamic>>? ?? [];
+      for (final e in errors) {
+        final code = _cleanText(e['errorCode'] ?? e['code']);
+        final desc = _cleanText(e['errorDesc'] ?? e['description']);
+        final key = code.isNotEmpty ? code : desc;
+        if (key.isNotEmpty) {
+          final label = desc.isNotEmpty ? (code.isNotEmpty ? '$desc Art.NR:$code' : desc) : code;
+          defectMap[key] = label;
+        }
+      }
+    }
+    final sortedDefectKeys = defectMap.keys.toList()..sort();
+
+    final borderThin = Border(borderStyle: BorderStyle.Thin, borderColorHex: ExcelColor.fromHexString('#000000'));
+    final borderThick = Border(borderStyle: BorderStyle.Medium, borderColorHex: ExcelColor.fromHexString('#000000'));
+    final fontBlack = ExcelColor.fromHexString('#000000');
+    final fillYellow = ExcelColor.fromHexString('#FFFF00');
+    final fillLightGray = ExcelColor.fromHexString('#F2F2F2');
+
+    const int fixedCols = 10;
+    final int notesColIdx = fixedCols + sortedDefectKeys.length;
+    final int totalCols = notesColIdx + 1;
+
+    final Map<int, double> colWidths = {
+      0: 12.0, // Fenster Nr.
+      1: 8.0,  // Etage
+      2: 12.0, // Raum Nr.
+      3: 18.0, // Sonstiges
+      4: 20.0, // Fenstertyp
+      5: 18.0, // Material
+      6: 18.0, // Flügelabmaße
+      7: 16.0, // Beschläge
+      8: 16.0, // Fenster in Ordnung
+      9: 16.0, // Raffstore in Ordnung
+    };
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      colWidths[fixedCols + i] = 16.0;
+    }
+    colWidths[notesColIdx] = 40.0;
+
+    final Map<int, int> rowLineCounts = {};
+
+    // Header Styles
+    final metaLabelStyle = CellStyle(
+      fontSize: 10,
+      bold: true,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
+
+    final positionNumberStyle = CellStyle(
+      fontSize: 10,
+      bold: true,
+      fontColorHex: fontBlack,
+      backgroundColorHex: fillYellow,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
+
+    final colHeaderStyle = CellStyle(
+      fontSize: 10,
+      bold: true,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final defectHeaderStyle = CellStyle(
+      fontSize: 9,
+      bold: true,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    // Row 0: Metadata Row
+    for (int c = 0; c < totalCols; c++) {
+      _setCell(sheet, colWidths, rowLineCounts, col: c, row: 0, text: '', style: metaLabelStyle, trackWidth: false);
+    }
+    _setCell(sheet, colWidths, rowLineCounts, col: 0, row: 0, text: 'Kunde:', style: metaLabelStyle);
+    _setCell(sheet, colWidths, rowLineCounts, col: 2, row: 0, text: clientName, style: metaLabelStyle);
+    _setCell(sheet, colWidths, rowLineCounts, col: 4, row: 0, text: 'Objekt: $objectAddress', style: metaLabelStyle);
+    final offerLabel = jobNumber.isNotEmpty ? 'Angebot $jobNumber, Position:' : 'Auftrag: $projectNumber, Position:';
+    _setCell(sheet, colWidths, rowLineCounts, col: 7, row: 0, text: offerLabel, style: metaLabelStyle);
+
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      _setCell(sheet, colWidths, rowLineCounts, col: fixedCols + i, row: 0, text: '${i + 1}', style: positionNumberStyle);
+    }
+    _setCell(sheet, colWidths, rowLineCounts, col: notesColIdx, row: 0, text: 'Anmerkung', style: metaLabelStyle);
+
+    // Row 1: Column Headers
+    final fixedHeaders = [
+      'Fenster Nr.',
+      'Etage',
+      'Raum Nr.',
+      'Sonstiges',
+      'Fenstertyp\nDreh/Drehkipp\nDIN links/rechts',
+      'Material\nAlu/Kunststoff/Holz',
+      'Flügelabmaße\nBreite x Höhe\nFlügeltiefe',
+      'Beschläge\nHersteller\nArtikelNr.',
+      'Fenster in Ordnung',
+      'Raffstore in Ordnung',
+    ];
+    for (int c = 0; c < fixedHeaders.length; c++) {
+      _setCell(sheet, colWidths, rowLineCounts, col: c, row: 1, text: fixedHeaders[c], style: colHeaderStyle);
+    }
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final key = sortedDefectKeys[i];
+      final label = defectMap[key] ?? key;
+      _setCell(sheet, colWidths, rowLineCounts, col: fixedCols + i, row: 1, text: label, style: defectHeaderStyle);
+    }
+    _setCell(sheet, colWidths, rowLineCounts, col: notesColIdx, row: 1, text: '', style: colHeaderStyle);
+
+    // Data Row Styles
+    final cellCenterStyle = CellStyle(
+      fontSize: 10,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final cellLeftStyle = CellStyle(
+      fontSize: 10,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final notesStyle = CellStyle(
+      fontSize: 9,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Left,
+      verticalAlign: VerticalAlign.Center,
+      textWrapping: TextWrapping.WrapText,
+      topBorder: borderThin,
+      bottomBorder: borderThin,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    final Map<String, int> defectSums = {};
+    for (final k in sortedDefectKeys) {
+      defectSums[k] = 0;
+    }
+
+    // Rows 2..N: Data rows
+    int currentRow = 2;
+    for (final w in windows) {
+      final windowNumber = _cleanText(w['windowNumber']);
+      final floor = _formatFloor(w['floor']);
+      final roomNumber = _cleanText(w['roomNumber']);
+      final sonstiges = _cleanText(w['roomDesignation'] ?? w['sonstiges']);
+      final windowType = _cleanText(w['windowType']);
+      final material = _cleanText(w['material']);
+      final wingDimensions = _cleanText(w['wingDimensions']);
+      final fittings = _cleanText(w['fittings']);
+
+      final bool isOk = (w['isOK'] == 1 || w['isOK'] == true || w['isOK'] == '1');
+      final okStr = isOk ? 'J' : 'N';
+
+      final bool hasRaffstore = (w['hasRaffstore'] == 1 || w['hasRaffstore'] == true || w['hasRaffstore'] == '1');
+      final bool raffstoreOk = (w['raffstoreOK'] == 1 || w['raffstoreOK'] == true || w['raffstoreOK'] == '1');
+      final String raffstoreStr = hasRaffstore ? (raffstoreOk ? 'Ja' : 'Nein') : '';
+
+      final notes = _cleanNoteText(w['junctionNotes'] ?? w['notes']);
+
+      _setCell(sheet, colWidths, rowLineCounts, col: 0, row: currentRow, text: windowNumber, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 1, row: currentRow, text: floor, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 2, row: currentRow, text: roomNumber, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 3, row: currentRow, text: sonstiges, style: cellLeftStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 4, row: currentRow, text: windowType, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 5, row: currentRow, text: material, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 6, row: currentRow, text: wingDimensions, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 7, row: currentRow, text: fittings, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 8, row: currentRow, text: okStr, style: cellCenterStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 9, row: currentRow, text: raffstoreStr, style: cellCenterStyle);
+
+      // Defect quantities
+      final errors = w['errors'] as List<Map<String, dynamic>>? ?? [];
+      final Map<String, int> windowDefectCounts = {};
+      for (final e in errors) {
+        final code = _cleanText(e['errorCode'] ?? e['code']);
+        final desc = _cleanText(e['errorDesc'] ?? e['description']);
+        final key = code.isNotEmpty ? code : desc;
+        final qty = (e['quantity'] as num?)?.toInt() ?? 1;
+        windowDefectCounts[key] = (windowDefectCounts[key] ?? 0) + (qty > 0 ? qty : 1);
+      }
+
+      for (int i = 0; i < sortedDefectKeys.length; i++) {
+        final key = sortedDefectKeys[i];
+        final count = windowDefectCounts[key];
+        final text = (count != null && count > 0) ? '$count' : '';
+        if (count != null && count > 0) {
+          defectSums[key] = (defectSums[key] ?? 0) + count;
+        }
+        _setCell(sheet, colWidths, rowLineCounts, col: fixedCols + i, row: currentRow, text: text, style: cellCenterStyle);
+      }
+
+      _setCell(sheet, colWidths, rowLineCounts, col: notesColIdx, row: currentRow, text: notes, style: notesStyle);
+      currentRow++;
+    }
+
+    // Summary Row (Summe:)
+    final sumLabelStyle = CellStyle(
+      fontSize: 10,
+      bold: true,
+      fontColorHex: fontBlack,
+      horizontalAlign: HorizontalAlign.Right,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThick,
+      rightBorder: borderThick,
+    );
+    final sumValueStyle = CellStyle(
+      fontSize: 10,
+      bold: true,
+      fontColorHex: fontBlack,
+      backgroundColorHex: fillLightGray,
+      horizontalAlign: HorizontalAlign.Center,
+      verticalAlign: VerticalAlign.Center,
+      topBorder: borderThick,
+      bottomBorder: borderThick,
+      leftBorder: borderThin,
+      rightBorder: borderThin,
+    );
+
+    for (int c = 0; c < fixedCols; c++) {
+      _setCell(sheet, colWidths, rowLineCounts, col: c, row: currentRow, text: '', style: sumLabelStyle, trackWidth: false);
+    }
+    _setCell(sheet, colWidths, rowLineCounts, col: 7, row: currentRow, text: 'Summe:', style: sumLabelStyle);
+
+    for (int i = 0; i < sortedDefectKeys.length; i++) {
+      final key = sortedDefectKeys[i];
+      final sum = defectSums[key] ?? 0;
+      final text = sum > 0 ? '$sum' : '';
+      _setCell(sheet, colWidths, rowLineCounts, col: fixedCols + i, row: currentRow, text: text, style: sumValueStyle);
+    }
+    _setCell(sheet, colWidths, rowLineCounts, col: notesColIdx, row: currentRow, text: '', style: sumLabelStyle, trackWidth: false);
+
+    _applyDimensions(sheet, colWidths, rowLineCounts, defaultRowHeight: 22.0);
+
+    final fileBytes = excel.save();
+    if (fileBytes == null) {
+      throw Exception('Excel-Datei konnte nicht generiert werden.');
+    }
+
+    final file = File(outputPath);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(fileBytes);
+    return file;
   }
 
   /// Exports complete historical audit data for a client into a multi-tab Excel workbook

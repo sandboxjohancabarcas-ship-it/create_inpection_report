@@ -1,0 +1,97 @@
+{
+  "floor": {
+    "options": ["?", "EG", "1.OG", "2.OG", "3.OG", "4.OG", "5.OG", "UG", "KG"],
+    "default": "?"
+  },
+  "roomNumber": {
+    "options": ["?", ".1.02", ".1.03", ".1.04", ".1.07", ".1.08", ".1.09", ".1.10", "Flur", "Herren WC", "Dusche Damen", "Treppenhaus"],
+    "default": "?"
+  },
+  "roomDesignation": {
+    "options": [
+      "?",
+      "AiP",
+      "Aktenraum",
+      "Asservatenkammer",
+      "Ausnüchterungszelle",
+      "Auswertung/Aktenraum",
+      "Basisdienst",
+      "Besprechungsraum",
+      "Büro",
+      "Damen WC",
+      "DGF",
+      "DGL",
+      "DGOA",
+      "Dusche Damen",
+      "Empfang",
+      "Flur",
+      "Garderobe",
+      "Gewahrsam",
+      "Herren Dusche",
+      "Herren WC",
+      "Kopierraum",
+      "Küche",
+      "Lager",
+      "Pausenraum",
+      "Serverraum",
+      "Sozialraum",
+      "Teeküche",
+      "Treppenhaus",
+      "Umkleide",
+      "Warteraum",
+      "WC"
+    ],
+    "default": "?"
+  },
+  "windowType": {
+    "options": [
+      "?",
+      "DKL",
+      "DKR",
+      "Kippfenster",
+      "Festverglasung",
+      "Drehfenster L",
+      "Drehfenster R",
+      "Oberlicht",
+      "Schiebefenster"
+    ],
+    "default": "?"
+  },
+  "material": {
+    "options": ["?", "Alu", "Kunststoff", "Holz", "Holz/Alu", "Stahl"],
+    "default": "?"
+  },
+  "wingDimensions": {
+    "options": [
+      "?",
+      "920x480",
+      "1180x750",
+      "1200x1550",
+      "1230x450",
+      "1230x770",
+      "1250x760",
+      "1280x460",
+      "1280x1760",
+      "1300x1550",
+      "1310x480",
+      "2430x750"
+    ],
+    "default": "?"
+  },
+  "fittings": {
+    "options": [
+      "?",
+      "Schüco",
+      "GEZE",
+      "Hueck",
+      "Roto",
+      "Siegenia",
+      "Winkhaus",
+      "GU (Gretsch-Unitas)",
+      "Hautau",
+      "Maco"
+    ],
+    "default": "?"
+  }
+}
+

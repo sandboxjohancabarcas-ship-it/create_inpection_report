@@ -18,7 +18,7 @@ import '../utils/file_export_helper.dart';
 class DatabaseService {
   /// Canonical Master Database Schema Version (Single Source of Truth).
   /// Increment this ONLY when modifying schema tables/columns and adding onUpgrade handlers.
-  static const int currentDatabaseVersion = 28;
+  static const int currentDatabaseVersion = 29;
 
   static Database? _db;
 
@@ -85,6 +85,33 @@ class DatabaseService {
         await db.execute(
             'CREATE INDEX idx_doors_provisional_alias ON doors (provisionalAlias)');
 
+        // Windows table
+        await db.execute('''
+          CREATE TABLE windows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            windowAlias TEXT UNIQUE,
+            provisionalAlias TEXT,
+            windowNumber TEXT,
+            floor TEXT,
+            roomNumber TEXT,
+            roomDesignation TEXT,
+            windowType TEXT,
+            material TEXT,
+            wingDimensions TEXT,
+            fittings TEXT,
+            windowFunctionOK INTEGER DEFAULT 1,
+            hasRaffstore INTEGER DEFAULT 0,
+            raffstoreOK INTEGER,
+            notes TEXT DEFAULT ''
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_windows_number ON windows (windowNumber)');
+        await db.execute(
+            'CREATE UNIQUE INDEX idx_windows_alias ON windows (windowAlias)');
+        await db.execute(
+            'CREATE INDEX idx_windows_provisional_alias ON windows (provisionalAlias)');
+
         // Inspections table
         await db.execute('''
           CREATE TABLE inspections (
@@ -102,7 +129,8 @@ class DatabaseService {
             craftnoteProjectId TEXT,
             craftnoteFileId TEXT,
             craftnoteSyncStatus TEXT DEFAULT 'none',
-            craftnoteLastSyncTime TEXT
+            craftnoteLastSyncTime TEXT,
+            assetType TEXT DEFAULT 'door'
           );
         ''');
         await db.execute(
@@ -127,6 +155,25 @@ class DatabaseService {
           );
         ''');
 
+        // InspectionWindows table
+        await db.execute('''
+          CREATE TABLE inspection_windows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionId INTEGER,
+            windowId INTEGER,
+            status TEXT,
+            notes TEXT,
+            attachments TEXT,
+            syncStatus TEXT,
+            FOREIGN KEY (inspectionId) REFERENCES inspections (inspectionId),
+            FOREIGN KEY (windowId) REFERENCES windows (id)
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_insp_win_insp ON inspection_windows (inspectionId)');
+        await db.execute(
+            'CREATE INDEX idx_insp_win_win ON inspection_windows (windowId)');
+
         // ErrorCatalog table
         await db.execute('''
           CREATE TABLE error_catalog (
@@ -138,9 +185,11 @@ class DatabaseService {
             recommendation TEXT DEFAULT '',
             normReference TEXT DEFAULT '',
             status TEXT NOT NULL DEFAULT 'Approved',
+            assetType TEXT DEFAULT 'door',
             requestedBy TEXT,
             requestDate TEXT,
-            sourceInspectionDoorId INTEGER
+            sourceInspectionDoorId INTEGER,
+            sourceInspectionWindowId INTEGER
           );
         ''');
 
@@ -160,6 +209,25 @@ class DatabaseService {
             FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
           );
         ''');
+
+        // InspectionWindowErrors table
+        await db.execute('''
+          CREATE TABLE inspection_window_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionWindowId INTEGER,
+            errorId INTEGER,
+            errorCode TEXT NOT NULL DEFAULT '',
+            quantity INTEGER,
+            severity TEXT,
+            notes TEXT,
+            resolutionStatus TEXT,
+            attachments TEXT DEFAULT '',
+            FOREIGN KEY (inspectionWindowId) REFERENCES inspection_windows (id),
+            FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_insp_win_err_win ON inspection_window_errors (inspectionWindowId)');
 
         // ErrorRequests table removed - functionality moved to error_catalog
       },
@@ -427,6 +495,92 @@ class DatabaseService {
             print('Main DB migration warning (v28 columns): $e');
           }
         }
+
+        if (oldVersion < 29) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS windows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                windowAlias TEXT UNIQUE,
+                provisionalAlias TEXT,
+                windowNumber TEXT,
+                floor TEXT,
+                roomNumber TEXT,
+                roomDesignation TEXT,
+                windowType TEXT,
+                material TEXT,
+                wingDimensions TEXT,
+                fittings TEXT,
+                windowFunctionOK INTEGER DEFAULT 1,
+                hasRaffstore INTEGER DEFAULT 0,
+                raffstoreOK INTEGER,
+                notes TEXT DEFAULT ''
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_windows_number ON windows (windowNumber)');
+            await db.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS idx_windows_alias ON windows (windowAlias)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_windows_provisional_alias ON windows (provisionalAlias)');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_windows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionId INTEGER,
+                windowId INTEGER,
+                status TEXT,
+                notes TEXT,
+                attachments TEXT,
+                syncStatus TEXT,
+                FOREIGN KEY (inspectionId) REFERENCES inspections (inspectionId),
+                FOREIGN KEY (windowId) REFERENCES windows (id)
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_win_insp ON inspection_windows (inspectionId)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_win_win ON inspection_windows (windowId)');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_window_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionWindowId INTEGER,
+                errorId INTEGER,
+                errorCode TEXT NOT NULL DEFAULT '',
+                quantity INTEGER,
+                severity TEXT,
+                notes TEXT,
+                resolutionStatus TEXT,
+                attachments TEXT DEFAULT '',
+                FOREIGN KEY (inspectionWindowId) REFERENCES inspection_windows (id),
+                FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_win_err_win ON inspection_window_errors (inspectionWindowId)');
+
+            try {
+              await db.execute(
+                  "ALTER TABLE inspections ADD COLUMN assetType TEXT DEFAULT 'door'");
+            } catch (_) {}
+
+            try {
+              await db.execute(
+                  "ALTER TABLE error_catalog ADD COLUMN assetType TEXT DEFAULT 'door'");
+            } catch (_) {}
+
+            try {
+              await db.execute(
+                  "ALTER TABLE error_catalog ADD COLUMN sourceInspectionWindowId INTEGER");
+            } catch (_) {}
+
+            print(
+                '[DatabaseService] Main DB upgraded to v29: Windows, InspectionWindows, and InspectionWindowErrors tables added.');
+          } catch (e) {
+            print('Main DB migration warning (v29 tables/columns): $e');
+          }
+        }
       },
     );
 
@@ -541,8 +695,11 @@ class DatabaseService {
       final db = await getDb();
       await db.delete('inspection_door_errors');
       await db.delete('inspection_doors');
+      await db.delete('inspection_window_errors');
+      await db.delete('inspection_windows');
       await db.delete('inspections');
       await db.delete('doors');
+      await db.delete('windows');
       await db.delete('error_catalog');
     } catch (_) {}
     await closeDb();
@@ -697,6 +854,380 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [doorId],
     );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // WINDOWS
+  // ─────────────────────────────────────────────────────────────
+
+  static Future<int> insertWindow(Window window) async {
+    final db = await getDb();
+    final id = await db.insert(
+      'windows',
+      window.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return id;
+  }
+
+  static Future<void> updateWindow(Window window) async {
+    final db = await getDb();
+    if (window.id == null) return;
+    await db.update(
+      'windows',
+      window.toMap(),
+      where: 'id = ?',
+      whereArgs: [window.id],
+    );
+  }
+
+  static Future<void> deleteWindow(int id) async {
+    final db = await getDb();
+    await db.delete(
+      'inspection_window_errors',
+      where:
+          'inspectionWindowId IN (SELECT id FROM inspection_windows WHERE windowId = ?)',
+      whereArgs: [id],
+    );
+    await db
+        .delete('inspection_windows', where: 'windowId = ?', whereArgs: [id]);
+    await db.delete('windows', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<Window?> getWindowById(int id) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'windows',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Window.fromMap(maps.first) : null;
+  }
+
+  static Future<Window?> getWindowByAlias(String alias) async {
+    final db = await getDb();
+    final clean = alias.trim();
+    final maps = await db.query(
+      'windows',
+      where: 'windowAlias = ? OR provisionalAlias = ?',
+      whereArgs: [clean, clean],
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Window.fromMap(maps.first) : null;
+  }
+
+  /// Finds an existing window matching the given barcode (windowAlias or provisionalAlias),
+  /// optionally excluding a specific window ID.
+  static Future<Window?> findWindowByBarcode(String barcode,
+      {int? excludeWindowId}) async {
+    final db = await getDb();
+    final clean = barcode.trim();
+    if (clean.isEmpty) return null;
+
+    final String whereClause = excludeWindowId != null
+        ? '(windowAlias = ? OR provisionalAlias = ?) AND id != ?'
+        : 'windowAlias = ? OR provisionalAlias = ?';
+    final List<dynamic> whereArgs = excludeWindowId != null
+        ? [clean, clean, excludeWindowId]
+        : [clean, clean];
+
+    final maps = await db.query(
+      'windows',
+      where: whereClause,
+      whereArgs: whereArgs,
+      limit: 1,
+    );
+    return maps.isNotEmpty ? Window.fromMap(maps.first) : null;
+  }
+
+  /// Updates the windowAlias for a specific window ID in Master DB.
+  /// Preserves the existing alias into provisionalAlias if provisionalAlias is not set.
+  static Future<int> updateWindowAlias(int windowId, String newAlias) async {
+    final db = await getDb();
+    final cleanAlias = newAlias.trim();
+    final maps = await db.query('windows',
+        where: 'id = ?', whereArgs: [windowId], limit: 1);
+    if (maps.isNotEmpty) {
+      final currentWindow = Window.fromMap(maps.first);
+      final provisional = (currentWindow.provisionalAlias != null &&
+              currentWindow.provisionalAlias!.isNotEmpty)
+          ? currentWindow.provisionalAlias
+          : (currentWindow.windowAlias ?? cleanAlias);
+      return await db.update(
+        'windows',
+        {
+          'windowAlias': cleanAlias,
+          'provisionalAlias': provisional,
+        },
+        where: 'id = ?',
+        whereArgs: [windowId],
+      );
+    }
+    return await db.update(
+      'windows',
+      {'windowAlias': cleanAlias},
+      where: 'id = ?',
+      whereArgs: [windowId],
+    );
+  }
+
+  static Future<int> insertInspectionWindow(Map<String, dynamic> data) async {
+    final db = await getDb();
+    final inspectionId = data['inspectionId'];
+    final windowId = data['windowId'];
+
+    if (inspectionId != null && windowId != null) {
+      final existing = await db.query(
+        'inspection_windows',
+        columns: ['id'],
+        where: 'inspectionId = ? AND windowId = ?',
+        whereArgs: [inspectionId, windowId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        final updateData = Map<String, dynamic>.from(data);
+        updateData['id'] = existingId;
+        await db.update(
+          'inspection_windows',
+          updateData,
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
+
+    return await db.insert(
+      'inspection_windows',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getInspectionWindowsByInspectionId(
+      int inspectionId) async {
+    final db = await getDb();
+    return await db.query(
+      'inspection_windows',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+  }
+
+  static Future<void> updateInspectionWindowStatus({
+    required int inspectionId,
+    required int windowId,
+    required String status,
+    String? notes,
+    String? attachments,
+  }) async {
+    final db = await getDb();
+    final existing = await db.query(
+      'inspection_windows',
+      columns: ['id'],
+      where: 'inspectionId = ? AND windowId = ?',
+      whereArgs: [inspectionId, windowId],
+      limit: 1,
+    );
+
+    final values = <String, dynamic>{
+      'status': status,
+      if (notes != null) 'notes': notes,
+      if (attachments != null) 'attachments': attachments,
+    };
+
+    if (existing.isNotEmpty) {
+      await db.update(
+        'inspection_windows',
+        values,
+        where: 'inspectionId = ? AND windowId = ?',
+        whereArgs: [inspectionId, windowId],
+      );
+    } else {
+      values['inspectionId'] = inspectionId;
+      values['windowId'] = windowId;
+      await db.insert('inspection_windows', values);
+    }
+  }
+
+  static Future<List<Window>> getWindowsByInspectionId(int inspectionId) async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT w.*, iw.status as inspectionStatus, iw.notes as inspectionNotes, iw.attachments as inspectionAttachments
+      FROM windows w
+      INNER JOIN inspection_windows iw ON w.id = iw.windowId
+      WHERE iw.inspectionId = ?
+      ORDER BY w.windowNumber ASC
+    ''', [inspectionId]);
+    return rows.map((r) => Window.fromMap(r)).toList();
+  }
+
+  static Future<int> insertInspectionWindowError(
+      InspectionWindowError error) async {
+    final db = await getDb();
+
+    if (error.id != null) {
+      final existing = await db.query(
+        'inspection_window_errors',
+        where: 'id = ?',
+        whereArgs: [error.id],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        await db.update(
+          'inspection_window_errors',
+          error.toMap(),
+          where: 'id = ?',
+          whereArgs: [error.id],
+        );
+        return error.id!;
+      }
+    }
+
+    if (error.inspectionWindowId > 0) {
+      List<Map<String, dynamic>> existing = [];
+      if (error.errorId != null) {
+        existing = await db.query(
+          'inspection_window_errors',
+          columns: ['id'],
+          where: 'inspectionWindowId = ? AND errorId = ?',
+          whereArgs: [error.inspectionWindowId, error.errorId],
+          limit: 1,
+        );
+      } else if (error.errorCode.isNotEmpty) {
+        existing = await db.query(
+          'inspection_window_errors',
+          columns: ['id'],
+          where: 'inspectionWindowId = ? AND errorCode = ?',
+          whereArgs: [error.inspectionWindowId, error.errorCode],
+          limit: 1,
+        );
+      }
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        final updateError = error.copyWith(id: existingId);
+        await db.update(
+          'inspection_window_errors',
+          updateError.toMap(),
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
+
+    return await db.insert(
+      'inspection_window_errors',
+      error.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<InspectionWindowError>> getInspectionWindowErrors(
+      int inspectionWindowId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_window_errors',
+      where: 'inspectionWindowId = ?',
+      whereArgs: [inspectionWindowId],
+    );
+    return rows.map((r) => InspectionWindowError.fromMap(r)).toList();
+  }
+
+  static Future<void> deleteInspectionWindowError(int id) async {
+    final db = await getDb();
+    await db
+        .delete('inspection_window_errors', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<List<Map<String, dynamic>>> searchMasterWindowsDetailed({
+    String query = '',
+    String clientFilter = '',
+    String projectFilter = '',
+  }) async {
+    final db = await getDb();
+    final cleanQuery = query.trim();
+    final cleanClient = clientFilter.trim();
+    final cleanProject = projectFilter.trim();
+
+    String whereClause = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (cleanProject.isNotEmpty && cleanProject != 'Alle') {
+      whereClause += ' AND (i.projectNumber = ? OR i.objectAddress = ?)';
+      whereArgs.addAll([cleanProject, cleanProject]);
+    }
+
+    if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
+      whereClause += ' AND i.clientName = ?';
+      whereArgs.add(cleanClient);
+    }
+
+    if (cleanQuery.isNotEmpty) {
+      final searchTerm = '%$cleanQuery%';
+      whereClause += '''
+        AND (
+          w.windowNumber LIKE ? 
+          OR w.windowAlias LIKE ?
+          OR w.roomDesignation LIKE ?
+          OR w.roomNumber LIKE ?
+          OR w.floor LIKE ?
+          OR w.material LIKE ?
+          OR w.windowType LIKE ?
+          OR w.fittings LIKE ?
+          OR i.projectNumber LIKE ?
+          OR i.clientName LIKE ?
+          OR i.jobNumber LIKE ?
+        )
+      ''';
+      whereArgs.addAll([
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+        searchTerm,
+      ]);
+    }
+
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT 
+        w.*,
+        i.inspectionId,
+        i.projectNumber,
+        i.clientName,
+        i.jobNumber,
+        i.objectAddress,
+        i.date AS lastInspectionDate,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_window_errors iwe
+          INNER JOIN inspection_windows iw2 ON iwe.inspectionWindowId = iw2.id
+          WHERE iw2.windowId = w.id
+            AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'beholfen', 'gelöst')
+        ) AS openErrorCount,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_window_errors iwe
+          INNER JOIN inspection_windows iw2 ON iwe.inspectionWindowId = iw2.id
+          WHERE iw2.windowId = w.id
+        ) AS totalErrorCount
+      FROM windows w
+      LEFT JOIN inspection_windows iw ON w.id = iw.windowId
+      LEFT JOIN inspections i ON iw.inspectionId = i.inspectionId
+      WHERE $whereClause
+      GROUP BY w.id
+      ORDER BY w.windowNumber ASC, w.id DESC
+    ''', whereArgs);
+
+    return rows;
   }
 
   /// Performs an automated database integrity audit and self-repair.
@@ -1643,17 +2174,19 @@ class DatabaseService {
     await db.delete('doors', where: 'id = ?', whereArgs: [duplicateDoorId]);
   }
 
-  /// Searches inspections by client name, job number, date, or door number.
-  /// Supports optional clientFilter and limits results to 100 jobs for performance.
+  /// Searches inspections by client name, job number, date, or door/window number.
+  /// Supports optional clientFilter, projectFilter, assetTypeFilter and limits results to 100 jobs for performance.
   static Future<List<Map<String, dynamic>>> searchInspections(
     String query, {
     String clientFilter = '',
     String projectFilter = '',
+    String assetTypeFilter = '',
   }) async {
     final db = await getDb();
     final cleanQuery = query.trim();
     final cleanClient = clientFilter.trim();
     final cleanProject = projectFilter.trim();
+    final cleanAssetType = assetTypeFilter.trim().toLowerCase();
 
     String where = '1=1';
     List<dynamic> whereArgs = [];
@@ -1666,6 +2199,11 @@ class DatabaseService {
     if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
       where += ' AND i.clientName = ?';
       whereArgs.add(cleanClient);
+    }
+
+    if (cleanAssetType.isNotEmpty && cleanAssetType != 'alle') {
+      where += " AND LOWER(COALESCE(i.assetType, 'door')) = ?";
+      whereArgs.add(cleanAssetType);
     }
 
     if (cleanQuery.isNotEmpty) {
@@ -1681,6 +2219,8 @@ class DatabaseService {
         OR d.roomNumber LIKE ?
         OR d.roomDesignation LIKE ?
         OR d.floor LIKE ?
+        OR w.windowNumber LIKE ?
+        OR w.windowAlias LIKE ?
       )''';
       whereArgs.addAll([
         searchTerm,
@@ -1692,15 +2232,21 @@ class DatabaseService {
         searchTerm,
         searchTerm,
         searchTerm,
-        searchTerm
+        searchTerm,
+        searchTerm,
+        searchTerm,
       ]);
     }
 
     return await db.rawQuery('''
-      SELECT i.*, COUNT(DISTINCT id.doorId) as doorCount 
+      SELECT i.*, 
+        COUNT(DISTINCT id.doorId) as doorCount,
+        COUNT(DISTINCT iw.windowId) as windowCount
       FROM inspections i
       LEFT JOIN inspection_doors id ON i.inspectionId = id.inspectionId
       LEFT JOIN doors d ON id.doorId = d.id
+      LEFT JOIN inspection_windows iw ON i.inspectionId = iw.inspectionId
+      LEFT JOIN windows w ON iw.windowId = w.id
       WHERE $where
       GROUP BY i.inspectionId
       ORDER BY i.date DESC
@@ -3649,23 +4195,41 @@ class DatabaseService {
     });
   }
 
-  static Future<List<ErrorCatalog>> getAllErrorCatalog({String? status}) async {
+  static Future<List<ErrorCatalog>> getAllErrorCatalog(
+      {String? status, String? assetType}) async {
     final db = await getDb();
+    final List<String> whereClauses = [];
+    final List<dynamic> whereArgs = [];
+
+    if (status != null && status.isNotEmpty) {
+      whereClauses.add('status = ?');
+      whereArgs.add(status);
+    }
+    if (assetType != null && assetType.isNotEmpty && assetType.toLowerCase() != 'all') {
+      whereClauses.add("LOWER(COALESCE(assetType, 'door')) = ?");
+      whereArgs.add(assetType.toLowerCase());
+    }
+
     final maps = await db.query(
       'error_catalog',
-      where: status != null ? 'status = ?' : null,
-      whereArgs: status != null ? [status] : null,
+      where: whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null,
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
       orderBy: 'category, code',
     );
     return maps.map((m) => ErrorCatalog.fromMap(m)).toList();
   }
 
   /// Fetches unique categories currently present in the error catalog.
-  static Future<List<String>> getErrorCatalogCategories() async {
+  static Future<List<String>> getErrorCatalogCategories({String? assetType}) async {
     final db = await getDb();
-    final maps = await db.rawQuery(
-      'SELECT DISTINCT category FROM error_catalog ORDER BY category ASC',
-    );
+    String query = 'SELECT DISTINCT category FROM error_catalog';
+    List<dynamic> args = [];
+    if (assetType != null && assetType.isNotEmpty && assetType.toLowerCase() != 'all') {
+      query += " WHERE LOWER(COALESCE(assetType, 'door')) = ?";
+      args.add(assetType.toLowerCase());
+    }
+    query += ' ORDER BY category ASC';
+    final maps = await db.rawQuery(query, args);
     return maps.map((m) => m['category'] as String).toList();
   }
 
@@ -3898,10 +4462,98 @@ class DatabaseService {
     } catch (e) {
       print('[Catalog] Error during catalog initialization: $e');
     }
+
+    // Also initialize/seed window error catalog
+    await checkAndInitializeWindowCatalog(force: force);
+  }
+
+  /// Startup module to check and initialize the Window Error Catalog.
+  static Future<void> checkAndInitializeWindowCatalog({bool force = false}) async {
+    final db = await getDb();
+    final countRows = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'window'");
+    final count = Sqflite.firstIntValue(countRows) ?? 0;
+
+    if (!force && count > 0) {
+      print('[Catalog] Window catalog already initialized ($count entries).');
+      return;
+    }
+
+    final dbPath = await getDatabasesPath();
+    final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
+    List<ErrorCatalog> errors = [];
+
+    // 1. External window_error_catalog.json
+    final jsonFile = File(join(externalDir.path, 'window_error_catalog.json'));
+    if (await jsonFile.exists()) {
+      try {
+        final content = await jsonFile.readAsString();
+        errors = _parseJsonCatalog(content, defaultAssetType: 'window');
+      } catch (e) {
+        print('[Catalog] Window JSON Read/Parse Error: $e');
+      }
+    }
+
+    // 2. Project root window_error_catalog.json
+    if (errors.isEmpty) {
+      final projectFile =
+          File(join(Directory.current.path, 'window_error_catalog.json'));
+      if (await projectFile.exists()) {
+        try {
+          final content = await projectFile.readAsString();
+          errors = _parseJsonCatalog(content, defaultAssetType: 'window');
+        } catch (e) {
+          print('[Catalog] Project Root Window JSON Read/Parse Error: $e');
+        }
+      }
+    }
+
+    // 3. Fallback to bundled asset
+    if (errors.isEmpty) {
+      try {
+        final content = await rootBundle.loadString('window_error_catalog.json');
+        errors = _parseJsonCatalog(content, defaultAssetType: 'window');
+      } catch (_) {}
+    }
+
+    if (errors.isEmpty) return;
+
+    try {
+      await db.transaction((txn) async {
+        for (final error in errors) {
+          final existing = await txn.query(
+            'error_catalog',
+            columns: ['errorId'],
+            where: 'code = ?',
+            whereArgs: [error.code],
+            limit: 1,
+          );
+          if (existing.isNotEmpty) {
+            if (force) {
+              await txn.update(
+                'error_catalog',
+                error.toMap()..remove('errorId'),
+                where: 'code = ?',
+                whereArgs: [error.code],
+              );
+            }
+          } else {
+            await txn.insert(
+              'error_catalog',
+              error.toMap()..remove('errorId'),
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+        }
+      });
+      print('[Catalog] Window Error Catalog initialized with ${errors.length} items.');
+    } catch (e) {
+      print('[Catalog] Error during window catalog initialization: $e');
+    }
   }
 
   /// Parses JSON catalog formatted data
-  static List<ErrorCatalog> _parseJsonCatalog(String jsonStr) {
+  static List<ErrorCatalog> _parseJsonCatalog(String jsonStr, {String defaultAssetType = 'door'}) {
     final List<ErrorCatalog> results = [];
     try {
       final Map<String, dynamic> data = jsonDecode(jsonStr);
@@ -3914,6 +4566,7 @@ class DatabaseService {
             severity: value['severity'] as String? ?? 'medium',
             recommendation: value['recommendation'] as String? ?? '',
             normReference: value['normReference'] as String? ?? '',
+            assetType: value['assetType'] as String? ?? defaultAssetType,
           ));
         }
       });
@@ -4450,6 +5103,38 @@ class DatabaseService {
     if (inspRows.isEmpty) return {};
 
     final insp = inspRows.first;
+    final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window');
+
+    if (isWindow) {
+      final List<Map<String, dynamic>> windowRows = await db.rawQuery('''
+        SELECT w.*, iw.id as junctionId, iw.status as junctionStatus, iw.notes as junctionNotes
+        FROM windows w
+        INNER JOIN inspection_windows iw ON w.id = iw.windowId
+        WHERE iw.inspectionId = ?
+        ORDER BY w.windowNumber ASC
+      ''', [inspectionId]);
+
+      final List<Map<String, dynamic>> processedWindows = [];
+      for (final w in windowRows) {
+        final junctionId = w['junctionId'] as int;
+        final errors = await db.rawQuery('''
+          SELECT iwe.*, ec.code as errorCode, ec.description as errorDesc, ec.category as errorCat
+          FROM inspection_window_errors iwe
+          LEFT JOIN error_catalog ec ON iwe.errorCode = ec.code OR iwe.errorId = ec.errorId
+          WHERE iwe.inspectionWindowId = ?
+        ''', [junctionId]);
+
+        final windowData = Map<String, dynamic>.from(w);
+        windowData['errors'] = errors;
+        processedWindows.add(windowData);
+      }
+
+      return {
+        'inspection': insp,
+        'windows': processedWindows,
+        'doors': const <Map<String, dynamic>>[],
+      };
+    }
 
     final List<Map<String, dynamic>> doorRows = await db.rawQuery('''
       SELECT d.*, id.id as junctionId, id.status as junctionStatus, id.notes as junctionNotes
@@ -4477,6 +5162,7 @@ class DatabaseService {
     return {
       'inspection': insp,
       'doors': processedDoors,
+      'windows': const <Map<String, dynamic>>[],
     };
   }
 

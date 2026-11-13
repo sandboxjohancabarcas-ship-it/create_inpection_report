@@ -6,3 +6,6 @@ export 'error_catalog.dart';
 export 'inspection_door_error.dart';
 export 'import_report.dart';
 export 'integrity_report.dart';
+export 'window.dart';
+export 'inspection_window.dart';
+export 'inspection_window_error.dart';

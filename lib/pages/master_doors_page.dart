@@ -21,6 +21,7 @@ import '../services/craftnote_sync_service.dart';
 import '../widgets/import_report_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import 'inspection_doors_page.dart';
+import 'inspection_windows_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 
@@ -1670,11 +1671,15 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                               ),
                             ),
                           Text(
-                            '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
+                            (job['assetType']?.toString().toLowerCase() == 'window')
+                                ? '${(job['windowCount'] as num?)?.toInt() ?? 0} Fenster erfasst'
+                                : '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: Colors.blue.shade800),
+                                color: (job['assetType']?.toString().toLowerCase() == 'window')
+                                    ? Colors.teal.shade800
+                                    : Colors.blue.shade800),
                           ),
                         ],
                       ),
@@ -1744,17 +1749,32 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       if (_selectedInspectionIds.isNotEmpty) {
                         _toggleInspectionSelection(id);
                       } else {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => InspectionDoorsPage(
-                              inspectionId: id,
-                              title:
-                                  '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
-                              isManagerMode: true,
+                        final isWindow = (job['assetType']?.toString().toLowerCase() == 'window');
+                        if (isWindow) {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => InspectionWindowsPage(
+                                inspectionId: id,
+                                title:
+                                    '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
+                                isManagerMode: true,
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        } else {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => InspectionDoorsPage(
+                                inspectionId: id,
+                                title:
+                                    '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
+                                isManagerMode: true,
+                              ),
+                            ),
+                          );
+                        }
                         _loadData();
                       }
                     },

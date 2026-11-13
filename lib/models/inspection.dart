@@ -10,6 +10,8 @@ class Inspection {
   final String? orderType;
   final String? repairDate;
   final int? doorCount;
+  final int? windowCount;
+  final String assetType;
   final dynamic isLocked;
 
   const Inspection({
@@ -22,8 +24,13 @@ class Inspection {
     this.orderType,
     this.repairDate,
     this.doorCount,
+    this.windowCount,
+    this.assetType = 'door',
     this.isLocked,
   });
+
+  bool get isDoorInspection => assetType.toLowerCase() == 'door';
+  bool get isWindowInspection => assetType.toLowerCase() == 'window';
 
   factory Inspection.fromMap(Map<String, dynamic> map) {
     return Inspection(
@@ -37,6 +44,8 @@ class Inspection {
       orderType: map['orderType']?.toString(),
       repairDate: map['repairDate']?.toString(),
       doorCount: (map['doorCount'] as num?)?.toInt(),
+      windowCount: (map['windowCount'] as num?)?.toInt(),
+      assetType: map['assetType']?.toString() ?? 'door',
       isLocked: map['isLocked'],
     );
   }

@@ -17,6 +17,7 @@ import '../widgets/craftnote_test_mode_switch.dart';
 import '../widgets/app_log_dialog.dart';
 import '../services/craftnote_sync_service.dart';
 import 'inspection_doors_page.dart';
+import 'inspection_windows_page.dart';
 import 'package:intl/intl.dart';
 
 class DoorListPage extends StatefulWidget {
@@ -777,6 +778,9 @@ class _DoorListPageState extends State<DoorListPage> {
                           final insp = inspections[index];
                           final id = insp['inspectionId'] as int;
                           final isSelected = _selectedIds.contains(id);
+                          final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window');
+                          final doorCount = insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null;
+                          final windowCount = insp['windowCount'] != null ? (insp['windowCount'] as num).toInt() : null;
 
                           return InspectionSummaryCard(
                             inspectionId: id,
@@ -788,9 +792,9 @@ class _DoorListPageState extends State<DoorListPage> {
                             orderType:
                                 insp['orderType']?.toString() ?? 'Wartung',
                             repairDate: insp['repairDate']?.toString(),
-                            doorCount: insp['doorCount'] != null
-                                ? (insp['doorCount'] as num).toInt()
-                                : null,
+                            doorCount: doorCount,
+                            assetType: insp['assetType']?.toString(),
+                            windowCount: windowCount,
                             isLocked: insp['isLocked'],
                             craftnoteSyncStatus:
                                 insp['craftnoteSyncStatus']?.toString(),
@@ -801,16 +805,29 @@ class _DoorListPageState extends State<DoorListPage> {
                               if (isSelectionMode) {
                                 _toggleSelection(id);
                               } else {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => InspectionDoorsPage(
-                                      inspectionId: id,
-                                      title: insp['clientName'] ?? 'Türenliste',
-                                      isManagerMode: false,
+                                if (isWindow) {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => InspectionWindowsPage(
+                                        inspectionId: id,
+                                        title: insp['clientName'] ?? 'Fensterliste',
+                                        isManagerMode: false,
+                                      ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                } else {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => InspectionDoorsPage(
+                                        inspectionId: id,
+                                        title: insp['clientName'] ?? 'Türenliste',
+                                        isManagerMode: false,
+                                      ),
+                                    ),
+                                  );
+                                }
                                 loadInspections();
                               }
                             },

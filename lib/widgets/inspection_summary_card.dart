@@ -13,6 +13,8 @@ class InspectionSummaryCard extends StatelessWidget {
   final String orderType;
   final String? repairDate;
   final int? doorCount;
+  final String? assetType;
+  final int? windowCount;
   final dynamic isLocked;
   final VoidCallback? onEdit;
   final VoidCallback? onTap;
@@ -32,6 +34,8 @@ class InspectionSummaryCard extends StatelessWidget {
     this.orderType = 'Wartung',
     this.repairDate,
     this.doorCount,
+    this.assetType,
+    this.windowCount,
     this.isLocked,
     this.craftnoteSyncStatus,
     this.onEdit,
@@ -55,6 +59,8 @@ class InspectionSummaryCard extends StatelessWidget {
     final bool locked = InspectionYearUtils.isInspectionLocked(isLocked, date);
     final bool isReparatur = orderType == 'Reparatur';
     final bool isErledigt = orderType == 'Erledigt';
+    final bool isWindow = assetType?.toLowerCase() == 'window' ||
+        (windowCount != null && windowCount! > 0 && (doorCount == null || doorCount == 0));
 
     final Color badgeBg = isErledigt
         ? Colors.green.shade50
@@ -76,10 +82,14 @@ class InspectionSummaryCard extends StatelessWidget {
         leading: Icon(
           isErledigt
               ? Icons.check_circle_outline
-              : (isReparatur ? Icons.handyman_outlined : Icons.business),
+              : (isReparatur
+                  ? Icons.handyman_outlined
+                  : (isWindow ? Icons.window : Icons.business)),
           color: isErledigt
               ? Colors.green.shade700
-              : (isReparatur ? Colors.orange.shade800 : Colors.blue),
+              : (isReparatur
+                  ? Colors.orange.shade800
+                  : (isWindow ? Colors.teal.shade700 : Colors.blue)),
         ),
         title: Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -87,6 +97,34 @@ class InspectionSummaryCard extends StatelessWidget {
           runSpacing: 4,
           children: [
             Text(clientName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (isWindow)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.teal.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.teal.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.window,
+                      size: 11,
+                      color: Colors.teal.shade900,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'Fenster',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
@@ -218,7 +256,10 @@ class InspectionSummaryCard extends StatelessWidget {
               )
             else
               Text('Prüfdatum: $formattedDate'),
-            if (doorCount != null) Text('Türen gesamt: $doorCount'),
+            if (isWindow && windowCount != null)
+              Text('Fenster gesamt: $windowCount')
+            else if (doorCount != null)
+              Text('Türen gesamt: $doorCount'),
           ],
         ),
         trailing: Row(

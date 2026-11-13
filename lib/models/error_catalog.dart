@@ -9,9 +9,11 @@ class ErrorCatalog {
   
   // Consolidation fields
   final String status;        // 'Approved', 'Pending', 'Rejected'
+  final String assetType;     // 'door' | 'window' | ...
   final String? requestedBy;
   final DateTime? requestDate;
   final int? sourceInspectionDoorId;
+  final int? sourceInspectionWindowId;
 
   ErrorCatalog({
     this.errorId,
@@ -22,9 +24,11 @@ class ErrorCatalog {
     this.recommendation = '',
     this.normReference = '',
     this.status = 'Approved', // Default for master data
+    this.assetType = 'door',
     this.requestedBy,
     this.requestDate,
     this.sourceInspectionDoorId,
+    this.sourceInspectionWindowId,
   });
 
   // CopyWith method
@@ -37,9 +41,11 @@ class ErrorCatalog {
     String? recommendation,
     String? normReference,
     String? status,
+    String? assetType,
     String? requestedBy,     
     DateTime? requestDate,
     int? sourceInspectionDoorId,
+    int? sourceInspectionWindowId,
   }) {
     return ErrorCatalog(
       errorId: errorId ?? this.errorId,
@@ -50,9 +56,11 @@ class ErrorCatalog {
       recommendation: recommendation ?? this.recommendation,
       normReference: normReference ?? this.normReference,
       status: status ?? this.status,
+      assetType: assetType ?? this.assetType,
       requestedBy: requestedBy ?? this.requestedBy,
       requestDate: requestDate ?? this.requestDate, 
       sourceInspectionDoorId: sourceInspectionDoorId ?? this.sourceInspectionDoorId,
+      sourceInspectionWindowId: sourceInspectionWindowId ?? this.sourceInspectionWindowId,
     );
   }
 
@@ -65,9 +73,11 @@ class ErrorCatalog {
         'recommendation': recommendation,
         'normReference': normReference,
         'status': status, 
+        'assetType': assetType,
         'requestedBy': requestedBy,
         'requestDate': requestDate?.toIso8601String(),
         'sourceInspectionDoorId': sourceInspectionDoorId,
+        'sourceInspectionWindowId': sourceInspectionWindowId,
       };
 
   static String normalizeSeverity(dynamic raw) {
@@ -102,11 +112,13 @@ class ErrorCatalog {
         recommendation: map['recommendation'] ?? '',
         normReference: map['normReference'] ?? '',
         status: map['status'] ?? 'Approved',
+        assetType: map['assetType']?.toString() ?? 'door',
         requestedBy: map['requestedBy'],
         requestDate: map['requestDate'] != null 
             ? DateTime.tryParse(map['requestDate']) 
             : null,
         sourceInspectionDoorId: map['sourceInspectionDoorId'],
+        sourceInspectionWindowId: map['sourceInspectionWindowId'],
       );
 
   @override

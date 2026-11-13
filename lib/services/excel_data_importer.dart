@@ -5,11 +5,14 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/services/window_options_service.dart';
 
 class ExcelImportResult {
   final int sheetsProcessed;
   final int doorsImported;
+  final int windowsImported;
   final int errorsLinked;
+  final String assetType;
   final List<String> warnings;
   final List<String> logs;
 
@@ -22,8 +25,10 @@ class ExcelImportResult {
 
   ExcelImportResult({
     required this.sheetsProcessed,
-    required this.doorsImported,
+    this.doorsImported = 0,
+    this.windowsImported = 0,
     required this.errorsLinked,
+    this.assetType = 'door',
     required this.warnings,
     this.logs = const [],
     this.doorConflicts = const [],
@@ -32,6 +37,7 @@ class ExcelImportResult {
 
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
   bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
+  int get totalItemsImported => assetType == 'window' ? windowsImported : doorsImported;
 }
 
 class ExcelDataImporter {
@@ -78,6 +84,45 @@ class ExcelDataImporter {
     final allSheets = decoder.tables.keys.toList();
     logs.add(
         'Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
+
+    // Auto-detect asset type: Windows vs Doors
+    bool isWindowFile = fileName.toLowerCase().contains('fenster');
+    if (!isWindowFile) {
+      for (final sName in decoder.tables.keys) {
+        if (sName.toLowerCase().contains('fenster')) {
+          isWindowFile = true;
+          break;
+        }
+        final table = decoder.tables[sName]!;
+        for (int r = 0; r < table.maxRows && r < 5; r++) {
+          final row = table.rows[r];
+          for (final cell in row) {
+            final str = cell?.toString().trim().toLowerCase() ?? '';
+            if (str == 'fenster nr.' ||
+                str == 'fenster nr' ||
+                str == 'fensternummer' ||
+                str == 'fenstertyp' ||
+                str == 'raffstore in ordnung') {
+              isWindowFile = true;
+              break;
+            }
+          }
+          if (isWindowFile) break;
+        }
+        if (isWindowFile) break;
+      }
+    }
+
+    if (isWindowFile) {
+      logs.add('Erkanntes Prüfobjekt: FENSTER (assetType: window)');
+      return await _importWindowsFromFile(
+        decoder: decoder,
+        fileName: fileName,
+        projectNumber: projectNumber,
+        logs: logs,
+        warnings: warnings,
+      );
+    }
 
     // 1. Ensure master error catalog is initialized from asset/db and apply any resolutions
     await DatabaseService.checkAndInitializeCatalog();
@@ -1397,5 +1442,384 @@ class ExcelDataImporter {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
         .toLowerCase();
+  }
+
+  static Future<ExcelImportResult> _importWindowsFromFile({
+    required SpreadsheetDecoder decoder,
+    required String fileName,
+    required String projectNumber,
+    required List<String> logs,
+    required List<String> warnings,
+  }) async {
+    await WindowOptionsService.ensureLoaded();
+    await DatabaseService.checkAndInitializeCatalog();
+    await DatabaseService.checkAndInitializeWindowCatalog();
+
+    // 1. Locate Window data sheet
+    String? targetSheetName;
+    int headerRowIndex = 1;
+
+    for (final sName in decoder.tables.keys) {
+      if (sName.trim().toLowerCase() == 'fehlerliste codes' ||
+          sName.trim().toLowerCase() == 'tabelle3') {
+        continue;
+      }
+      final table = decoder.tables[sName]!;
+      for (int r = 0; r < table.maxRows && r < 5; r++) {
+        final row = table.rows[r];
+        for (final cell in row) {
+          final str = cell?.toString().trim().toLowerCase() ?? '';
+          if (str == 'fenster nr.' ||
+              str == 'fenster nr' ||
+              str == 'fensternummer') {
+            targetSheetName = sName;
+            headerRowIndex = r;
+            break;
+          }
+        }
+        if (targetSheetName != null) break;
+      }
+      if (targetSheetName != null) break;
+    }
+
+    if (targetSheetName == null) {
+      targetSheetName = decoder.tables.keys.first;
+      headerRowIndex = 1;
+    }
+
+    logs.add(
+        'Verarbeite Fenster-Arbeitsblatt: "$targetSheetName" (Kopfzeile: Index $headerRowIndex)');
+    final sheet = decoder.tables[targetSheetName]!;
+
+    // 2. Parse Metadata from row 0 / header area & filename
+    String clientName = '';
+    String objectAddress = '';
+    String jobNumber = '';
+    String dateStr = '';
+
+    if (sheet.maxRows > 0) {
+      final r0 = sheet.rows[0];
+      for (int i = 0; i < r0.length; i++) {
+        final cellStr = _toStr(_cell(r0, i)).trim();
+        if (cellStr.isEmpty) continue;
+
+        if (cellStr.toLowerCase().startsWith('kunde:')) {
+          final remainder = cellStr.substring(6).trim();
+          if (remainder.isNotEmpty) {
+            clientName = remainder;
+          } else if (i + 1 < r0.length &&
+              _toStr(_cell(r0, i + 1)).trim().isNotEmpty) {
+            clientName = _toStr(_cell(r0, i + 1)).trim();
+          } else if (i + 2 < r0.length &&
+              _toStr(_cell(r0, i + 2)).trim().isNotEmpty) {
+            clientName = _toStr(_cell(r0, i + 2)).trim();
+          }
+        } else if (cellStr.toLowerCase().startsWith('objekt:')) {
+          objectAddress = cellStr.substring(7).trim();
+        } else if (cellStr.toLowerCase().contains('angebot') ||
+            cellStr.toLowerCase().contains('auftrag')) {
+          final match = RegExp(r'(\d{2}-\d{5}-[A-Z]+|\d{2}-\d{5})',
+                  caseSensitive: false)
+              .firstMatch(cellStr);
+          if (match != null) {
+            jobNumber = match.group(1)!;
+          }
+        } else if (cellStr.toLowerCase().startsWith('datum:')) {
+          dateStr = cellStr.substring(6).trim();
+        }
+      }
+    }
+
+    if (dateStr.isEmpty) {
+      final dateMatch =
+          RegExp(r'(\d{2})\.(\d{2})\.(\d{4})').firstMatch(fileName);
+      if (dateMatch != null) {
+        dateStr =
+            '${dateMatch.group(3)}-${dateMatch.group(2)}-${dateMatch.group(1)}';
+      }
+    }
+
+    if (jobNumber.isEmpty) {
+      final jobMatch = RegExp(r'(\d{2}-\d{5}-[A-Z]+)').firstMatch(fileName);
+      if (jobMatch != null) {
+        jobNumber = jobMatch.group(1)!;
+      }
+    }
+
+    String effectiveProj = projectNumber;
+    if (effectiveProj.isEmpty) {
+      final projMatch =
+          RegExp(r'(P-\d+)', caseSensitive: false).firstMatch(fileName);
+      if (projMatch != null) {
+        effectiveProj = projMatch.group(1)!.toUpperCase();
+      }
+    }
+    if (effectiveProj.isEmpty) effectiveProj = 'P-000000';
+
+    final normalizedClient = CustomerNormalizer.getCanonicalName(clientName);
+    final effectiveClient = normalizedClient.isNotEmpty
+        ? normalizedClient
+        : (clientName.isNotEmpty ? clientName : 'Sprinkenhof');
+
+    final effectiveDate = dateStr.isNotEmpty
+        ? dateStr
+        : DateTime.now().toIso8601String().substring(0, 10);
+
+    logs.add(
+        'Metadaten erkannt: Kunde="$effectiveClient", Objekt="$objectAddress", Auftrag="$jobNumber", Projekt="$effectiveProj", Datum="$effectiveDate"');
+
+    final inspectionData = {
+      'clientName': effectiveClient,
+      'objectAddress': objectAddress,
+      'date': effectiveDate,
+      'jobNumber': jobNumber,
+      'projectNumber': effectiveProj,
+      'orderType': 'Wartung',
+      'assetType': 'window',
+    };
+
+    final inspectionId = await DatabaseService.insertInspection(inspectionData);
+    logs.add('Inspektion angelegt mit ID: $inspectionId (assetType: window)');
+
+    // 3. Map Header Row Columns
+    final headerRow = sheet.rows[headerRowIndex];
+    int colWinNum = 0;
+    int colFloor = 1;
+    int colRoomNum = 2;
+    int colRoomDesig = 3;
+    int colWinType = 4;
+    int colMat = 5;
+    int colDimensions = 6;
+    int colFittings = 7;
+    int colWinOK = 8;
+    int colRaffstore = 9;
+    int colNotes = -1;
+
+    for (int c = 0; c < headerRow.length; c++) {
+      final h = _toStr(_cell(headerRow, c)).trim().toLowerCase();
+      if (h.contains('fenster nr') || h.contains('fensternummer')) colWinNum = c;
+      if (h.contains('etage')) colFloor = c;
+      if (h.contains('raum nr')) colRoomNum = c;
+      if (h.contains('sonstiges')) colRoomDesig = c;
+      if (h.contains('fenstertyp')) colWinType = c;
+      if (h.contains('material')) colMat = c;
+      if (h.contains('flügelabmaße') || h.contains('abmaße')) colDimensions = c;
+      if (h.contains('beschläge')) colFittings = c;
+      if (h.contains('fenster in ordnung')) colWinOK = c;
+      if (h.contains('raffstore in ordnung') || h.contains('raffstore')) {
+        colRaffstore = c;
+      }
+      if (h.contains('anmerkung')) colNotes = c;
+    }
+
+    if (colNotes == -1 && sheet.maxRows > 0) {
+      final r0 = sheet.rows[0];
+      for (int c = 0; c < r0.length; c++) {
+        if (_toStr(_cell(r0, c)).trim().toLowerCase().contains('anmerkung')) {
+          colNotes = c;
+          break;
+        }
+      }
+    }
+    if (colNotes == -1) {
+      colNotes = headerRow.length - 1;
+    }
+
+    // Map defect columns: between colRaffstore and colNotes
+    final Map<int, ErrorCatalog> defectColumnMap = {};
+    final catalogList =
+        await DatabaseService.getAllErrorCatalog(assetType: 'window');
+
+    for (int c = colRaffstore + 1; c < colNotes && c < headerRow.length; c++) {
+      final headerText = _toStr(_cell(headerRow, c)).trim();
+      if (headerText.isEmpty) continue;
+
+      ErrorCatalog? match;
+      for (final cat in catalogList) {
+        if (cat.description.trim().toLowerCase() == headerText.toLowerCase() ||
+            headerText.toLowerCase().contains(cat.code.toLowerCase())) {
+          match = cat;
+          break;
+        }
+      }
+
+      if (match == null) {
+        final code = 'WIN_COL_$c';
+        final newEntry = ErrorCatalog(
+          code: code,
+          description: headerText,
+          category: 'Fenster Mängelerfassung',
+          severity: 'medium',
+          assetType: 'window',
+        );
+        await DatabaseService.insertErrorCatalog(newEntry);
+        match = newEntry;
+        logs.add('Neuer Katalogfehler angelegt: $code - $headerText');
+      }
+
+      defectColumnMap[c] = match;
+    }
+
+    logs.add(
+        'Erkannte Mängelspalten (${defectColumnMap.length}): ${defectColumnMap.values.map((e) => e.description).join('; ')}');
+
+    // 4. Parse Window Rows
+    int windowsImported = 0;
+    int errorsLinked = 0;
+
+    for (int r = headerRowIndex + 1; r < sheet.maxRows; r++) {
+      final row = sheet.rows[r];
+      if (row.isEmpty) continue;
+
+      final winNum = _toStr(_cell(row, colWinNum)).trim();
+      if (winNum.isEmpty) continue;
+
+      final fittingsVal = (colFittings < row.length
+              ? _toStr(_cell(row, colFittings))
+              : '')
+          .trim();
+      if (winNum.toLowerCase().startsWith('summe') ||
+          fittingsVal.toLowerCase().startsWith('summe')) {
+        logs.add('Summenzeile bei Zeile ${r + 1} erreicht. Beende Zeilen-Import.');
+        break;
+      }
+
+      final floor = (colFloor < row.length ? _toStr(_cell(row, colFloor)) : '').trim();
+      final roomNum = (colRoomNum < row.length ? _toStr(_cell(row, colRoomNum)) : '').trim();
+      final roomDesig = (colRoomDesig < row.length ? _toStr(_cell(row, colRoomDesig)) : '').trim();
+      final winType = (colWinType < row.length ? _toStr(_cell(row, colWinType)) : '').trim();
+      final material = (colMat < row.length ? _toStr(_cell(row, colMat)) : '').trim();
+      final dimensions = (colDimensions < row.length ? _toStr(_cell(row, colDimensions)) : '').trim();
+      final fittings = (colFittings < row.length ? _toStr(_cell(row, colFittings)) : '').trim();
+
+      final winOKStr = (colWinOK < row.length ? _toStr(_cell(row, colWinOK)) : '').trim().toLowerCase();
+      final windowFunctionOK = !(winOKStr == 'n' || winOKStr == 'nein' || winOKStr == '0' || winOKStr == 'false');
+
+      final raffStr = (colRaffstore < row.length ? _toStr(_cell(row, colRaffstore)) : '').trim().toLowerCase();
+      bool hasRaffstore = false;
+      bool? raffstoreOK;
+      if (raffStr.isNotEmpty) {
+        hasRaffstore = true;
+        if (raffStr == 'j' || raffStr == 'ja' || raffStr == '1' || raffStr == 'true') {
+          raffstoreOK = true;
+        } else if (raffStr == 'n' || raffStr == 'nein' || raffStr == '0' || raffStr == 'false') {
+          raffstoreOK = false;
+        }
+      }
+
+      final notes = (colNotes >= 0 && colNotes < row.length ? _toStr(_cell(row, colNotes)) : '').trim();
+
+      bool hasDefect = false;
+      for (final colIdx in defectColumnMap.keys) {
+        if (colIdx < row.length) {
+          final val = _toStr(_cell(row, colIdx)).trim();
+          final qty = int.tryParse(val) ?? ((val.toLowerCase() == 'x' || val == '1') ? 1 : 0);
+          if (qty > 0) {
+            hasDefect = true;
+            if (defectColumnMap[colIdx]!.description.toLowerCase().contains('raffstore')) {
+              hasRaffstore = true;
+              raffstoreOK = false;
+            }
+          }
+        }
+      }
+
+      final alias = Window.generateAlias(
+        projectNumber: effectiveProj,
+        windowNumber: winNum,
+      );
+
+      if (floor.isNotEmpty) WindowOptionsService.addOption('floor', floor);
+      if (roomNum.isNotEmpty) WindowOptionsService.addOption('roomNumber', roomNum);
+      if (roomDesig.isNotEmpty) WindowOptionsService.addOption('roomDesignation', roomDesig);
+      if (winType.isNotEmpty) WindowOptionsService.addOption('windowType', winType);
+      if (material.isNotEmpty) WindowOptionsService.addOption('material', material);
+      if (dimensions.isNotEmpty) WindowOptionsService.addOption('wingDimensions', dimensions);
+      if (fittings.isNotEmpty) WindowOptionsService.addOption('fittings', fittings);
+
+      final existingWindow = await DatabaseService.findWindowByBarcode(alias);
+      int windowId;
+      if (existingWindow != null && existingWindow.id != null) {
+        windowId = existingWindow.id!;
+        final updated = existingWindow.copyWith(
+          floor: floor.isNotEmpty ? floor : existingWindow.floor,
+          roomNumber: roomNum.isNotEmpty ? roomNum : existingWindow.roomNumber,
+          roomDesignation: roomDesig.isNotEmpty ? roomDesig : existingWindow.roomDesignation,
+          windowType: winType.isNotEmpty ? winType : existingWindow.windowType,
+          material: material.isNotEmpty ? material : existingWindow.material,
+          wingDimensions: dimensions.isNotEmpty ? dimensions : existingWindow.wingDimensions,
+          fittings: fittings.isNotEmpty ? fittings : existingWindow.fittings,
+          windowFunctionOK: windowFunctionOK,
+          hasRaffstore: hasRaffstore || existingWindow.hasRaffstore,
+          raffstoreOK: raffstoreOK ?? existingWindow.raffstoreOK,
+          notes: notes.isNotEmpty ? notes : existingWindow.notes,
+        );
+        await DatabaseService.updateWindow(updated);
+      } else {
+        final newWin = Window(
+          id: null,
+          windowAlias: alias,
+          provisionalAlias: alias,
+          windowNumber: winNum,
+          floor: floor,
+          roomNumber: roomNum,
+          roomDesignation: roomDesig,
+          windowType: winType,
+          material: material,
+          wingDimensions: dimensions,
+          fittings: fittings,
+          windowFunctionOK: windowFunctionOK,
+          hasRaffstore: hasRaffstore,
+          raffstoreOK: raffstoreOK,
+          notes: notes,
+        );
+        windowId = await DatabaseService.insertWindow(newWin);
+      }
+
+      final status = (!windowFunctionOK || hasDefect) ? 'HasErrors' : 'Inspected';
+      final inspWinId = await DatabaseService.insertInspectionWindow({
+        'inspectionId': inspectionId,
+        'windowId': windowId,
+        'status': status,
+        'notes': notes,
+      });
+
+      for (final entry in defectColumnMap.entries) {
+        final colIdx = entry.key;
+        final catError = entry.value;
+        if (colIdx < row.length) {
+          final val = _toStr(_cell(row, colIdx)).trim();
+          final qty = int.tryParse(val) ?? ((val.toLowerCase() == 'x' || val == '1') ? 1 : 0);
+          if (qty > 0) {
+            final winError = InspectionWindowError(
+              inspectionWindowId: inspWinId,
+              errorId: catError.errorId,
+              errorCode: catError.code,
+              quantity: qty,
+              severity: catError.severity,
+              notes: '',
+              resolutionStatus: 'Open',
+            );
+            await DatabaseService.insertInspectionWindowError(winError);
+            errorsLinked++;
+          }
+        }
+      }
+
+      windowsImported++;
+    }
+
+    await WindowOptionsService.save();
+    logs.add('Fenster-Import abgeschlossen: $windowsImported Fenster importiert, $errorsLinked Mängel verknüpft.');
+
+    return ExcelImportResult(
+      sheetsProcessed: 1,
+      doorsImported: 0,
+      windowsImported: windowsImported,
+      errorsLinked: errorsLinked,
+      assetType: 'window',
+      warnings: warnings,
+      logs: logs,
+    );
   }
 }

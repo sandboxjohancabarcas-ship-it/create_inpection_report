@@ -1,0 +1,331 @@
+{
+  "9.1": {
+    "description": "Öffnungssperre für Drehfenster Neumontage",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Neumontage Öffnungssperre",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.2": {
+    "description": "Drehlager unten SCHÜCO Austausch",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Austausch Drehlager unten",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.3": {
+    "description": "Drehkippschere SCHÜCO Austausch",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Austausch Drehkippschere",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.4": {
+    "description": "Fenstergriff SCHÜCO Austausch",
+    "category": "Fenstergriffe & Bedienung",
+    "severity": "medium",
+    "recommendation": "Fenstergriff austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.5": {
+    "description": "Fehlbedienungssperre für Fenster liefern und montieren",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Fehlbedienungssperre nachrüsten",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.6": {
+    "description": "Mitteldichtung Fenster-Blendrahmen liefern und montieren",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Blendrahmen-Mitteldichtung erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.7": {
+    "description": "Mitteldichtung Fensterflügel liefern und montieren",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Flügel-Mitteldichtung erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.8": {
+    "description": "Anschlagdichtung Fensterflügel liefern und montieren",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Flügel-Anschlagdichtung erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.9": {
+    "description": "Anschlagdichtung FensterBlendrahmen liefern und montieren",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Blendrahmen-Anschlagdichtung erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.10": {
+    "description": "Niveauschaltsperre für Fenster liefern und montieren",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Niveauschaltsperre montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.11": {
+    "description": "Schließblech/ Schließstück liefern und montieren",
+    "category": "Schließbleche",
+    "severity": "medium",
+    "recommendation": "Schließblech austauschen / neu montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.12": {
+    "description": "Fensterschere liefern und montieren",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Fensterschere montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.13": {
+    "description": "Kipplager liefern und montieren",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Kipplager austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.14": {
+    "description": "Eckumlenkung Hueck Austausch",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Hueck-Eckumlenkung austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.15": {
+    "description": "Oberlichtbeschlag komplett",
+    "category": "Oberlichter & Sonderbeschläge",
+    "severity": "medium",
+    "recommendation": "Oberlichtbeschlag instandsetzen/austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.16": {
+    "description": "Glasleistendichtung Fensterflügel liefern und montieren",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Glasleistendichtung erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.17": {
+    "description": "Eckumlenkung Schüco Austausch",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Schüco-Eckumlenkung austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.18": {
+    "description": "Riegelbock liefern und montieren",
+    "category": "Schließbleche",
+    "severity": "medium",
+    "recommendation": "Riegelbock liefern und montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.19": {
+    "description": "Fensterflügel neu verklotzen",
+    "category": "Verglasung & Klotzung",
+    "severity": "medium",
+    "recommendation": "Flügel fachgerecht neu verklotzen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.20": {
+    "description": "Schließrolle Schüco ersetzen",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Schüco-Schließrolle ersetzen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "9.21": {
+    "description": "Kammergetriebe Austausch",
+    "category": "Fensterbeschläge & Mechanik",
+    "severity": "medium",
+    "recommendation": "Kammergetriebe austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.1": {
+    "description": "Hinweis: Schadhafter Oberflächenschutz",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Oberflächenbehandlung / Lasur erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.2": {
+    "description": "Hinweis: Defekte Isolierverglasung (Randverbund)",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Isolierglasscheibe wegen undichtem Randverbund austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.3": {
+    "description": "Hinweis: Defekte Isolierverglasung (Riss)",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Gerissene Isolierglasscheibe austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.4": {
+    "description": "Hinweis: Schadhafte Versiegelung der Isolierverglasung",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Versiegelungsfugen nacharbeiten / erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.5": {
+    "description": "Hinweis: Schadhafter Wandanschluss",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Wandanschlussfuge instandsetzen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.6": {
+    "description": "Hinweis: Defekte Dreh-Kipp-Schere",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Dreh-Kipp-Schere austauschen oder gangbar machen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.7": {
+    "description": "Hinweis: Defektes Schließblech",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Schließblech austauschen / nachjustieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.8": {
+    "description": "Hinweis: Defektes Ecklager",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Ecklager austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.9": {
+    "description": "Hinweis: Defektes Kipp-Schließblech",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Kipp-Schließblech erneuern",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.10": {
+    "description": "Hinweis: Ein Fensterflügel ist verzogen",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Flügel richten / justieren oder neu verklotzen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.11": {
+    "description": "Hinweis: Schadhafte Verleistung außen",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Außenverleistung instandsetzen / befestigen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.12": {
+    "description": "Hinweis: Lose Verleistung innen",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Innenverleistung nachbefestigen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.13": {
+    "description": "Hinweis: Defekte Anschlagdichtung",
+    "category": "Holzfenster",
+    "severity": "low",
+    "recommendation": "Anschlagdichtung austauschen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "20.14": {
+    "description": "Arbeiten zum Material- und Stundennachweis",
+    "category": "Holzfenster",
+    "severity": "medium",
+    "recommendation": "Abrechnung nach Aufwand (Material und Stunden)",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_224310": {
+    "description": "Anschlagdichtung defekt Art.NR:224310",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Anschlagdichtung Art.Nr. 224310 liefern und montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_218144": {
+    "description": "Schließblech defekt Art.NR:218144",
+    "category": "Schließbleche",
+    "severity": "medium",
+    "recommendation": "Schließblech Art.Nr. 218144 liefern und montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_224068": {
+    "description": "Mitteldichtung defekt Art.NR:224068",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Mitteldichtung Art.Nr. 224068 liefern und montieren",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_VERKLOTZEN": {
+    "description": "Fenster neu verklotzen",
+    "category": "Verglasung & Klotzung",
+    "severity": "medium",
+    "recommendation": "Fensterflügel fachgerecht neu verklotzen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_RAFFSTORE": {
+    "description": "Raffstore: Fehlersuche mit Steuergerät",
+    "category": "Raffstore & Sonnenschutz",
+    "severity": "medium",
+    "recommendation": "Elektrische Fehlersuche am Raffstore mit Prüfgerät durchführen",
+    "normReference": "",
+    "assetType": "window"
+  },
+  "WIN_284825": {
+    "description": "Glasleisten Dichtung Art.NR:284825",
+    "category": "Dichtungen",
+    "severity": "medium",
+    "recommendation": "Glasleistendichtung Art.Nr. 284825 liefern und montieren",
+    "normReference": "",
+    "assetType": "window"
+  }
+}
+
