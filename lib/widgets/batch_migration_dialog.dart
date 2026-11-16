@@ -126,6 +126,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
 
     int newDoorsCount = 0;
     int updatedDoorsCount = 0;
+    int newWindowsCount = 0;
+    int updatedWindowsCount = 0;
     int newInspectionsCount = 0;
     int updatedInspectionsCount = 0;
     int totalErrorsImported = 0;
@@ -135,8 +137,6 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
     final List<InspectionFileReportItem> allFileReports = [];
     final List<String> processedNames = [];
     final List<String> skippedNames = [];
-    int compliantProcessed = 0;
-    int skippedCount = 0;
 
     try {
       for (int i = 0; i < files.length; i++) {
@@ -154,7 +154,6 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
         SingleFileMigrationResult fileResult = await BatchMigrationService.migrateSingleFile(file);
 
         if (fileResult.isSkipped) {
-          skippedCount++;
           skippedNames.add(fileResult.errorMessage != null ? '$fileName (${fileResult.errorMessage})' : fileName);
           allFileReports.addAll(fileResult.fileReports);
           continue;
@@ -196,11 +195,12 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
         }
 
         // 4. Accumulate reports and counts for this file
-        compliantProcessed++;
         processedNames.add(fileName);
         if (fileResult.importReport != null) {
           newDoorsCount += fileResult.importReport!.newDoorsCount;
           updatedDoorsCount += fileResult.importReport!.updatedDoorsCount;
+          newWindowsCount += fileResult.importReport!.newWindowsCount;
+          updatedWindowsCount += fileResult.importReport!.updatedWindowsCount;
           newInspectionsCount += fileResult.importReport!.newInspectionsCount;
           updatedInspectionsCount += fileResult.importReport!.updatedInspectionsCount;
           totalErrorsImported += fileResult.importReport!.totalErrorsImported;
@@ -210,6 +210,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
         } else {
           newDoorsCount += fileResult.newDoorsCount;
           updatedDoorsCount += fileResult.updatedDoorsCount;
+          newWindowsCount += fileResult.newWindowsCount;
+          updatedWindowsCount += fileResult.updatedWindowsCount;
           newInspectionsCount += fileResult.newInspectionsCount;
           updatedInspectionsCount += fileResult.updatedInspectionsCount;
           totalErrorsImported += fileResult.totalErrorsImported;
@@ -226,11 +228,23 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
 
       widget.onMigrationCompleted?.call();
 
+      String aggregatedAssetType = 'door';
+      final hasWindows = newWindowsCount + updatedWindowsCount > 0;
+      final hasDoors = newDoorsCount + updatedDoorsCount > 0;
+      if (hasWindows && !hasDoors) {
+        aggregatedAssetType = 'window';
+      } else if (hasWindows && hasDoors) {
+        aggregatedAssetType = 'mixed';
+      }
+
       final aggregatedReport = ImportReport(
         packageName: 'Batch-Migration (${processedNames.length} Dateien)',
         importedAt: DateTime.now(),
+        assetType: aggregatedAssetType,
         newDoorsCount: newDoorsCount,
         updatedDoorsCount: updatedDoorsCount,
+        newWindowsCount: newWindowsCount,
+        updatedWindowsCount: updatedWindowsCount,
         newInspectionsCount: newInspectionsCount,
         updatedInspectionsCount: updatedInspectionsCount,
         totalErrorsImported: totalErrorsImported,

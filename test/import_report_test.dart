@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wartungstool/models/import_report.dart';
+import 'package:wartungstool/widgets/import_report_dialog.dart';
 
 void main() {
   group('ImportReport Model Tests', () {
@@ -43,6 +45,171 @@ void main() {
       expect(report.doorChanges.first.doorAlias, equals('DOOR-001'));
       expect(report.doorChanges.first.changeType, equals('new'));
       expect(report.newCatalogProposals.first, contains('CAT-99'));
+      expect(report.effectiveAssetType, equals('door'));
+      expect(report.totalItemsProcessed, equals(8));
+      expect(report.newItemsCount, equals(3));
+      expect(report.updatedItemsCount, equals(5));
+      expect(report.isWindowReport, isFalse);
+    });
+
+    test('AssetTypeHelper resolves labels and icons correctly', () {
+      expect(AssetTypeHelper.getLabel('window', plural: false), equals('Fenster'));
+      expect(AssetTypeHelper.getLabel('window', plural: true), equals('Fenster'));
+      expect(AssetTypeHelper.getLabel('door', plural: false), equals('Tür'));
+      expect(AssetTypeHelper.getLabel('door', plural: true), equals('Türen'));
+      expect(AssetTypeHelper.getLabel('mixed', plural: false), equals('Objekt'));
+      expect(AssetTypeHelper.getLabel('mixed', plural: true), equals('Objekte'));
+      expect(AssetTypeHelper.getLabel('schiebetor', plural: true), equals('Schiebetore'));
+      expect(AssetTypeHelper.getLabel('rwa', plural: true), equals('RWA-Anlagen'));
+      expect(AssetTypeHelper.getLabel('tor', plural: true), equals('Tore'));
+    });
+
+    test('ImportReport recognizes window imports and calculates window metrics', () {
+      final report = ImportReport(
+        packageName: '24-00000-AB P-000000 Fensterliste.xlsx',
+        importedAt: DateTime.now(),
+        assetType: 'window',
+        newWindowsCount: 213,
+        updatedWindowsCount: 0,
+        doorChanges: [
+          DoorChangeItem(
+            doorAlias: 'WIN-001',
+            doorNumber: '03-044',
+            roomDesignation: 'Büro 3.44',
+            changeType: 'new',
+            status: 'Completed',
+            assetType: 'window',
+            errorCount: 1,
+          ),
+        ],
+        fileReports: [
+          InspectionFileReportItem(
+            fileName: 'Fensterliste.xlsx',
+            status: 'Erfolgreich',
+            assetType: 'window',
+            newWindowsCount: 213,
+            doorChanges: [
+              DoorChangeItem(
+                doorAlias: 'WIN-001',
+                doorNumber: '03-044',
+                roomDesignation: 'Büro 3.44',
+                assetType: 'window',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(report.isWindowReport, isTrue);
+      expect(report.effectiveAssetType, equals('window'));
+      expect(report.totalWindowsProcessed, equals(213));
+      expect(report.totalItemsProcessed, equals(213));
+      expect(report.newItemsCount, equals(213));
+      expect(report.updatedItemsCount, equals(0));
+      expect(report.doorChanges.first.isWindow, isTrue);
+      expect(report.fileReports.first.isWindow, isTrue);
+      expect(report.fileReports.first.totalItems, equals(213));
+    });
+
+    test('ImportReport handles mixed imports correctly', () {
+      final report = ImportReport(
+        packageName: 'Misch-Paket',
+        importedAt: DateTime.now(),
+        newDoorsCount: 5,
+        newWindowsCount: 10,
+        doorChanges: [
+          DoorChangeItem(doorAlias: 'D-1', doorNumber: '1', roomDesignation: '', assetType: 'door'),
+          DoorChangeItem(doorAlias: 'W-1', doorNumber: '1', roomDesignation: '', assetType: 'window'),
+        ],
+      );
+
+      expect(report.effectiveAssetType, equals('mixed'));
+      expect(report.totalDoorsProcessed, equals(5));
+      expect(report.totalWindowsProcessed, equals(10));
+      expect(report.totalItemsProcessed, equals(15));
+      expect(report.newItemsCount, equals(15));
+    });
+
+    testWidgets('ImportReportDialog displays window metrics and titles correctly', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final windowReport = ImportReport(
+        packageName: '24-00000-AB Fensterliste.xlsx',
+        importedAt: DateTime.now(),
+        assetType: 'window',
+        newWindowsCount: 213,
+        updatedWindowsCount: 0,
+        doorChanges: [
+          DoorChangeItem(
+            doorAlias: 'F-24-00000-AB-03-044',
+            doorNumber: '03-044',
+            roomDesignation: 'Büro 3.44',
+            changeType: 'new',
+            status: 'geprüft',
+            assetType: 'window',
+            errorCount: 1,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImportReportDialog(report: windowReport),
+          ),
+        ),
+      );
+
+      // Verify that window labels are shown, NOT door labels
+      expect(find.text('Verarbeitete Fenster'), findsOneWidget);
+      expect(find.text('213'), findsOneWidget);
+      expect(find.text('+213 neu, 0 aktualisiert'), findsOneWidget);
+      expect(find.text('Alle Fenster (1)'), findsOneWidget);
+      expect(find.text('Fenster 03-044'), findsOneWidget);
+      expect(find.text('Verarbeitete Türen'), findsNothing);
+    });
+
+    testWidgets('ImportReportDialog displays door metrics and titles for door report', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final doorReport = ImportReport(
+        packageName: 'Türenliste.xlsx',
+        importedAt: DateTime.now(),
+        assetType: 'door',
+        newDoorsCount: 42,
+        updatedDoorsCount: 3,
+        doorChanges: [
+          DoorChangeItem(
+            doorAlias: 'T-001',
+            doorNumber: 'T-01',
+            roomDesignation: 'Flur',
+            changeType: 'new',
+            status: 'geprüft',
+            assetType: 'door',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImportReportDialog(report: doorReport),
+          ),
+        ),
+      );
+
+      expect(find.text('Verarbeitete Türen'), findsOneWidget);
+      expect(find.text('45'), findsOneWidget);
+      expect(find.text('+42 neu, 3 aktualisiert'), findsOneWidget);
+      expect(find.text('Alle Türen (1)'), findsOneWidget);
+      expect(find.text('Tür T-01'), findsOneWidget);
+      expect(find.text('Verarbeitete Fenster'), findsNothing);
     });
   });
 }

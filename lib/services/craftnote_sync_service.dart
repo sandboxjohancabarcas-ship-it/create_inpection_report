@@ -454,8 +454,9 @@ class CraftnoteSyncService {
               '📦 [WartungsTool] Neuer Wartungsauftrag übertragen:\n');
           buffer.writeln('• Auftrag: #$jobNum');
           if (client.toString().isNotEmpty) buffer.writeln('• Kunde: $client');
-          if (address.toString().isNotEmpty)
+          if (address.toString().isNotEmpty) {
             buffer.writeln('• Objekt: $address');
+          }
           buffer.writeln(
               '• Paketdatei: ${p.basename(packagePath)} (${standardFolders.wartungslistenPath ?? "Wartungslisten"})');
           if (pdfUpload != null) buffer.writeln('• PDF-Bericht beigelegt');

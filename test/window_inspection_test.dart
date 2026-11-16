@@ -1,6 +1,6 @@
 import 'dart:io';
+import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
@@ -23,7 +23,8 @@ void main() {
       await db.delete('error_catalog');
     });
 
-    test('Window.generateAlias conforms to agreed formula F-[Project]-[Window]', () {
+    test('Window.generateAlias conforms to agreed formula F-[Project]-[Window]',
+        () {
       final alias1 = Window.generateAlias(
         projectNumber: '24-00000-AB P-000000',
         windowNumber: '03-044',
@@ -79,7 +80,8 @@ void main() {
       expect(materials, contains('Holz'));
 
       WindowOptionsService.addOption('material', 'Holz-Alu');
-      final updatedMaterials = WindowOptionsService.getStringOptions('material');
+      final updatedMaterials =
+          WindowOptionsService.getStringOptions('material');
       expect(updatedMaterials, contains('Holz-Alu'));
 
       WindowOptionsService.removeOption('material', 'Holz-Alu');
@@ -87,7 +89,8 @@ void main() {
       expect(afterRemove.contains('Holz-Alu'), isFalse);
     });
 
-    test('ExcelDataImporter imports template file and exports back to Excel', () async {
+    test('ExcelDataImporter imports template file and exports back to Excel',
+        () async {
       final templateFile = File(
           'test/test_data/test_template/24-00000-AB P-000000 Fensterliste Aktuell 20.08.2024.xlsx');
       expect(templateFile.existsSync(), isTrue,
@@ -104,7 +107,8 @@ void main() {
       expect(insp['assetType'], equals('window'));
       expect(insp['clientName'], contains('Sprinkenhof'));
 
-      final windows = await DatabaseService.getWindowsByInspectionId(insp['inspectionId'] as int);
+      final windows = await DatabaseService.getWindowsByInspectionId(
+          insp['inspectionId'] as int);
       expect(windows.length, equals(result.windowsImported));
 
       // Test export to Excel
@@ -168,16 +172,154 @@ void main() {
       final errId = await DatabaseService.insertInspectionWindowError(err);
       expect(errId, isPositive);
 
-      final errList = await DatabaseService.getInspectionWindowErrors(junctionId);
+      final errList =
+          await DatabaseService.getInspectionWindowErrors(junctionId);
       expect(errList.length, equals(1));
       expect(errList.first.errorCode, equals('9.1'));
       expect(errList.first.quantity, equals(2));
 
-      final exportData = await DatabaseService.getSingleInspectionExportData(inspId);
+      final exportData =
+          await DatabaseService.getSingleInspectionExportData(inspId);
       expect(exportData['windows'], isNotEmpty);
       final exportedWin = (exportData['windows'] as List).first;
       expect(exportedWin['windowNumber'], equals('02-005'));
       expect((exportedWin['errors'] as List).length, equals(1));
+    });
+
+    test(
+        'ExcelDataImporter imports multi-year sheets and Fehlerliste Codes sheet',
+        () async {
+      final excel = Excel.createExcel();
+      excel.rename('Sheet1', '2024');
+
+      // Sheet "Fehlerliste Codes"
+      final codesSheet = excel['Fehlerliste Codes'];
+      codesSheet
+          .appendRow([TextCellValue('9.99-Sonderfensterschere austauschen')]);
+      codesSheet.appendRow([TextCellValue('Holzfenster')]);
+      codesSheet.appendRow(
+          [TextCellValue('20.99-Hinweis: Spezieller Holzfäulebefall')]);
+
+      // Sheet "2024"
+      final sheet2024 = excel['2024'];
+      sheet2024.appendRow([
+        TextCellValue('Kunde: Testkunde MultiYear'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Objekt: Mustergebäude 24'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Auftrag 24-99999-AB'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Anmerkung')
+      ]);
+      sheet2024.appendRow([
+        TextCellValue('Fenster Nr.'),
+        TextCellValue('Etage'),
+        TextCellValue('Raum Nr.'),
+        TextCellValue('Sonstiges'),
+        TextCellValue('Fenstertyp'),
+        TextCellValue('Material'),
+        TextCellValue('Flügelabmaße'),
+        TextCellValue('Beschläge'),
+        TextCellValue('Fenster in Ordnung'),
+        TextCellValue('Raffstore in Ordnung'),
+        TextCellValue('Anschlagdichtung defekt Art.NR:224310'),
+        TextCellValue('Anmerkung'),
+      ]);
+      sheet2024.appendRow([
+        TextCellValue('01-001'),
+        TextCellValue('1.OG'),
+        TextCellValue('101'),
+        TextCellValue('Büro'),
+        TextCellValue('DKR'),
+        TextCellValue('Alu'),
+        TextCellValue('1200x1400'),
+        TextCellValue('Schüco'),
+        TextCellValue('N'),
+        TextCellValue('J'),
+        IntCellValue(1),
+        TextCellValue('Dichtung porös'),
+      ]);
+
+      // Sheet "2023"
+      final sheet2023 = excel['2023'];
+      sheet2023.appendRow([
+        TextCellValue('Kunde: Testkunde MultiYear'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Objekt: Mustergebäude 24'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Auftrag 23-88888-AB'),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue(''),
+        TextCellValue('Anmerkung')
+      ]);
+      sheet2023.appendRow([
+        TextCellValue('Fenster Nr.'),
+        TextCellValue('Etage'),
+        TextCellValue('Raum Nr.'),
+        TextCellValue('Sonstiges'),
+        TextCellValue('Fenstertyp'),
+        TextCellValue('Material'),
+        TextCellValue('Flügelabmaße'),
+        TextCellValue('Beschläge'),
+        TextCellValue('Fenster in Ordnung'),
+        TextCellValue('Jalousie in Ordnung'),
+        TextCellValue('Anschlagdichtung defekt Art.NR:224310'),
+        TextCellValue('Anmerkung'),
+      ]);
+      sheet2023.appendRow([
+        TextCellValue('01-001'),
+        TextCellValue('1.OG'),
+        TextCellValue('101'),
+        TextCellValue('Büro'),
+        TextCellValue('DKR'),
+        TextCellValue('Alu'),
+        TextCellValue('1200x1400'),
+        TextCellValue('Schüco'),
+        TextCellValue('J'),
+        TextCellValue('J'),
+        IntCellValue(0),
+        TextCellValue(''),
+      ]);
+
+      final tempDir = Directory.systemTemp.createTempSync('multi_year_test_');
+      final tempFile = File('${tempDir.path}/test_multi_year_windows.xlsx');
+      final bytes = excel.save()!;
+      await tempFile.writeAsBytes(bytes);
+
+      final result = await ExcelDataImporter.importFromFile(tempFile);
+
+      expect(result.assetType, equals('window'));
+      expect(result.sheetsProcessed, equals(2));
+      expect(result.windowsImported, equals(1));
+      expect(result.errorsLinked, equals(1));
+
+      // Verify Inspections created for both 2024 and 2023
+      final allInspections = await DatabaseService.getAllInspections();
+      final windowInspections =
+          allInspections.where((i) => i['assetType'] == 'window').toList();
+      expect(windowInspections.length, greaterThanOrEqualTo(2));
+
+      // Verify new catalog error from "Fehlerliste Codes" was imported
+      final windowCatalog =
+          await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      expect(windowCatalog.any((c) => c.code == '9.99'), isTrue);
+      expect(
+          windowCatalog
+              .any((c) => c.code == '20.99' && c.category == 'Holzfenster'),
+          isTrue);
+
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
     });
   });
 }

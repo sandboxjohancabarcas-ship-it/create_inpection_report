@@ -110,12 +110,22 @@ class Window {
     if (val is bool) return val;
     if (val is int) return val == 1;
     final str = val.toString().trim().toLowerCase();
-    if (str.isEmpty || str == '?' || str == 'none' || str == 'nicht vorhanden')
+    if (str.isEmpty ||
+        str == '?' ||
+        str == 'none' ||
+        str == 'nicht vorhanden') {
       return null;
-    if (str == '1' || str == 'true' || str == 'ja' || str == 'j' || str == 'x')
+    }
+    if (str == '1' ||
+        str == 'true' ||
+        str == 'ja' ||
+        str == 'j' ||
+        str == 'x') {
       return true;
-    if (str == '0' || str == 'false' || str == 'nein' || str == 'n')
+    }
+    if (str == '0' || str == 'false' || str == 'nein' || str == 'n') {
       return false;
+    }
     return null;
   }
 

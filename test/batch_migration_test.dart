@@ -1,8 +1,14 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
+import 'package:wartungstool/services/database_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
   group('BatchMigrationService Extension Validation Tests', () {
     test('isCompliantFile accurately identifies supported extensions', () {
       expect(BatchMigrationService.isCompliantFile('inspection_package.db'), isTrue);
@@ -27,6 +33,33 @@ void main() {
       expect(result.fileName, 'test_unsupported.txt');
       expect(result.fileReports.length, 1);
       expect(result.fileReports.first.status, contains('Nicht unterstützt'));
+    });
+
+    test('migrateSingleFile recognizes and imports window inspection Excel correctly', () async {
+      final db = await DatabaseService.getDb();
+      await db.delete('inspections');
+      await db.delete('windows');
+      await db.delete('inspection_windows');
+      await db.delete('inspection_window_errors');
+
+      final windowExcel = File('test/test_data/test_template/24-00000-AB P-000000 Fensterliste Aktuell 20.08.2024.xlsx');
+      final result = await BatchMigrationService.migrateSingleFile(windowExcel);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.assetType, equals('window'));
+      expect(result.isWindow, isTrue);
+      expect(result.newWindowsCount, greaterThan(200));
+      expect(result.totalItems, greaterThan(200));
+      expect(result.newDoorsCount, equals(0));
+
+      // Report verification
+      final report = result.importReport;
+      expect(report, isNotNull);
+      expect(report!.effectiveAssetType, equals('window'));
+      expect(report.isWindowReport, isTrue);
+      expect(report.totalItemsProcessed, greaterThan(200));
+      expect(report.newWindowsCount, greaterThan(200));
+      expect(report.newDoorsCount, equals(0));
     });
   });
 }

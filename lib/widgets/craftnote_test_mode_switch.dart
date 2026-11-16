@@ -14,7 +14,8 @@ class CraftnoteTestModeSwitch extends StatefulWidget {
   });
 
   @override
-  State<CraftnoteTestModeSwitch> createState() => _CraftnoteTestModeSwitchState();
+  State<CraftnoteTestModeSwitch> createState() =>
+      _CraftnoteTestModeSwitchState();
 }
 
 class _CraftnoteTestModeSwitchState extends State<CraftnoteTestModeSwitch> {
@@ -66,7 +67,7 @@ class _CraftnoteTestModeSwitchState extends State<CraftnoteTestModeSwitch> {
                 child: Switch(
                   value: isTest,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  activeColor: Colors.blue.shade700,
+                  activeThumbColor: Colors.blue.shade700,
                   activeTrackColor: Colors.blue.shade200,
                   inactiveThumbColor: Colors.red.shade700,
                   inactiveTrackColor: Colors.red.shade200,
@@ -108,7 +109,9 @@ class _CraftnoteTestModeSwitchState extends State<CraftnoteTestModeSwitch> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  isTest ? 'Test-Modus aktiv (Sandbox)' : 'PRODUKTIV-MODUS AKTIV',
+                  isTest
+                      ? 'Test-Modus aktiv (Sandbox)'
+                      : 'PRODUKTIV-MODUS AKTIV',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -129,7 +132,7 @@ class _CraftnoteTestModeSwitchState extends State<CraftnoteTestModeSwitch> {
           ),
           Switch(
             value: isTest,
-            activeColor: Colors.blue.shade700,
+            activeThumbColor: Colors.blue.shade700,
             inactiveThumbColor: Colors.red.shade700,
             onChanged: (val) {
               setState(() {
@@ -143,4 +146,3 @@ class _CraftnoteTestModeSwitchState extends State<CraftnoteTestModeSwitch> {
     );
   }
 }
-

@@ -31,7 +31,12 @@ class ImportReportDialog extends StatelessWidget {
     final bool hasCatalogProposals = report.newCatalogProposals.isNotEmpty;
     final bool hasLegacyAudit = report.hasLegacyAudit;
 
-    int tabCount = 1; // Doors tab by default
+    final String effectiveAsset = report.effectiveAssetType;
+    final String assetLabelPlural =
+        AssetTypeHelper.getLabel(effectiveAsset, plural: true);
+    final IconData assetIcon = AssetTypeHelper.getIcon(effectiveAsset);
+
+    int tabCount = 1; // Asset items tab by default
     if (hasLegacyAudit) tabCount++;
     if (hasFileReports) tabCount++;
     if (hasCatalogProposals) tabCount++;
@@ -63,7 +68,8 @@ class ImportReportDialog extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const Text(
                             'Import- & Migrations-Bericht',
@@ -123,11 +129,11 @@ class ImportReportDialog extends StatelessWidget {
               children: [
                 _buildStatCard(
                   context,
-                  title: 'Verarbeitete Türen',
-                  value: '${report.totalDoorsProcessed}',
+                  title: 'Verarbeitete $assetLabelPlural',
+                  value: '${report.totalItemsProcessed}',
                   subtitle:
-                      '+${report.newDoorsCount} neu, ${report.updatedDoorsCount} aktualisiert',
-                  icon: Icons.door_front_door,
+                      '+${report.newItemsCount} neu, ${report.updatedItemsCount} aktualisiert',
+                  icon: assetIcon,
                   color: Colors.indigo,
                 ),
                 const SizedBox(width: 12),
@@ -152,7 +158,7 @@ class ImportReportDialog extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // Warning Banner for Unprocessed Doors
+            // Warning Banner for Unprocessed Assets
             if (report.hasUnprocessedDoors) ...[
               Container(
                 width: double.infinity,
@@ -172,7 +178,7 @@ class ImportReportDialog extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Warnung: ${report.unprocessedDoors.length} unbearbeitete / nicht geprüfte Tür(en) im Paket!',
+                            'Warnung: ${report.unprocessedDoors.length} unbearbeitete / nicht geprüfte $assetLabelPlural im Paket!',
                             style: TextStyle(
                               color: Colors.amber.shade900,
                               fontWeight: FontWeight.bold,
@@ -188,13 +194,19 @@ class ImportReportDialog extends StatelessWidget {
                       child: SingleChildScrollView(
                         child: Text(
                           report.unprocessedDoors.map((d) {
+                            final itemSingular =
+                                AssetTypeHelper.getLabel(d.assetType, plural: false);
                             final loc = [
                               if (d.floor.isNotEmpty) d.floor,
                               if (d.roomDesignation.isNotEmpty)
                                 d.roomDesignation
                             ].join(' | ');
                             final locStr = loc.isNotEmpty ? ' ($loc)' : '';
-                            return '• Tür ${d.doorNumber.isNotEmpty ? d.doorNumber : d.doorAlias}$locStr [ID: ${d.doorAlias}]';
+                            final dNum = d.doorNumber.isNotEmpty ? d.doorNumber : d.doorAlias;
+                            final name = dNum.toLowerCase().contains(itemSingular.toLowerCase())
+                                ? dNum
+                                : '$itemSingular $dNum';
+                            return '• $name$locStr [ID: ${d.doorAlias}]';
                           }).join('\n'),
                           style: TextStyle(
                               color: Colors.brown.shade800,
@@ -238,7 +250,7 @@ class ImportReportDialog extends StatelessWidget {
                           Tab(
                               text:
                                   'Inspektions-Dateien (${report.fileReports.length})'),
-                        Tab(text: 'Alle Türen (${report.doorChanges.length})'),
+                        Tab(text: 'Alle $assetLabelPlural (${report.doorChanges.length})'),
                         if (hasCatalogProposals)
                           Tab(
                               text:
@@ -254,18 +266,28 @@ class ImportReportDialog extends StatelessWidget {
 
                           if (hasFileReports) _buildPerFileReportList(context),
 
-                          // Doors Tab
+                          // Asset Items Tab
                           report.doorChanges.isEmpty
-                              ? const Center(
-                                  child: Text('Keine Tür-Details vorhanden.'))
+                              ? Center(
+                                  child: Text('Keine $assetLabelPlural-Details vorhanden.'))
                               : ListView.separated(
                                   itemCount: report.doorChanges.length,
                                   separatorBuilder: (_, __) =>
                                       const Divider(height: 1),
                                   itemBuilder: (context, index) {
                                     final door = report.doorChanges[index];
+                                    final itemSingular =
+                                        AssetTypeHelper.getLabel(door.assetType, plural: false);
+                                    final itemIcon =
+                                        AssetTypeHelper.getIcon(door.assetType);
                                     final isNew = door.changeType == 'new';
                                     final isProcessed = door.isProcessed;
+                                    final dNum = door.doorNumber.isNotEmpty
+                                        ? door.doorNumber
+                                        : door.doorAlias;
+                                    final displayTitle = dNum.toLowerCase().contains(itemSingular.toLowerCase())
+                                        ? dNum
+                                        : '$itemSingular $dNum';
                                     return ListTile(
                                       contentPadding:
                                           const EdgeInsets.symmetric(
@@ -275,9 +297,7 @@ class ImportReportDialog extends StatelessWidget {
                                             ? Colors.green.shade50
                                             : Colors.blue.shade50,
                                         child: Icon(
-                                          isNew
-                                              ? Icons.add_business
-                                              : Icons.sync,
+                                          itemIcon,
                                           color: isNew
                                               ? Colors.green
                                               : Colors.blue,
@@ -285,7 +305,7 @@ class ImportReportDialog extends StatelessWidget {
                                         ),
                                       ),
                                       title: Text(
-                                        'Tür ${door.doorNumber.isNotEmpty ? door.doorNumber : door.doorAlias}',
+                                        displayTitle,
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w600,
                                             fontSize: 14),
@@ -817,6 +837,12 @@ class ImportReportDialog extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = report.fileReports[index];
+        final String fileAsset = item.assetType.isNotEmpty
+            ? item.assetType
+            : report.effectiveAssetType;
+        final String fileAssetPlural =
+            AssetTypeHelper.getLabel(fileAsset, plural: true);
+
         final isError = item.status.contains('Fehler') ||
             item.status.contains('Übersprungen');
         final hasConflicts = item.status.contains('Konflikte');
@@ -894,10 +920,10 @@ class ImportReportDialog extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildFileStat('Neugeschafene Türen',
-                            '+${item.newDoorsCount}', Colors.indigo),
-                        _buildFileStat('Aktualisierte Türen',
-                            '${item.updatedDoorsCount}', Colors.blue),
+                        _buildFileStat('Neugeschaffene $fileAssetPlural',
+                            '+${item.newItemsCount}', Colors.indigo),
+                        _buildFileStat('Aktualisierte $fileAssetPlural',
+                            '${item.updatedItemsCount}', Colors.blue),
                         _buildFileStat('Mängel', '${item.defectsRecordedCount}',
                             Colors.orange),
                         _buildFileStat('Fotos / Anhänge',
@@ -921,7 +947,7 @@ class ImportReportDialog extends StatelessWidget {
                                 size: 14, color: Colors.amber.shade900),
                             const SizedBox(width: 4),
                             Text(
-                              '${item.unprocessedDoors.length} Tür(en) nicht geprüft / offen im Paket',
+                              '${item.unprocessedDoors.length} $fileAssetPlural nicht geprüft / offen im Paket',
                               style: TextStyle(
                                   color: Colors.amber.shade900,
                                   fontSize: 11,
@@ -933,8 +959,8 @@ class ImportReportDialog extends StatelessWidget {
                     ],
                     if (item.doorChanges.isNotEmpty) ...[
                       const SizedBox(height: 12),
-                      const Text('Enthaltene Türen:',
-                          style: TextStyle(
+                      Text('Enthaltene $fileAssetPlural:',
+                          style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 12)),
                       const SizedBox(height: 6),
                       Container(
@@ -949,6 +975,19 @@ class ImportReportDialog extends StatelessWidget {
                           itemCount: item.doorChanges.length,
                           itemBuilder: (context, dIdx) {
                             final door = item.doorChanges[dIdx];
+                            final itemSing =
+                                AssetTypeHelper.getLabel(door.assetType, plural: false);
+                            final dNum = door.doorNumber.isNotEmpty
+                                ? door.doorNumber
+                                : door.doorAlias;
+                            final formattedName = dNum
+                                    .toLowerCase()
+                                    .contains(itemSing.toLowerCase())
+                                ? dNum
+                                : '$itemSing $dNum';
+                            final roomStr = door.roomDesignation.isNotEmpty
+                                ? ' (${door.roomDesignation})'
+                                : '';
                             return Padding(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 4),
@@ -956,7 +995,7 @@ class ImportReportDialog extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '• ${door.doorNumber.isNotEmpty ? "Tür ${door.doorNumber}" : door.doorAlias} (${door.roomDesignation})',
+                                      '• $formattedName$roomStr',
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                   ),

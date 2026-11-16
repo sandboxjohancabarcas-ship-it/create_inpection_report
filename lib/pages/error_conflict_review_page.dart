@@ -775,8 +775,9 @@ class _ErrorConflictReviewPageState extends State<ErrorConflictReviewPage> {
                               (s) => DropdownMenuItem(value: s, child: Text(s)))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null)
+                        if (val != null) {
                           setState(() => _severitySelections[key] = val);
+                        }
                       },
                     ),
                   ),

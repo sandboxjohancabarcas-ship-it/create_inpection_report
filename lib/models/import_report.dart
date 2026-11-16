@@ -1,4 +1,45 @@
+import 'package:flutter/material.dart';
 import 'door_conflict.dart';
+
+class AssetTypeHelper {
+  static String getLabel(String assetType, {bool plural = false}) {
+    switch (assetType.toLowerCase()) {
+      case 'window':
+        return 'Fenster';
+      case 'schiebetor':
+        return plural ? 'Schiebetore' : 'Schiebetor';
+      case 'rwa':
+      case 'rwa-anlage':
+        return plural ? 'RWA-Anlagen' : 'RWA-Anlage';
+      case 'tor':
+        return plural ? 'Tore' : 'Tor';
+      case 'mixed':
+        return plural ? 'Objekte' : 'Objekt';
+      case 'door':
+      default:
+        return plural ? 'Türen' : 'Tür';
+    }
+  }
+
+  static IconData getIcon(String assetType) {
+    switch (assetType.toLowerCase()) {
+      case 'window':
+        return Icons.window;
+      case 'schiebetor':
+        return Icons.sensor_door;
+      case 'rwa':
+      case 'rwa-anlage':
+        return Icons.air;
+      case 'tor':
+        return Icons.garage;
+      case 'mixed':
+        return Icons.category;
+      case 'door':
+      default:
+        return Icons.door_front_door;
+    }
+  }
+}
 
 class DoorChangeItem {
   final String doorAlias;
@@ -9,17 +50,21 @@ class DoorChangeItem {
   final String? status;
   final int errorCount;
   final int? pos;
+  final String assetType; // 'door' | 'window' | ...
 
   DoorChangeItem({
     required this.doorAlias,
     required this.doorNumber,
     required this.roomDesignation,
     this.floor = '',
-    required this.changeType,
+    this.changeType = 'updated',
     this.status,
     this.errorCount = 0,
     this.pos,
+    this.assetType = 'door',
   });
+
+  bool get isWindow => assetType.toLowerCase() == 'window';
 
   /// Returns true if this door is marked as inspected/processed.
   bool get isProcessed {
@@ -42,6 +87,9 @@ class InspectionFileReportItem {
   final String inspectionDate;
   final int newDoorsCount;
   final int updatedDoorsCount;
+  final int newWindowsCount;
+  final int updatedWindowsCount;
+  final String assetType;
   final int defectsRecordedCount;
   final int attachmentsCount;
   final List<DoorChangeItem> doorChanges;
@@ -55,6 +103,9 @@ class InspectionFileReportItem {
     this.inspectionDate = '',
     this.newDoorsCount = 0,
     this.updatedDoorsCount = 0,
+    this.newWindowsCount = 0,
+    this.updatedWindowsCount = 0,
+    this.assetType = 'door',
     this.defectsRecordedCount = 0,
     this.attachmentsCount = 0,
     this.doorChanges = const [],
@@ -62,6 +113,11 @@ class InspectionFileReportItem {
   });
 
   int get totalDoors => newDoorsCount + updatedDoorsCount;
+  int get totalWindows => newWindowsCount + updatedWindowsCount;
+  int get totalItems => isWindow ? (totalWindows > 0 ? totalWindows : totalDoors) : totalDoors;
+  int get newItemsCount => isWindow ? (newWindowsCount > 0 ? newWindowsCount : newDoorsCount) : newDoorsCount;
+  int get updatedItemsCount => isWindow ? (updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount) : updatedDoorsCount;
+  bool get isWindow => assetType.toLowerCase() == 'window' || (newWindowsCount + updatedWindowsCount > 0 && newDoorsCount + updatedDoorsCount == 0);
 
   List<DoorChangeItem> get unprocessedDoors =>
       doorChanges.where((d) => !d.isProcessed).toList();
@@ -162,6 +218,8 @@ class ImportReport {
   final DateTime importedAt;
   final int newDoorsCount;
   final int updatedDoorsCount;
+  final int newWindowsCount;
+  final int updatedWindowsCount;
   final int newInspectionsCount;
   final int updatedInspectionsCount;
   final int totalErrorsImported;
@@ -171,30 +229,75 @@ class ImportReport {
   final List<InspectionFileReportItem> fileReports;
   final List<DoorConflict> doorConflicts;
   final List<LegacyMigrationAudit> legacyAudits;
+  final String assetType;
 
   ImportReport({
     required this.packageName,
     required this.importedAt,
-    required this.newDoorsCount,
-    required this.updatedDoorsCount,
-    required this.newInspectionsCount,
-    required this.updatedInspectionsCount,
-    required this.totalErrorsImported,
-    required this.totalAttachmentsImported,
-    required this.doorChanges,
-    required this.newCatalogProposals,
+    this.newDoorsCount = 0,
+    this.updatedDoorsCount = 0,
+    this.newWindowsCount = 0,
+    this.updatedWindowsCount = 0,
+    this.newInspectionsCount = 0,
+    this.updatedInspectionsCount = 0,
+    this.totalErrorsImported = 0,
+    this.totalAttachmentsImported = 0,
+    this.doorChanges = const [],
+    this.newCatalogProposals = const [],
     this.fileReports = const [],
     this.doorConflicts = const [],
     this.legacyAudits = const [],
+    this.assetType = 'door',
   });
 
-  int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;
+  String get effectiveAssetType {
+    if (assetType.isNotEmpty && assetType.toLowerCase() != 'door') return assetType;
+    final hasWin = (newWindowsCount + updatedWindowsCount > 0) ||
+        fileReports.any((f) => f.isWindow) ||
+        doorChanges.any((d) => d.isWindow);
+    final hasDoor = (newDoorsCount + updatedDoorsCount > 0) ||
+        fileReports.any((f) => !f.isWindow) ||
+        doorChanges.any((d) => !d.isWindow);
 
-  /// Returns all doors from the imported package that are in an unprocessed/pending status.
+    if (hasWin && !hasDoor) return 'window';
+    if (hasWin && hasDoor) return 'mixed';
+    return assetType.isNotEmpty ? assetType : 'door';
+  }
+
+  bool get isWindowReport => effectiveAssetType == 'window';
+
+  int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;
+  int get totalWindowsProcessed => newWindowsCount + updatedWindowsCount;
+
+  int get totalItemsProcessed {
+    if (effectiveAssetType == 'window') {
+      return totalWindowsProcessed > 0 ? totalWindowsProcessed : totalDoorsProcessed;
+    }
+    if (effectiveAssetType == 'mixed') {
+      return totalDoorsProcessed + totalWindowsProcessed;
+    }
+    return totalDoorsProcessed > 0 ? totalDoorsProcessed : totalWindowsProcessed;
+  }
+
+  int get newItemsCount {
+    if (effectiveAssetType == 'window') {
+      return newWindowsCount > 0 ? newWindowsCount : newDoorsCount;
+    }
+    return newDoorsCount + newWindowsCount;
+  }
+
+  int get updatedItemsCount {
+    if (effectiveAssetType == 'window') {
+      return updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount;
+    }
+    return updatedDoorsCount + updatedWindowsCount;
+  }
+
+  /// Returns all doors/items from the imported package that are in an unprocessed/pending status.
   List<DoorChangeItem> get unprocessedDoors =>
       doorChanges.where((d) => !d.isProcessed).toList();
 
-  /// Whether there are any unprocessed doors in the imported package.
+  /// Whether there are any unprocessed doors/items in the imported package.
   bool get hasUnprocessedDoors => unprocessedDoors.isNotEmpty;
 
   /// Whether any legacy packages were audited during this import.

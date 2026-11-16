@@ -408,6 +408,50 @@ class _ErrorConsolidationPageState extends State<ErrorConsolidationPage> {
                               fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                       ),
+                      const SizedBox(width: 6),
+                      // Tür vs Fenster badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: item.assetType.toLowerCase() == 'window'
+                              ? Colors.teal.shade50
+                              : Colors.indigo.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: item.assetType.toLowerCase() == 'window'
+                                ? Colors.teal.shade200
+                                : Colors.indigo.shade200,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              item.assetType.toLowerCase() == 'window'
+                                  ? Icons.window
+                                  : Icons.door_front_door,
+                              size: 11,
+                              color: item.assetType.toLowerCase() == 'window'
+                                  ? Colors.teal.shade800
+                                  : Colors.indigo.shade800,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              item.assetType.toLowerCase() == 'window'
+                                  ? 'Fenster'
+                                  : 'Tür',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: item.assetType.toLowerCase() == 'window'
+                                    ? Colors.teal.shade800
+                                    : Colors.indigo.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

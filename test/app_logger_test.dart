@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wartungstool/services/app_logger.dart';
@@ -57,9 +56,11 @@ void main() {
       expect(expectedMessages, contains('Test warning 2'));
       expect(expectedMessages, contains('Test error 3'));
 
-      expect(logger.recentEntries.any((e) => e.message == 'Test message 1'), isTrue);
+      expect(logger.recentEntries.any((e) => e.message == 'Test message 1'),
+          isTrue);
       expect(logger.recentEntries.any((e) => e.level == LogLevel.warn), isTrue);
-      expect(logger.recentEntries.any((e) => e.level == LogLevel.error), isTrue);
+      expect(
+          logger.recentEntries.any((e) => e.level == LogLevel.error), isTrue);
 
       await subscription.cancel();
     });
@@ -76,7 +77,8 @@ void main() {
   });
 
   group('AppLogDialog widget test', () {
-    testWidgets('Renders AppLogDialog and displays log entries', (tester) async {
+    testWidgets('Renders AppLogDialog and displays log entries',
+        (tester) async {
       AppLogger.info('UI', 'App initialized');
       AppLogger.warn('UI', 'Low battery detected');
 
@@ -100,4 +102,3 @@ void main() {
     });
   });
 }
-

@@ -291,6 +291,9 @@ class WindowOptionsService {
     }
   }
 
+  /// Alias for save() for API consistency with DoorOptionsService.
+  static Future<bool> saveOptions() => save();
+
   /// Gets raw options for a given key.
   static List<dynamic> getOptions(String key) {
     if (!_loaded || !_options.containsKey(key)) {

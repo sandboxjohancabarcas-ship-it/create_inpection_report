@@ -35,7 +35,10 @@ class PropertyPhotoHelper {
     ImagePicker? imagePicker,
   }) async {
     final bool isDoorPhoto = propertyName.toLowerCase() == 'tuer' || propertyName.toLowerCase() == 'tür';
-    final String displayTitle = isDoorPhoto ? 'Türfoto' : 'Foto für $propertyName';
+    final bool isWindowPhoto = propertyName.toLowerCase() == 'fenster';
+    final String displayTitle = isWindowPhoto
+        ? 'Fensterfoto'
+        : (isDoorPhoto ? 'Türfoto' : 'Foto für $propertyName');
 
     // 1. Choose photo source: Kamera or Galerie / Datei
     final ImageSource? source = await showDialog<ImageSource>(
@@ -122,7 +125,7 @@ class PropertyPhotoHelper {
     final DateTime captureTime = DateTime.now();
 
     // 3. Generate standardized filename
-    final String defaultFileName = isDoorPhoto
+    final String defaultFileName = (isDoorPhoto || isWindowPhoto)
         ? PhotoNameHelper.formatGeneralDoorPhotoName(
             doorAlias: doorAlias,
             jobNumber: jobNumber ?? 'Auftrag',

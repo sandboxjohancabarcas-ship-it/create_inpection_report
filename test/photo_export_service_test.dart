@@ -17,7 +17,9 @@ void main() {
     await DatabaseService.clearDatabase();
   });
 
-  test('PhotoExportService exports all pictures with [door alias]_Fehler_[error code]_[index].jpg naming', () async {
+  test(
+      'PhotoExportService exports all pictures with [door alias]_Fehler_[error code]_[index].jpg naming',
+      () async {
     final tempDir = Directory.systemTemp.createTempSync('photo_export_test_');
 
     try {
@@ -72,7 +74,7 @@ void main() {
 
       // 3. Create sample base64 images
       final dummyBytesGeneral = Uint8List.fromList([11, 12, 13, 14, 15]);
-      final b64_general = base64Encode(dummyBytesGeneral);
+      final b64General = base64Encode(dummyBytesGeneral);
       final generalTimestamp = '20261112_083526';
 
       final junction1Id = await DatabaseService.insertInspectionDoor({
@@ -80,7 +82,7 @@ void main() {
         'doorId': door1Id,
         'status': 'Inspected',
         'notes': '',
-        'attachments': '$generalTimestamp#$b64_general',
+        'attachments': '$generalTimestamp#$b64General',
       });
 
       final dummyBytes1 = Uint8List.fromList([1, 2, 3, 4, 5]);
@@ -107,11 +109,17 @@ void main() {
       );
 
       expect(result.totalPhotos, equals(3));
-      expect(result.exportedFileNames, contains('000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg'));
-      expect(result.exportedFileNames, contains('000331-1-EG-101_Fehler_1.1.1_1.jpg'));
-      expect(result.exportedFileNames, contains('000331-1-EG-101_Fehler_1.1.1_2.jpg'));
+      expect(
+          result.exportedFileNames,
+          contains(
+              '000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg'));
+      expect(result.exportedFileNames,
+          contains('000331-1-EG-101_Fehler_1.1.1_1.jpg'));
+      expect(result.exportedFileNames,
+          contains('000331-1-EG-101_Fehler_1.1.1_2.jpg'));
 
-      final generalFile = File('${tempDir.path}/000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg');
+      final generalFile = File(
+          '${tempDir.path}/000331-1-EG-101_26-14078-AB_allgemein_20261112_083526.jpg');
       final file1 = File('${tempDir.path}/000331-1-EG-101_Fehler_1.1.1_1.jpg');
       final file2 = File('${tempDir.path}/000331-1-EG-101_Fehler_1.1.1_2.jpg');
       expect(generalFile.existsSync(), isTrue);

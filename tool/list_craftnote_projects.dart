@@ -3,24 +3,34 @@ import 'dart:io';
 
 Future<void> main(List<String> rawArgs) async {
   // Credentials (defaults configured for WartungsTool)
-  final apiKey = Platform.environment['CRAFTNOTE_API_KEY'] ?? '64045d24-397a-407b-b4ae-2ceef59018dd';
-  final clientId = Platform.environment['CRAFTNOTE_CLIENT_ID'] ?? 'd04f732b-6c89-4804-97d8-63a0ea7c1199';
-  final baseUrl = (Platform.environment['CRAFTNOTE_BASE_URL'] ?? 'https://europe-west1-craftnote-live.cloudfunctions.net/api/v1')
+  final apiKey = Platform.environment['CRAFTNOTE_API_KEY'] ??
+      '64045d24-397a-407b-b4ae-2ceef59018dd';
+  final clientId = Platform.environment['CRAFTNOTE_CLIENT_ID'] ??
+      'd04f732b-6c89-4804-97d8-63a0ea7c1199';
+  final baseUrl = (Platform.environment['CRAFTNOTE_BASE_URL'] ??
+          'https://europe-west1-craftnote-live.cloudfunctions.net/api/v1')
       .replaceAll(RegExp(r'/+$'), '');
 
-  stdout.writeln('========================================================================================================');
+  stdout.writeln(
+      '========================================================================================================');
   stdout.writeln('  CRAFTNOTE - PROJEKTE & PARAMETER-ANALYSE');
-  stdout.writeln('========================================================================================================');
+  stdout.writeln(
+      '========================================================================================================');
   stdout.writeln('API Base URL:  $baseUrl');
   stdout.writeln('Client-ID:     $clientId');
-  stdout.writeln('API-Key:       ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}');
-  stdout.writeln('--------------------------------------------------------------------------------------------------------\n');
+  stdout.writeln(
+      'API-Key:       ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}');
+  stdout.writeln(
+      '--------------------------------------------------------------------------------------------------------\n');
 
   final cacheFile = File('craftnote_projects_cache.json');
-  final bool forceRefresh = rawArgs.contains('--refresh') || !cacheFile.existsSync();
+  final bool forceRefresh =
+      rawArgs.contains('--refresh') || !cacheFile.existsSync();
   final bool showJson = rawArgs.contains('--json');
   final bool showFirstOnly = rawArgs.contains('--first');
-  final bool forceDetails = rawArgs.contains('--details') || rawArgs.contains('-d') || rawArgs.contains('--all');
+  final bool forceDetails = rawArgs.contains('--details') ||
+      rawArgs.contains('-d') ||
+      rawArgs.contains('--all');
 
   int? limitDetailCount;
   for (final arg in rawArgs) {
@@ -29,19 +39,22 @@ Future<void> main(List<String> rawArgs) async {
     }
   }
 
-  final cleanArgs = rawArgs.where((a) =>
-      a != '--refresh' &&
-      a != '--details' &&
-      a != '-d' &&
-      a != '--all' &&
-      a != '--json' &&
-      a != '--first' &&
-      !a.startsWith('--limit=')).toList();
+  final cleanArgs = rawArgs
+      .where((a) =>
+          a != '--refresh' &&
+          a != '--details' &&
+          a != '-d' &&
+          a != '--all' &&
+          a != '--json' &&
+          a != '--first' &&
+          !a.startsWith('--limit='))
+      .toList();
 
   final allProjects = <Map<String, dynamic>>[];
 
   if (!forceRefresh && cacheFile.existsSync()) {
-    stdout.writeln('Lade Projekte aus lokalem Cache (Verwende --refresh für Live-Aktualisierung)...');
+    stdout.writeln(
+        'Lade Projekte aus lokalem Cache (Verwende --refresh für Live-Aktualisierung)...');
     try {
       final cachedJson = jsonDecode(await cacheFile.readAsString());
       if (cachedJson is List) {
@@ -49,7 +62,8 @@ Future<void> main(List<String> rawArgs) async {
           if (item is Map<String, dynamic>) allProjects.add(item);
         }
       }
-      stdout.writeln('Erfolgreich ${allProjects.length} Projekte aus Cache geladen.\n');
+      stdout.writeln(
+          'Erfolgreich ${allProjects.length} Projekte aus Cache geladen.\n');
     } catch (e) {
       stdout.writeln('Cache fehlerhaft, lade live aus Craftnote...');
     }
@@ -76,7 +90,8 @@ Future<void> main(List<String> rawArgs) async {
         final body = await response.transform(utf8.decoder).join();
 
         if (response.statusCode != 200) {
-          stdout.writeln('\n❌ Fehler beim Abrufen (Seite $page, Status ${response.statusCode}): $body');
+          stdout.writeln(
+              '\n❌ Fehler beim Abrufen (Seite $page, Status ${response.statusCode}): $body');
           break;
         }
 
@@ -84,7 +99,8 @@ Future<void> main(List<String> rawArgs) async {
         List<dynamic> items = [];
         if (decoded is List) {
           items = decoded;
-        } else if (decoded is Map<String, dynamic> && decoded['projects'] is List) {
+        } else if (decoded is Map<String, dynamic> &&
+            decoded['projects'] is List) {
           items = decoded['projects'] as List<dynamic>;
         } else if (decoded is Map<String, dynamic> && decoded['data'] is List) {
           items = decoded['data'] as List<dynamic>;
@@ -140,7 +156,8 @@ Future<void> main(List<String> rawArgs) async {
     return nameA.toLowerCase().compareTo(nameB.toLowerCase());
   });
 
-  String clean(dynamic val) => (val ?? '').toString().replaceAll('\n', ' ').replaceAll('\r', '').trim();
+  String clean(dynamic val) =>
+      (val ?? '').toString().replaceAll('\n', ' ').replaceAll('\r', '').trim();
 
   // Optionaler Suchfilter über CLI-Parameter (z. B. `dart run tool/list_craftnote_projects.dart 26-00251-AN`)
   final filterQuery = cleanArgs.join(' ').trim().toLowerCase();
@@ -172,7 +189,8 @@ Future<void> main(List<String> rawArgs) async {
   }
 
   if (filterQuery.isNotEmpty) {
-    stdout.writeln('Suchfilter aktiv: "$filterQuery" -> ${displayProjects.length} Treffer von ${allProjects.length} Projekten.\n');
+    stdout.writeln(
+        'Suchfilter aktiv: "$filterQuery" -> ${displayProjects.length} Treffer von ${allProjects.length} Projekten.\n');
   }
 
   // --- TABELLE ZEIGEN WENN NICHT NUR EINZELNES JSON ANGEFORDERT IST ---
@@ -210,9 +228,10 @@ Future<void> main(List<String> rawArgs) async {
     stdout.writeln(header);
     stdout.writeln(separator);
 
-    final maxTableRows = (filterQuery.isEmpty && !forceDetails && displayProjects.length > 50)
-        ? 50
-        : displayProjects.length;
+    final maxTableRows =
+        (filterQuery.isEmpty && !forceDetails && displayProjects.length > 50)
+            ? 50
+            : displayProjects.length;
 
     int index = 1;
     for (int i = 0; i < maxTableRows; i++) {
@@ -235,9 +254,11 @@ Future<void> main(List<String> rawArgs) async {
 
     stdout.writeln(separator);
     if (displayProjects.length > maxTableRows) {
-      stdout.writeln('(Zeige die ersten $maxTableRows von ${displayProjects.length} Projekten in der Kurzübersicht.)\n');
+      stdout.writeln(
+          '(Zeige die ersten $maxTableRows von ${displayProjects.length} Projekten in der Kurzübersicht.)\n');
     } else {
-      stdout.writeln('Gesamt: ${displayProjects.length} Projekte aufgelistet.\n');
+      stdout
+          .writeln('Gesamt: ${displayProjects.length} Projekte aufgelistet.\n');
     }
   }
 
@@ -250,7 +271,9 @@ Future<void> main(List<String> rawArgs) async {
   final bool shouldShowDetails = forceDetails ||
       showFirstOnly ||
       showJson ||
-      (filterQuery.isNotEmpty && displayProjects.isNotEmpty && displayProjects.length <= (limitDetailCount ?? 10));
+      (filterQuery.isNotEmpty &&
+          displayProjects.isNotEmpty &&
+          displayProjects.length <= (limitDetailCount ?? 10));
 
   final int detailLimit = limitDetailCount ??
       (forceDetails ? displayProjects.length : (showFirstOnly ? 1 : 10));
@@ -258,48 +281,66 @@ Future<void> main(List<String> rawArgs) async {
   final projectsForDetail = displayProjects.take(detailLimit).toList();
 
   if (shouldShowDetails && projectsForDetail.isNotEmpty) {
-    stdout.writeln('========================================================================================================');
-    stdout.writeln('  VOLLSTÄNDIGE PARAMETER-ANTWORT DER PROJEKTE (${projectsForDetail.length} Projekt(e))');
-    stdout.writeln('========================================================================================================\n');
+    stdout.writeln(
+        '========================================================================================================');
+    stdout.writeln(
+        '  VOLLSTÄNDIGE PARAMETER-ANTWORT DER PROJEKTE (${projectsForDetail.length} Projekt(e))');
+    stdout.writeln(
+        '========================================================================================================\n');
 
     for (int i = 0; i < projectsForDetail.length; i++) {
       final project = projectsForDetail[i];
       if (showJson) {
         final encoder = const JsonEncoder.withIndent('  ');
-        stdout.writeln('// -------------------------------------------------------------');
-        stdout.writeln('// PROJEKT #${i + 1}: ${project['name'] ?? project['id']}');
-        stdout.writeln('// -------------------------------------------------------------');
+        stdout.writeln(
+            '// -------------------------------------------------------------');
+        stdout.writeln(
+            '// PROJEKT #${i + 1}: ${project['name'] ?? project['id']}');
+        stdout.writeln(
+            '// -------------------------------------------------------------');
         stdout.writeln(encoder.convert(project));
         stdout.writeln();
       } else {
         printComprehensiveProjectParameters(i + 1, project);
       }
     }
-  } else if (filterQuery.isNotEmpty && displayProjects.length > (limitDetailCount ?? 10) && !forceDetails) {
-    stdout.writeln('💡 Hinweis: $displayProjects.length Projekte gefunden. Um alle Parameter-Antworten anzuzeigen, füge "--details" oder z. B. "--limit=5" hinzu.');
-    stdout.writeln('   Beispiel: dart run tool/list_craftnote_projects.dart "$filterQuery" --details\n');
+  } else if (filterQuery.isNotEmpty &&
+      displayProjects.length > (limitDetailCount ?? 10) &&
+      !forceDetails) {
+    stdout.writeln(
+        '💡 Hinweis: $displayProjects.length Projekte gefunden. Um alle Parameter-Antworten anzuzeigen, füge "--details" oder z. B. "--limit=5" hinzu.');
+    stdout.writeln(
+        '   Beispiel: dart run tool/list_craftnote_projects.dart "$filterQuery" --details\n');
   } else if (!forceDetails && !showFirstOnly) {
-    stdout.writeln('💡 Tipp: Um alle API-Parameter eines bestimmten Projektes anzuzeigen:');
-    stdout.writeln('   dart run tool/list_craftnote_projects.dart <Auftragsnummer_oder_Name>');
-    stdout.writeln('   Beispiel: dart run tool/list_craftnote_projects.dart --first');
-    stdout.writeln('   JSON-Export: dart run tool/list_craftnote_projects.dart <Suchbegriff> --json\n');
+    stdout.writeln(
+        '💡 Tipp: Um alle API-Parameter eines bestimmten Projektes anzuzeigen:');
+    stdout.writeln(
+        '   dart run tool/list_craftnote_projects.dart <Auftragsnummer_oder_Name>');
+    stdout.writeln(
+        '   Beispiel: dart run tool/list_craftnote_projects.dart --first');
+    stdout.writeln(
+        '   JSON-Export: dart run tool/list_craftnote_projects.dart <Suchbegriff> --json\n');
   }
 
   // --- MARKDOWN EXPORT GENERIEREN ---
   final sbMarkdown = StringBuffer();
   sbMarkdown.writeln('# Craftnote Projektliste & Parameter-Übersicht\n');
   sbMarkdown.writeln('Abgerufen am: ${DateTime.now().toIso8601String()}\n');
-  sbMarkdown.writeln('Gesamtzahl Projekte im Workspace: **${allProjects.length}**\n');
+  sbMarkdown
+      .writeln('Gesamtzahl Projekte im Workspace: **${allProjects.length}**\n');
   if (filterQuery.isNotEmpty) {
-    sbMarkdown.writeln('Suchfilter: `${filterQuery}` (**${displayProjects.length} Treffer**)\n');
+    sbMarkdown.writeln(
+        'Suchfilter: `$filterQuery` (**${displayProjects.length} Treffer**)\n');
   }
 
   sbMarkdown.writeln('## Übersichtstabelle\n');
-  sbMarkdown.writeln('| Nr. | Order Number (Angebotsnr) | Project Name | Craftnote ID (UUID) | Street / Address | City | Customer |');
+  sbMarkdown.writeln(
+      '| Nr. | Order Number (Angebotsnr) | Project Name | Craftnote ID (UUID) | Street / Address | City | Customer |');
   sbMarkdown.writeln('|---:|:---|:---|:---|:---|:---|:---|');
 
   int mdIndex = 1;
-  final mdTableLimit = displayProjects.length > 300 ? 300 : displayProjects.length;
+  final mdTableLimit =
+      displayProjects.length > 300 ? 300 : displayProjects.length;
   for (int i = 0; i < mdTableLimit; i++) {
     final p = displayProjects[i];
     final orderNr = clean(p['orderNumber']);
@@ -309,12 +350,14 @@ Future<void> main(List<String> rawArgs) async {
     final city = clean(p['city']);
     final clientName = clean(p['clientName']);
 
-    sbMarkdown.writeln('| $mdIndex | ${orderNr.isEmpty ? '-' : orderNr} | $name | `$id` | ${street.isEmpty ? '-' : street} | ${city.isEmpty ? '-' : city} | ${clientName.isEmpty ? '-' : clientName} |');
+    sbMarkdown.writeln(
+        '| $mdIndex | ${orderNr.isEmpty ? '-' : orderNr} | $name | `$id` | ${street.isEmpty ? '-' : street} | ${city.isEmpty ? '-' : city} | ${clientName.isEmpty ? '-' : clientName} |');
     mdIndex++;
   }
 
   if (displayProjects.length > mdTableLimit) {
-    sbMarkdown.writeln('\n*(Tabelle auf erste $mdTableLimit Einträge begrenzt. Nutze CLI-Filter für spezifische Projekte)*\n');
+    sbMarkdown.writeln(
+        '\n*(Tabelle auf erste $mdTableLimit Einträge begrenzt. Nutze CLI-Filter für spezifische Projekte)*\n');
   }
 
   // Wenn Details vorhanden sind, auch in Markdown aufnehmen
@@ -331,7 +374,8 @@ Future<void> main(List<String> rawArgs) async {
 
   final mdFile = File('craftnote_projects_overview.md');
   await mdFile.writeAsString(sbMarkdown.toString());
-  stdout.writeln('Übersicht & Parameter als Markdown-Datei gespeichert: ${mdFile.absolute.path}\n');
+  stdout.writeln(
+      'Übersicht & Parameter als Markdown-Datei gespeichert: ${mdFile.absolute.path}\n');
 }
 
 /// Formatiert Unix-Timestamps (Sekunden oder Millisekunden) lesbar.
@@ -351,13 +395,17 @@ String formatTimestamp(dynamic val) {
 
 /// Gibt alle Parameter eines Projekts gegliedert und vollständig aus.
 void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
-  stdout.writeln('┌───────────────────────────────────────────────────────────────────────────────────────────────────────');
+  stdout.writeln(
+      '┌───────────────────────────────────────────────────────────────────────────────────────────────────────');
   stdout.writeln('│ PROJEKT #$index: ${(p['name'] ?? 'Ohne Namen')}');
   stdout.writeln('│ ID (UUID): ${p['id']}');
-  stdout.writeln('├───────────────────────────────────────────────────────────────────────────────────────────────────────');
+  stdout.writeln(
+      '├───────────────────────────────────────────────────────────────────────────────────────────────────────');
 
   void printField(String label, dynamic value, [String? extra]) {
-    final valStr = (value == null || value.toString().trim().isEmpty) ? '-' : value.toString().trim();
+    final valStr = (value == null || value.toString().trim().isEmpty)
+        ? '-'
+        : value.toString().trim();
     final extraStr = extra != null ? ' ($extra)' : '';
     stdout.writeln('│  • ${label.padRight(28)}: $valStr$extraStr');
   }
@@ -368,7 +416,8 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
   printField('name', p['name']);
   printField('orderNumber (Auftrag/Angebot)', p['orderNumber']);
   printField('projectType', p['projectType']);
-  printField('archived', p['archived'], p['archived'] == true ? 'ARCHIVIERT' : 'AKTIV');
+  printField('archived', p['archived'],
+      p['archived'] == true ? 'ARCHIVIERT' : 'AKTIV');
   printField('statusId', p['statusId']);
   printField('parentProject', p['parentProject']);
   printField('creator', p['creator']);
@@ -379,7 +428,8 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
   printField('lastEditedDate', formatTimestamp(p['lastEditedDate']));
   printField('lastOpenedDate', formatTimestamp(p['lastOpenedDate']));
   if (p.containsKey('unreadCountsLastEditedDate')) {
-    printField('unreadCountsLastEditedDate', formatTimestamp(p['unreadCountsLastEditedDate']));
+    printField('unreadCountsLastEditedDate',
+        formatTimestamp(p['unreadCountsLastEditedDate']));
   }
 
   // 3. Standortadresse
@@ -399,7 +449,9 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
   printField('billingEmail', p['billingEmail']);
 
   // 5. Kundendaten (falls separat)
-  if (p.containsKey('clientName') || p.containsKey('clientEmail') || p.containsKey('clientPhone')) {
+  if (p.containsKey('clientName') ||
+      p.containsKey('clientEmail') ||
+      p.containsKey('clientPhone')) {
     stdout.writeln('│\n│ [5] KUNDE / CLIENT DIRECT');
     printField('clientName', p['clientName']);
     printField('clientEmail', p['clientEmail']);
@@ -415,9 +467,12 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
       final c = contacts[cIdx];
       if (c is Map) {
         final cName = c['name'] ?? '-';
-        final emails = (c['emails'] is List) ? (c['emails'] as List).join(', ') : '-';
-        final phones = (c['phones'] is List) ? (c['phones'] as List).join(', ') : '-';
-        stdout.writeln('│    [$cIdx] Name: $cName | E-Mails: [${emails.isEmpty ? '-' : emails}] | Tel: [${phones.isEmpty ? '-' : phones}]');
+        final emails =
+            (c['emails'] is List) ? (c['emails'] as List).join(', ') : '-';
+        final phones =
+            (c['phones'] is List) ? (c['phones'] as List).join(', ') : '-';
+        stdout.writeln(
+            '│    [$cIdx] Name: $cName | E-Mails: [${emails.isEmpty ? '-' : emails}] | Tel: [${phones.isEmpty ? '-' : phones}]');
       } else {
         stdout.writeln('│    [$cIdx] $c');
       }
@@ -451,11 +506,13 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
   }
   final subProjects = p['projects'];
   if (subProjects is List) {
-    printField('projects (Sub-Projects)', '${subProjects.length} Unterprojekte ${subProjects.isNotEmpty ? subProjects : ""}');
+    printField('projects (Sub-Projects)',
+        '${subProjects.length} Unterprojekte ${subProjects.isNotEmpty ? subProjects : ""}');
   }
 
   // 9. Vollständige Rohparameter-Übersicht (Garantie: JEDER Parameter wird aufgeführt)
-  stdout.writeln('│\n│ [9] ALLE PARAMETER-SCHLÜSSEL & TYPEN IM RESPONSE (Vollständigkeitsliste)');
+  stdout.writeln(
+      '│\n│ [9] ALLE PARAMETER-SCHLÜSSEL & TYPEN IM RESPONSE (Vollständigkeitsliste)');
   final sortedKeys = p.keys.toList()..sort();
   for (final key in sortedKeys) {
     final val = p[key];
@@ -463,7 +520,9 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
     if (val == null) {
       summary = 'null';
     } else if (val is String) {
-      summary = val.length > 50 ? '"${val.substring(0, 47)}..." (String, len=${val.length})' : '"$val" (String)';
+      summary = val.length > 50
+          ? '"${val.substring(0, 47)}..." (String, len=${val.length})'
+          : '"$val" (String)';
     } else if (val is List) {
       summary = 'List with ${val.length} items';
     } else if (val is Map) {
@@ -474,5 +533,6 @@ void printComprehensiveProjectParameters(int index, Map<String, dynamic> p) {
     stdout.writeln('│    • ${key.padRight(28)} : $summary');
   }
 
-  stdout.writeln('└───────────────────────────────────────────────────────────────────────────────────────────────────────\n');
+  stdout.writeln(
+      '└───────────────────────────────────────────────────────────────────────────────────────────────────────\n');
 }

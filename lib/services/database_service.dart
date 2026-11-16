@@ -1142,6 +1142,18 @@ class DatabaseService {
         .delete('inspection_window_errors', where: 'id = ?', whereArgs: [id]);
   }
 
+  static Future<int> updateInspectionWindowError(
+      InspectionWindowError error) async {
+    final db = await getDb();
+    if (error.id == null) return 0;
+    return await db.update(
+      'inspection_window_errors',
+      error.toMap(),
+      where: 'id = ?',
+      whereArgs: [error.id],
+    );
+  }
+
   static Future<List<Map<String, dynamic>>> searchMasterWindowsDetailed({
     String query = '',
     String clientFilter = '',

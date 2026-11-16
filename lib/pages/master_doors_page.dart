@@ -221,7 +221,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   Icon(
                     res.isQueuedOffline
                         ? Icons.cloud_queue
-                        : (res.success ? Icons.cloud_done : Icons.error_outline),
+                        : (res.success
+                            ? Icons.cloud_done
+                            : Icons.error_outline),
                     color: res.isQueuedOffline
                         ? Colors.orange
                         : (res.success ? Colors.green : Colors.red),
@@ -230,7 +232,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   Text(
                     res.isQueuedOffline
                         ? 'Offline eingereiht'
-                        : (res.success ? 'Export erfolgreich' : 'Export fehlgeschlagen'),
+                        : (res.success
+                            ? 'Export erfolgreich'
+                            : 'Export fehlgeschlagen'),
                   ),
                 ],
               ),
@@ -244,10 +248,12 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ),
           );
         } else {
-          final succeeded = results.where((r) => r.success && !r.isQueuedOffline).length;
+          final succeeded =
+              results.where((r) => r.success && !r.isQueuedOffline).length;
           final queued = results.where((r) => r.isQueuedOffline).length;
           final failed = results.where((r) => !r.success).length;
-          final summary = '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
+          final summary =
+              '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(summary),
@@ -426,23 +432,26 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     final userCredentials = await _showUserSelectionDialog();
     if (userCredentials == null) return null;
 
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Anmeldung am Cloud-Dienst...')));
+    }
     try {
       final loggedIn = await _apiService.login(
           userCredentials['username']!, userCredentials['password']!);
       if (!loggedIn) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('Login fehlgeschlagen.'),
               backgroundColor: Colors.orange));
+        }
         return null;
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Login-Fehler: $e'), backgroundColor: Colors.orange));
+      }
       return null;
     }
 
@@ -450,17 +459,19 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
     try {
       fetchedDirectories = await _apiService.getDirectories();
       if (fetchedDirectories.isEmpty) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('Keine Verzeichnisse gefunden.'),
               backgroundColor: Colors.orange));
+        }
         return null;
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Fehler beim Laden: $e'),
             backgroundColor: Colors.orange));
+      }
       return null;
     }
 
@@ -1217,7 +1228,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       ),
                       const VerticalDivider(),
                       Tooltip(
-                        message: 'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
+                        message:
+                            'Prüfergebnis aus Craftnote importieren (*ergebnis*.db)',
                         child: TextButton.icon(
                           onPressed: _isProcessing
                               ? null
@@ -1671,13 +1683,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                               ),
                             ),
                           Text(
-                            (job['assetType']?.toString().toLowerCase() == 'window')
+                            (job['assetType']?.toString().toLowerCase() ==
+                                    'window')
                                 ? '${(job['windowCount'] as num?)?.toInt() ?? 0} Fenster erfasst'
                                 : '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: (job['assetType']?.toString().toLowerCase() == 'window')
+                                color: (job['assetType']
+                                            ?.toString()
+                                            .toLowerCase() ==
+                                        'window')
                                     ? Colors.teal.shade800
                                     : Colors.blue.shade800),
                           ),
@@ -1749,7 +1765,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       if (_selectedInspectionIds.isNotEmpty) {
                         _toggleInspectionSelection(id);
                       } else {
-                        final isWindow = (job['assetType']?.toString().toLowerCase() == 'window');
+                        final isWindow =
+                            (job['assetType']?.toString().toLowerCase() ==
+                                'window');
                         if (isWindow) {
                           await Navigator.push(
                             context,
@@ -1888,8 +1906,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       const Text('Alle Türen', style: TextStyle(fontSize: 11)),
                   selected: _errorFilter == ErrorFilterOption.all,
                   onSelected: (selected) {
-                    if (selected)
+                    if (selected) {
                       setState(() => _errorFilter = ErrorFilterOption.all);
+                    }
                   },
                 ),
                 const SizedBox(width: 6),
@@ -1905,9 +1924,10 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                   selected: _errorFilter == ErrorFilterOption.withErrors,
                   onSelected: (selected) {
-                    if (selected)
+                    if (selected) {
                       setState(
                           () => _errorFilter = ErrorFilterOption.withErrors);
+                    }
                   },
                 ),
                 const SizedBox(width: 6),
@@ -1923,9 +1943,10 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   ),
                   selected: _errorFilter == ErrorFilterOption.errorFree,
                   onSelected: (selected) {
-                    if (selected)
+                    if (selected) {
                       setState(
                           () => _errorFilter = ErrorFilterOption.errorFree);
+                    }
                   },
                 ),
                 const SizedBox(width: 16),

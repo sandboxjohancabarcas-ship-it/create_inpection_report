@@ -35,8 +35,11 @@ class SingleFileMigrationResult {
   final bool isSuccess;
   final bool isSkipped;
   final String? errorMessage;
+  final String assetType;
   final int newDoorsCount;
   final int updatedDoorsCount;
+  final int newWindowsCount;
+  final int updatedWindowsCount;
   final int newInspectionsCount;
   final int updatedInspectionsCount;
   final int totalErrorsImported;
@@ -55,8 +58,11 @@ class SingleFileMigrationResult {
     this.isSuccess = false,
     this.isSkipped = false,
     this.errorMessage,
+    this.assetType = 'door',
     this.newDoorsCount = 0,
     this.updatedDoorsCount = 0,
+    this.newWindowsCount = 0,
+    this.updatedWindowsCount = 0,
     this.newInspectionsCount = 0,
     this.updatedInspectionsCount = 0,
     this.totalErrorsImported = 0,
@@ -73,6 +79,8 @@ class SingleFileMigrationResult {
   bool get hasConflicts => doorConflicts.isNotEmpty || catalogConflicts.isNotEmpty;
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
   bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
+  bool get isWindow => assetType.toLowerCase() == 'window' || (newWindowsCount + updatedWindowsCount > 0 && newDoorsCount + updatedDoorsCount == 0);
+  int get totalItems => isWindow ? (newWindowsCount + updatedWindowsCount) : (newDoorsCount + updatedDoorsCount);
 }
 
 class BatchMigrationService {
@@ -138,8 +146,11 @@ class BatchMigrationService {
             : [
                 InspectionFileReportItem(
                   fileName: fileName,
+                  assetType: report.effectiveAssetType,
                   newDoorsCount: report.newDoorsCount,
                   updatedDoorsCount: report.updatedDoorsCount,
+                  newWindowsCount: report.newWindowsCount,
+                  updatedWindowsCount: report.updatedWindowsCount,
                   defectsRecordedCount: report.totalErrorsImported,
                   attachmentsCount: report.totalAttachmentsImported,
                   doorChanges: report.doorChanges,
@@ -151,8 +162,11 @@ class BatchMigrationService {
           file: file,
           fileName: fileName,
           isSuccess: true,
+          assetType: report.effectiveAssetType,
           newDoorsCount: report.newDoorsCount,
           updatedDoorsCount: report.updatedDoorsCount,
+          newWindowsCount: report.newWindowsCount,
+          updatedWindowsCount: report.updatedWindowsCount,
           newInspectionsCount: report.newInspectionsCount,
           updatedInspectionsCount: report.updatedInspectionsCount,
           totalErrorsImported: report.totalErrorsImported,
@@ -165,20 +179,30 @@ class BatchMigrationService {
         );
       } else if (excelExtensions.contains(ext)) {
         final excelResult = await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
+        final isWindow = excelResult.assetType.toLowerCase() == 'window' ||
+            (excelResult.windowsImported > 0 && excelResult.doorsImported == 0);
         final doorCount = excelResult.doorsImported;
-        final excelDoorItems = [
-          DoorChangeItem(
-            doorAlias: 'Excel-Import: $fileName',
-            doorNumber: '$doorCount Türen',
-            roomDesignation: 'Excel Import (${excelResult.sheetsProcessed} Blätter)',
-            changeType: 'new',
-          )
-        ];
+        final windowCount = excelResult.windowsImported;
+        final itemCount = isWindow ? windowCount : doorCount;
+        final assetType = isWindow ? 'window' : 'door';
+        final assetLabel = isWindow ? 'Fenster' : 'Türen';
+
+        final excelItems = excelResult.doorChanges.isNotEmpty
+            ? excelResult.doorChanges
+            : [
+                DoorChangeItem(
+                  doorAlias: 'Excel-Import: $fileName',
+                  doorNumber: '$itemCount $assetLabel',
+                  roomDesignation: 'Excel Import (${excelResult.sheetsProcessed} Blätter)',
+                  changeType: 'new',
+                  assetType: assetType,
+                )
+              ];
 
         String statusStr = 'Erfolgreich';
         final conflictParts = <String>[];
         if (excelResult.hasDoorConflicts) {
-          conflictParts.add('${excelResult.doorConflicts.length} Türkonflikte');
+          conflictParts.add('${excelResult.doorConflicts.length} ${isWindow ? "Fensterkonflikte" : "Türkonflikte"}');
         }
         if (excelResult.hasCatalogConflicts) {
           conflictParts.add('${excelResult.catalogConflicts.length} Katalogkonflikte');
@@ -187,25 +211,44 @@ class BatchMigrationService {
           statusStr = 'Konflikte zur Überprüfung (${conflictParts.join(", ")})';
         }
 
+        final fileReportItem = InspectionFileReportItem(
+          fileName: fileName,
+          assetType: assetType,
+          newDoorsCount: doorCount,
+          newWindowsCount: windowCount,
+          defectsRecordedCount: excelResult.errorsLinked,
+          doorChanges: excelItems,
+          status: statusStr,
+        );
+
+        final singleReport = ImportReport(
+          packageName: fileName,
+          importedAt: DateTime.now(),
+          assetType: assetType,
+          newDoorsCount: doorCount,
+          newWindowsCount: windowCount,
+          totalErrorsImported: excelResult.errorsLinked,
+          doorChanges: excelItems,
+          newCatalogProposals: excelResult.newCatalogProposals,
+          fileReports: [fileReportItem],
+          doorConflicts: excelResult.doorConflicts,
+        );
+
         return SingleFileMigrationResult(
           file: file,
           fileName: fileName,
           isSuccess: true,
+          assetType: assetType,
           newDoorsCount: doorCount,
+          newWindowsCount: windowCount,
           totalErrorsImported: excelResult.errorsLinked,
-          doorChanges: excelDoorItems,
-          fileReports: [
-            InspectionFileReportItem(
-              fileName: fileName,
-              newDoorsCount: doorCount,
-              defectsRecordedCount: excelResult.errorsLinked,
-              doorChanges: excelDoorItems,
-              status: statusStr,
-            ),
-          ],
+          doorChanges: excelItems,
+          newCatalogProposals: excelResult.newCatalogProposals,
+          fileReports: [fileReportItem],
           doorConflicts: excelResult.doorConflicts,
           catalogConflicts: excelResult.catalogConflicts,
           excelResult: excelResult,
+          importReport: singleReport,
         );
       }
     } catch (e) {
@@ -245,6 +288,8 @@ class BatchMigrationService {
   }) async {
     int newDoorsCount = 0;
     int updatedDoorsCount = 0;
+    int newWindowsCount = 0;
+    int updatedWindowsCount = 0;
     int newInspectionsCount = 0;
     int updatedInspectionsCount = 0;
     int totalErrorsImported = 0;
@@ -282,6 +327,8 @@ class BatchMigrationService {
       processedNames.add(fileName);
       newDoorsCount += singleResult.newDoorsCount;
       updatedDoorsCount += singleResult.updatedDoorsCount;
+      newWindowsCount += singleResult.newWindowsCount;
+      updatedWindowsCount += singleResult.updatedWindowsCount;
       newInspectionsCount += singleResult.newInspectionsCount;
       updatedInspectionsCount += singleResult.updatedInspectionsCount;
       totalErrorsImported += singleResult.totalErrorsImported;
@@ -296,11 +343,23 @@ class BatchMigrationService {
       }
     }
 
+    String aggregatedAssetType = 'door';
+    final hasWindows = newWindowsCount + updatedWindowsCount > 0;
+    final hasDoors = newDoorsCount + updatedDoorsCount > 0;
+    if (hasWindows && !hasDoors) {
+      aggregatedAssetType = 'window';
+    } else if (hasWindows && hasDoors) {
+      aggregatedAssetType = 'mixed';
+    }
+
     final aggregatedReport = ImportReport(
       packageName: 'Batch-Migration (${processedNames.length} Dateien)',
       importedAt: DateTime.now(),
+      assetType: aggregatedAssetType,
       newDoorsCount: newDoorsCount,
       updatedDoorsCount: updatedDoorsCount,
+      newWindowsCount: newWindowsCount,
+      updatedWindowsCount: updatedWindowsCount,
       newInspectionsCount: newInspectionsCount,
       updatedInspectionsCount: updatedInspectionsCount,
       totalErrorsImported: totalErrorsImported,

@@ -1200,7 +1200,6 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
 
   Future<void> _takePropertyPhoto({
     required String propertyName,
-    ValueChanged<String>? onPhotoSaved,
   }) async {
     if (propertyName.toLowerCase() == 'tuer' ||
         propertyName.toLowerCase() == 'tür') {
@@ -1989,8 +1988,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 lintelHeightInsideOver1m = val;
                 if (!val) {
                   lintelHeightInsideValue = null;
-                } else
+                } else {
                   lintelHeightInsideValue ??= '1m';
+                }
               }),
             ),
 
@@ -2026,8 +2026,9 @@ class _DoorInspectionFormState extends State<DoorInspectionForm> {
                 lintelHeightOutsideOver1m = val;
                 if (!val) {
                   lintelHeightOutsideValue = null;
-                } else
+                } else {
                   lintelHeightOutsideValue ??= '1m';
+                }
               }),
             ),
 

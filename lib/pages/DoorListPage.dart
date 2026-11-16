@@ -104,7 +104,8 @@ class _DoorListPageState extends State<DoorListPage> {
           query: _searchController.text,
           clientFilter: _selectedClient,
         );
-        final pendingList = await LocalDatabaseService.getPendingCraftnoteUploads();
+        final pendingList =
+            await LocalDatabaseService.getPendingCraftnoteUploads();
         if (mounted) {
           setState(() {
             inspections = results;
@@ -381,8 +382,9 @@ class _DoorListPageState extends State<DoorListPage> {
         statuses.addAll(inspStatuses);
       }
 
-      if (doorsToExport.isEmpty)
+      if (doorsToExport.isEmpty) {
         throw Exception('Keine Türen in den gewählten Aufträgen gefunden.');
+      }
 
       final canProceed = await FileExportHelper.confirmUnprocessedDoors(
         context: context,
@@ -479,7 +481,9 @@ class _DoorListPageState extends State<DoorListPage> {
                   Icon(
                     res.isQueuedOffline
                         ? Icons.cloud_queue
-                        : (res.success ? Icons.cloud_done : Icons.error_outline),
+                        : (res.success
+                            ? Icons.cloud_done
+                            : Icons.error_outline),
                     color: res.isQueuedOffline
                         ? Colors.orange
                         : (res.success ? Colors.green : Colors.red),
@@ -488,7 +492,9 @@ class _DoorListPageState extends State<DoorListPage> {
                   Text(
                     res.isQueuedOffline
                         ? 'Offline eingereiht'
-                        : (res.success ? 'Export erfolgreich' : 'Export fehlgeschlagen'),
+                        : (res.success
+                            ? 'Export erfolgreich'
+                            : 'Export fehlgeschlagen'),
                   ),
                 ],
               ),
@@ -502,10 +508,12 @@ class _DoorListPageState extends State<DoorListPage> {
             ),
           );
         } else {
-          final succeeded = results.where((r) => r.success && !r.isQueuedOffline).length;
+          final succeeded =
+              results.where((r) => r.success && !r.isQueuedOffline).length;
           final queued = results.where((r) => r.isQueuedOffline).length;
           final failed = results.where((r) => !r.success).length;
-          final summary = '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
+          final summary =
+              '$succeeded erfolgreich übertragen, $queued offline eingereiht, $failed fehlgeschlagen.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(summary),
@@ -773,9 +781,15 @@ class _DoorListPageState extends State<DoorListPage> {
                           final insp = inspections[index];
                           final id = insp['inspectionId'] as int;
                           final isSelected = _selectedIds.contains(id);
-                          final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window');
-                          final doorCount = insp['doorCount'] != null ? (insp['doorCount'] as num).toInt() : null;
-                          final windowCount = insp['windowCount'] != null ? (insp['windowCount'] as num).toInt() : null;
+                          final isWindow =
+                              (insp['assetType']?.toString().toLowerCase() ==
+                                  'window');
+                          final doorCount = insp['doorCount'] != null
+                              ? (insp['doorCount'] as num).toInt()
+                              : null;
+                          final windowCount = insp['windowCount'] != null
+                              ? (insp['windowCount'] as num).toInt()
+                              : null;
 
                           return InspectionSummaryCard(
                             inspectionId: id,
@@ -806,7 +820,8 @@ class _DoorListPageState extends State<DoorListPage> {
                                     MaterialPageRoute(
                                       builder: (_) => InspectionWindowsPage(
                                         inspectionId: id,
-                                        title: insp['clientName'] ?? 'Fensterliste',
+                                        title: insp['clientName'] ??
+                                            'Fensterliste',
                                         isManagerMode: false,
                                       ),
                                     ),
@@ -817,7 +832,8 @@ class _DoorListPageState extends State<DoorListPage> {
                                     MaterialPageRoute(
                                       builder: (_) => InspectionDoorsPage(
                                         inspectionId: id,
-                                        title: insp['clientName'] ?? 'Türenliste',
+                                        title:
+                                            insp['clientName'] ?? 'Türenliste',
                                         isManagerMode: false,
                                       ),
                                     ),
