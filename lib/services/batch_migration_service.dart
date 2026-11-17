@@ -213,6 +213,10 @@ class BatchMigrationService {
 
         final fileReportItem = InspectionFileReportItem(
           fileName: fileName,
+          clientName: excelResult.clientName,
+          objectAddress: excelResult.objectAddress,
+          jobNumber: excelResult.jobNumber,
+          inspectionDate: excelResult.inspectionDate,
           assetType: assetType,
           newDoorsCount: doorCount,
           newWindowsCount: windowCount,

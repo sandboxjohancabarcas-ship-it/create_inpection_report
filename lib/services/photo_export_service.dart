@@ -64,6 +64,197 @@ class PhotoExportService {
             : 'Auftrag_$inspectionId';
     final safeJob = PhotoNameHelper.sanitizeForFilename(jobStr);
 
+    final isWindow =
+        (inspection?['assetType']?.toString().toLowerCase() == 'window');
+
+    // 2. Prepare target directory
+    final String targetDir;
+    if (destinationDir != null && destinationDir.trim().isNotEmpty) {
+      targetDir = destinationDir.trim();
+      final dir = Directory(targetDir);
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+    } else {
+      final now = DateTime.now();
+      final dateStr =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final timeStr =
+          '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}';
+      final timestamp = '${dateStr}_$timeStr';
+      targetDir = await getDefaultExportDirectory(
+          subFolder: 'Fotos_${safeJob}_$timestamp');
+    }
+
+    final List<String> exportedFiles = [];
+    int photoCounter = 0;
+
+    Future<void> savePhotoBytes({
+      required String rawData,
+      required String baseFileName,
+    }) async {
+      String uniqueFileName = baseFileName;
+      int duplicateCounter = 1;
+      while (exportedFiles.contains(uniqueFileName)) {
+        final baseNameNoExt = baseFileName.endsWith('.jpg')
+            ? baseFileName.substring(0, baseFileName.length - 4)
+            : baseFileName;
+        uniqueFileName = '${baseNameNoExt}_$duplicateCounter.jpg';
+        duplicateCounter++;
+      }
+
+      try {
+        List<int>? bytes;
+        if (await File(rawData).exists()) {
+          bytes = await File(rawData).readAsBytes();
+        } else {
+          String cleanBase64 = rawData.trim();
+          if (cleanBase64.contains(',')) {
+            cleanBase64 = cleanBase64.split(',').last.trim();
+          }
+          bytes = base64Decode(cleanBase64);
+        }
+
+        if (bytes.isNotEmpty) {
+          final filePath = p.join(targetDir, uniqueFileName);
+          final file = File(filePath);
+          await file.writeAsBytes(bytes);
+          exportedFiles.add(uniqueFileName);
+          photoCounter++;
+        }
+      } catch (e) {
+        print('[PhotoExportService] Error saving photo "$uniqueFileName": $e');
+      }
+    }
+
+    if (isWindow) {
+      // Fetch windows for the inspection
+      final List<Window> windows = isManagerMode
+          ? await DatabaseService.getWindowsByInspectionIds([inspectionId])
+          : await LocalDatabaseService.getWindowsByInspectionIds(
+              [inspectionId]);
+      final Map<int, Window> windowMap = {
+        for (final w in windows)
+          if (w.id != null) w.id!: w,
+      };
+
+      final junctions = isManagerMode
+          ? await DatabaseService.getInspectionWindowsByInspectionId(
+              inspectionId)
+          : await LocalDatabaseService.getInspectionWindowsByInspectionId(
+              inspectionId);
+
+      final List<int> junctionIds =
+          junctions.map((j) => j['id'] as int?).whereType<int>().toList();
+
+      final List<Map<String, dynamic>> errorRows = isManagerMode
+          ? await DatabaseService.getErrorsForInspectionWindowIds(junctionIds)
+          : await LocalDatabaseService.getErrorsForInspectionWindowIds(
+              junctionIds);
+
+      final Map<int, Window> junctionToWindowMap = {};
+      for (final j in junctions) {
+        final jId = j['id'] as int?;
+        final windowId = j['windowId'] as int?;
+        if (jId != null &&
+            windowId != null &&
+            windowMap.containsKey(windowId)) {
+          junctionToWindowMap[jId] = windowMap[windowId]!;
+        }
+      }
+
+      // General window photos
+      for (final j in junctions) {
+        final rawAttachments = (j['attachments'] ?? '').toString();
+        if (rawAttachments.trim().isEmpty) continue;
+
+        final windowId = j['windowId'] as int?;
+        final window = windowId != null ? windowMap[windowId] : null;
+
+        final resolvedAlias = window?.windowAlias?.trim().isNotEmpty == true
+            ? window!.windowAlias!.trim()
+            : (window?.provisionalAlias?.trim().isNotEmpty == true
+                ? window!.provisionalAlias!.trim()
+                : (window?.windowNumber.trim().isNotEmpty == true
+                    ? window!.windowNumber.trim()
+                    : 'Fenster'));
+
+        final windowPhotos = rawAttachments
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+
+        for (int i = 0; i < windowPhotos.length; i++) {
+          final photoEntry = windowPhotos[i];
+          String? entryTimestamp;
+          String rawData = photoEntry;
+
+          if (photoEntry.contains('#')) {
+            final parts = photoEntry.split('#');
+            entryTimestamp = parts[0];
+            rawData = parts.sublist(1).join('#');
+          }
+
+          final fileName = PhotoNameHelper.formatGeneralDoorPhotoName(
+            doorAlias: resolvedAlias,
+            jobNumber: safeJob,
+            timestampStr: entryTimestamp,
+            photoIndex: (windowPhotos.length > 1) ? (i + 1) : null,
+            extension: 'jpg',
+          );
+
+          await savePhotoBytes(rawData: rawData, baseFileName: fileName);
+        }
+      }
+
+      // Window error defect photos
+      for (final errRow in errorRows) {
+        final rawAttachments = (errRow['attachments'] ?? '').toString();
+        if (rawAttachments.trim().isEmpty) continue;
+
+        final junctionId = errRow['inspectionWindowId'] as int?;
+        final window =
+            junctionId != null ? junctionToWindowMap[junctionId] : null;
+
+        final resolvedAlias = window?.windowAlias?.trim().isNotEmpty == true
+            ? window!.windowAlias!.trim()
+            : (window?.provisionalAlias?.trim().isNotEmpty == true
+                ? window!.provisionalAlias!.trim()
+                : (window?.windowNumber.trim().isNotEmpty == true
+                    ? window!.windowNumber.trim()
+                    : 'Fenster'));
+
+        final String rawErrorCode =
+            (errRow['errorCode'] ?? '').toString().trim();
+        final errorCode = rawErrorCode.isNotEmpty
+            ? rawErrorCode
+            : (errRow['code'] ?? 'Fehler').toString();
+
+        final photos = rawAttachments
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+
+        for (int i = 0; i < photos.length; i++) {
+          final photoEntry = photos[i];
+          final fileName = PhotoNameHelper.formatPhotoName(
+            doorAlias: resolvedAlias,
+            errorCode: errorCode,
+            photoIndex: i + 1,
+            extension: 'jpg',
+          );
+
+          await savePhotoBytes(rawData: photoEntry, baseFileName: fileName);
+        }
+      }
+
+      return PhotoExportResult(
+        totalPhotos: photoCounter,
+        outputDirectory: targetDir,
+        exportedFileNames: exportedFiles,
+      );
+    }
+
     // 2. Fetch doors for the inspection
     final List<Door> doors = isManagerMode
         ? await DatabaseService.getDoorsByInspectionIds([inspectionId])
@@ -99,27 +290,6 @@ class PhotoExportService {
         junctionToDoorMap[jId] = doorMap[doorId]!;
       }
     }
-
-    // 5. Prepare target directory
-    final String targetDir;
-    if (destinationDir != null && destinationDir.trim().isNotEmpty) {
-      targetDir = destinationDir.trim();
-      final dir = Directory(targetDir);
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-    } else {
-      final now = DateTime.now();
-      final dateStr =
-          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final timeStr =
-          '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}';
-      final timestamp = '${dateStr}_$timeStr';
-      targetDir = await getDefaultExportDirectory(
-          subFolder: 'Fotos_${safeJob}_$timestamp');
-    }
-
-    // 6. Extract photos and write to disk
-    final List<String> exportedFiles = [];
-    int photoCounter = 0;
 
     // 6a. Extract general door photos ("allgemein") from inspection_doors attachments
     for (final j in junctions) {

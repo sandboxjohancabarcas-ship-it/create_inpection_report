@@ -12,6 +12,7 @@ import '../widgets/editable_dropdown_field.dart';
 import '../widgets/full_screen_photo_viewer.dart';
 import '../widgets/master_portal_home_button.dart';
 import 'window_error_management_page.dart';
+import 'window_history_page.dart';
 
 class NewWindowPage extends StatefulWidget {
   final Window? window;
@@ -717,6 +718,23 @@ class _NewWindowPageState extends State<NewWindowPage> {
       appBar: AppBar(
         title: Text(title),
         actions: [
+          if (widget.window?.id != null || widget.window?.windowAlias != null)
+            IconButton(
+              icon: const Icon(Icons.history_edu),
+              tooltip: 'Fenster-Akte & Historie',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => WindowHistoryPage(
+                      windowId: widget.window?.id,
+                      windowAlias: widget.window?.windowAlias,
+                      isManagerMode: widget.isManagerMode,
+                    ),
+                  ),
+                );
+              },
+            ),
           MasterPortalHomeButton(isManagerMode: widget.isManagerMode),
         ],
       ),

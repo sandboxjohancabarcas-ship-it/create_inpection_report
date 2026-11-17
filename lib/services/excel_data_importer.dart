@@ -29,6 +29,12 @@ class ExcelImportResult {
   /// Catalog proposals added or discovered during import.
   final List<String> newCatalogProposals;
 
+  /// Metadata extracted during inspection migration
+  final String clientName;
+  final String objectAddress;
+  final String jobNumber;
+  final String inspectionDate;
+
   ExcelImportResult({
     required this.sheetsProcessed,
     this.doorsImported = 0,
@@ -41,6 +47,10 @@ class ExcelImportResult {
     this.catalogConflicts = const [],
     this.doorChanges = const [],
     this.newCatalogProposals = const [],
+    this.clientName = '',
+    this.objectAddress = '',
+    this.jobNumber = '',
+    this.inspectionDate = '',
   });
 
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
@@ -1112,10 +1122,15 @@ class ExcelDataImporter {
       sheetsProcessed: sheetsProcessed,
       doorsImported: totalDoorsImported,
       errorsLinked: totalErrorsLinked,
+      assetType: 'door',
       warnings: warnings,
       logs: logs,
       doorConflicts: allDoorConflicts,
       catalogConflicts: allCatalogConflicts,
+      clientName: doorSheetsToProcess.firstOrNull?['meta']?['clientName'] ?? '',
+      objectAddress: canonicalObjectAddress,
+      jobNumber: doorSheetsToProcess.firstOrNull?['meta']?['jobNumber'] ?? '',
+      inspectionDate: doorSheetsToProcess.firstOrNull?['meta']?['date'] ?? '',
     );
   }
 
@@ -1219,20 +1234,22 @@ class ExcelDataImporter {
 
   static String _extractAddressFromFileName(String fileName) {
     String clean = p.basenameWithoutExtension(fileName);
-    // Remove job number pattern e.g. 25-13966-AB or 26-14332-AB
+    // Remove job number pattern e.g. 25-13966-AB, 26-14332-AB, 23-08561-AB
     clean = clean.replaceAll(RegExp(r'\b\d{2}-\d{5}(?:-[A-Za-z0-9]+)?\b'), ' ');
-    // Remove project number pattern e.g. P-000604 or P-003341
+    // Remove project number pattern e.g. P-000604, P-003341, P-000362
     clean = clean.replaceAll(RegExp(r'\bP-\d+\b', caseSensitive: false), ' ');
-    // Remove suffixes like Türen, Türliste, final, Monteur, Wartung, KINCHI, TEST, Kopie, template
+    // Remove suffixes like Türen, Türliste, final, Monteur, Wartung, KINCHI, TEST, Kopie, template, Fenster, Fensterliste, Mängelbeseitigung, Altbau, Neubau
     clean = clean.replaceAll(
         RegExp(
-            r'\b(Türen|Türliste|final|Monteur|Wartung|KINCHI|TEST|Kopie|template|1 Monteur)\b',
+            r'\b(Fensterliste|Fensterprüfung|Fenster|Türen|Türliste|final|Monteur|Wartung|KINCHI|TEST|Kopie|template|1 Monteur|Mängelbeseitigung|Altbau|Neubau)\b',
             caseSensitive: false),
         ' ');
+    // Remove trailing "Mieter ..." if present in filename
+    clean = clean.replaceAll(RegExp(r'\bMieter\b.*$', caseSensitive: false), ' ');
     // Remove underscores and isolated hyphens (preserving hyphenated German street names like Carl-Cohn-Straße)
     clean = clean.replaceAll('_', ' ');
     clean = clean.replaceAll(RegExp(r'\s+-\s+'), ' ');
-    clean = clean.replaceAll(RegExp(r'^[-_\s]+|[-_\s]+$'), '');
+    clean = clean.replaceAll(RegExp(r'^[-_,\s]+|[-_,\s]+$'), '');
     clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
     return clean;
   }
@@ -1240,6 +1257,7 @@ class ExcelDataImporter {
   static bool _hasStreetOrNumber(String address) {
     if (address.isEmpty) return false;
     final lower = address.toLowerCase();
+    final hasPostalCode = RegExp(r'\b\d{5}\b').hasMatch(address);
     final hasStreetKeyword = lower.contains('straße') ||
         lower.contains('strasse') ||
         lower.contains('str.') ||
@@ -1253,9 +1271,77 @@ class ExcelDataImporter {
         lower.contains('chaussee') ||
         lower.contains('gasse') ||
         lower.contains('krug') ||
-        lower.contains('bogen');
+        lower.contains('bogen') ||
+        lower.contains('hafen') ||
+        lower.contains('kai') ||
+        lower.contains('fleet') ||
+        lower.contains('deich') ||
+        lower.contains('wall') ||
+        lower.contains('stieg') ||
+        lower.contains('twiete') ||
+        lower.contains('kamp') ||
+        lower.contains('berg') ||
+        lower.contains('brücke') ||
+        lower.contains('markt');
     final hasNumber = RegExp(r'\d+').hasMatch(address);
-    return hasStreetKeyword && hasNumber;
+    return (hasStreetKeyword || hasPostalCode) && hasNumber;
+  }
+
+  /// Extracts the property address from row 0/1 (Columns E, F, G or cells labeled "Objekt:" / "Objeckt:").
+  static String _extractObjectAddressFromWindowSheet(SpreadsheetTable table) {
+    if (table.maxRows == 0) return '';
+
+    for (int r = 0; r < table.maxRows && r < 2; r++) {
+      final row = table.rows[r];
+
+      // 1. Scan for cell matching "objekt:" or "objeckt:"
+      for (int i = 0; i < row.length; i++) {
+        final cellStr = _toStr(_cell(row, i)).trim();
+        if (cellStr.isEmpty) continue;
+
+        final match = RegExp(r'^objec?kt:?\s*(.*)$', caseSensitive: false)
+            .firstMatch(cellStr);
+        if (match != null) {
+          final inlineAddr = match.group(1)!.trim();
+          if (inlineAddr.isNotEmpty) {
+            return inlineAddr;
+          }
+          // "Objekt:" is alone in cell i. Check adjacent cells (e.g., Col F, G)
+          for (int nextIdx = i + 1;
+              nextIdx < row.length && nextIdx <= i + 3;
+              nextIdx++) {
+            final nextVal = _toStr(_cell(row, nextIdx)).trim();
+            if (nextVal.isNotEmpty &&
+                !nextVal.toLowerCase().startsWith('angebot') &&
+                !nextVal.toLowerCase().startsWith('auftrag') &&
+                !nextVal.toLowerCase().startsWith('kunde')) {
+              return nextVal;
+            }
+          }
+        }
+      }
+
+      // 2. Also check specifically Columns E (idx 4), F (idx 5), G (idx 6) in row r
+      for (final cIdx in [4, 5, 6]) {
+        if (cIdx < row.length) {
+          final cellStr = _toStr(_cell(row, cIdx)).trim();
+          if (cellStr.isNotEmpty) {
+            final lower = cellStr.toLowerCase();
+            if (lower.startsWith('objekt:') || lower.startsWith('objeckt:')) {
+              final addr = cellStr
+                  .replaceFirst(
+                      RegExp(r'^objec?kt:?\s*', caseSensitive: false), '')
+                  .trim();
+              if (addr.isNotEmpty) return addr;
+            } else if (_hasStreetOrNumber(cellStr)) {
+              return cellStr;
+            }
+          }
+        }
+      }
+    }
+
+    return '';
   }
 
   static bool _isSummaryOrFooterText(String str) {
@@ -1456,6 +1542,94 @@ class ExcelDataImporter {
         .toLowerCase();
   }
 
+  static String _determineWindowDefectCategory(String description) {
+    final d = description.toLowerCase();
+    if (d.contains('dichtung')) return 'Dichtungen';
+    if (d.contains('schließblech') || d.contains('scließblech')) {
+      return 'Schließbleche';
+    }
+    if (d.contains('raffstore') ||
+        d.contains('jalousie') ||
+        d.contains('leiterkordel') ||
+        d.contains('texband')) {
+      return 'Sonnenschutz & Raffstore';
+    }
+    if (d.contains('scheibe') || d.contains('glas') || d.contains('verglasung')) {
+      return 'Verglasung';
+    }
+    if (d.contains('griff') || d.contains('oliven')) {
+      return 'Fenstergriffe & Bedienung';
+    }
+    if (d.contains('lager') ||
+        d.contains('schere') ||
+        d.contains('schnapper') ||
+        d.contains('begrenzer') ||
+        d.contains('beschlag')) {
+      return 'Fensterbeschläge & Mechanik';
+    }
+    if (d.contains('hinweis') || d.contains('anmerkung')) {
+      return 'Hinweise und Anmerkungen';
+    }
+    return 'Fenster Mängelerfassung';
+  }
+
+  static List<ErrorCatalog> _extractErrorsFromNotes(
+      String notes, List<ErrorCatalog> catalogList) {
+    if (notes.trim().isEmpty) return [];
+    final List<ErrorCatalog> matchedErrors = [];
+    final lowerNotes = notes.toLowerCase();
+
+    for (final cat in catalogList) {
+      if (cat.assetType.toLowerCase() != 'window') continue;
+      final desc = cat.description.toLowerCase().trim();
+      if (desc.isEmpty) continue;
+
+      bool isMatch = false;
+      if (lowerNotes.contains(desc)) {
+        isMatch = true;
+      } else if (desc.contains('entwässerung') && lowerNotes.contains('entwässerung')) {
+        isMatch = true;
+      } else if (desc.contains('525099') && lowerNotes.contains('525099')) {
+        isMatch = true;
+      } else if (desc.contains('mitteldichtung') && desc.contains('blendrahmen') &&
+          lowerNotes.contains('mitteldichtung') && lowerNotes.contains('blendrahmen')) {
+        isMatch = true;
+      } else if (desc.contains('mitteldichtung') && desc.contains('flügel') &&
+          lowerNotes.contains('mitteldichtung') && lowerNotes.contains('flügel')) {
+        isMatch = true;
+      } else if (desc.contains('ecklager') && lowerNotes.contains('ecklager')) {
+        isMatch = true;
+      } else if (desc.contains('schere') && lowerNotes.contains('schere')) {
+        isMatch = true;
+      } else if (desc.contains('schnapper') && lowerNotes.contains('schnapper')) {
+        isMatch = true;
+      } else if (desc.contains('öffnungsbegrenzer') && lowerNotes.contains('öffnungsbegrenzer')) {
+        isMatch = true;
+      } else if (desc.contains('kipp') && desc.contains('schließblech') &&
+          lowerNotes.contains('kipp') && lowerNotes.contains('schließblech')) {
+        isMatch = true;
+      } else if (desc.contains('rc2') && lowerNotes.contains('rc2')) {
+        isMatch = true;
+      } else if (desc.contains('texband') && lowerNotes.contains('texband')) {
+        isMatch = true;
+      } else if (desc.contains('scheibe') && lowerNotes.contains('scheibe') && lowerNotes.contains('gerissen')) {
+        isMatch = true;
+      } else if (desc.contains('leiterkordel') && lowerNotes.contains('leiterkordel')) {
+        isMatch = true;
+      } else if ((desc.contains('raffstore fährt nicht') || desc.contains('jalousie defekt')) &&
+          (lowerNotes.contains('raffstore fährt nicht') || lowerNotes.contains('jalousie defekt'))) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        if (!matchedErrors.any((m) => m.errorId == cat.errorId || m.code == cat.code)) {
+          matchedErrors.add(cat);
+        }
+      }
+    }
+    return matchedErrors;
+  }
+
   static Future<ExcelImportResult> _importWindowsFromFile({
     required SpreadsheetDecoder decoder,
     required String fileName,
@@ -1599,9 +1773,9 @@ class ExcelDataImporter {
         continue;
       }
 
-      // Parse metadata from header area / row 0
+      // Parse metadata from header area / row 0 (and row 1)
       String sClient = '';
-      String sObject = '';
+      String sObject = _extractObjectAddressFromWindowSheet(table);
       String sJobNum = '';
       String sDateStr = '';
 
@@ -1623,8 +1797,22 @@ class ExcelDataImporter {
                 _toStr(_cell(r0, i + 2)).trim().isNotEmpty) {
               sClient = _toStr(_cell(r0, i + 2)).trim();
             }
-          } else if (cellLower.startsWith('objekt:')) {
-            sObject = cellStr.substring(7).trim();
+          } else if (sObject.isEmpty &&
+              (cellLower.startsWith('objekt:') ||
+                  cellLower.startsWith('objeckt:'))) {
+            final rem = cellStr
+                .replaceFirst(
+                    RegExp(r'^objec?kt:?\s*', caseSensitive: false), '')
+                .trim();
+            if (rem.isNotEmpty) {
+              sObject = rem;
+            } else if (i + 1 < r0.length &&
+                _toStr(_cell(r0, i + 1)).trim().isNotEmpty) {
+              sObject = _toStr(_cell(r0, i + 1)).trim();
+            } else if (i + 2 < r0.length &&
+                _toStr(_cell(r0, i + 2)).trim().isNotEmpty) {
+              sObject = _toStr(_cell(r0, i + 2)).trim();
+            }
           } else if (cellLower.contains('angebot') ||
               cellLower.contains('auftrag')) {
             final match = RegExp(r'(\d{2}-\d{5}-[A-Z]+|\d{2}-\d{5})',
@@ -1739,6 +1927,50 @@ class ExcelDataImporter {
     final jobMatch = RegExp(r'(\d{2}-\d{5}-[A-Z]+)').firstMatch(fileName);
     if (jobMatch != null) fallbackJobNum = jobMatch.group(1)!;
 
+    // ── Resolve Canonical Object Address for this Project/File ──────────
+    final String fileNameAddress = _extractAddressFromFileName(fileName);
+    String canonicalObjectAddress = '';
+
+    // Check if filename contains a valid street address
+    if (_hasStreetOrNumber(fileNameAddress)) {
+      canonicalObjectAddress = fileNameAddress;
+    }
+
+    // Check sheets (newest sheet first)
+    for (final ws in windowSheetsToProcess) {
+      final rawAddr = (ws['objectAddress'] ?? '').toString().trim();
+      if (_hasStreetOrNumber(rawAddr)) {
+        if (canonicalObjectAddress.isEmpty ||
+            rawAddr.length > canonicalObjectAddress.length) {
+          canonicalObjectAddress = rawAddr;
+        }
+      }
+    }
+
+    // If still empty, use sheet's objectAddress if non-empty, otherwise fileNameAddress
+    if (canonicalObjectAddress.isEmpty) {
+      for (final ws in windowSheetsToProcess) {
+        final rawAddr = (ws['objectAddress'] ?? '').toString().trim();
+        if (rawAddr.isNotEmpty) {
+          canonicalObjectAddress = rawAddr;
+          break;
+        }
+      }
+      if (canonicalObjectAddress.isEmpty) {
+        canonicalObjectAddress = fileNameAddress;
+      }
+    }
+
+    if (canonicalObjectAddress.isNotEmpty) {
+      logs.add(
+          'Liegenschaftsadresse für ${projectNumber.isNotEmpty ? "Projekt $projectNumber" : fileName} festgelegt als: "$canonicalObjectAddress"');
+    } else {
+      final warn =
+          'WARNUNG: Keine Objektadresse in Dateiname oder Kopfzeile (Zeile 1, Spalten E/F/G) für "$fileName" gefunden.';
+      warnings.add(warn);
+      logs.add(warn);
+    }
+
     for (int sheetIndex = 0;
         sheetIndex < windowSheetsToProcess.length;
         sheetIndex++) {
@@ -1750,6 +1982,11 @@ class ExcelDataImporter {
 
       String clientName = sInfo['clientName'] as String;
       String objectAddress = sInfo['objectAddress'] as String;
+      if (canonicalObjectAddress.isNotEmpty) {
+        if (objectAddress.isEmpty || !_hasStreetOrNumber(objectAddress)) {
+          objectAddress = canonicalObjectAddress;
+        }
+      }
       String jobNumber = sInfo['jobNumber'] as String;
 
       if (jobNumber.isEmpty) jobNumber = fallbackJobNum;
@@ -1802,6 +2039,25 @@ class ExcelDataImporter {
       int colJalousie = -1;
       int colNotes = -1;
 
+      bool isDefectText(String text) {
+        final t = text.toLowerCase();
+        return t.contains('defekt') ||
+            t.contains('fährt') ||
+            t.contains('strom') ||
+            t.contains('fehlt') ||
+            t.contains('schaden') ||
+            t.contains('beschädigt') ||
+            t.contains('kaputt') ||
+            t.contains('gerissen') ||
+            t.contains('gebrochen') ||
+            t.contains('schere') ||
+            t.contains('schnapper') ||
+            t.contains('kordel') ||
+            t.contains('dichtung') ||
+            t.contains('schließblech') ||
+            t.contains('scließblech');
+      }
+
       for (int c = 0; c < headerRow.length; c++) {
         final h = _toStr(_cell(headerRow, c)).trim().toLowerCase();
         if (h.contains('fenster nr') || h.contains('fensternummer')) {
@@ -1816,25 +2072,44 @@ class ExcelDataImporter {
           colDimensions = c;
         }
         if (h.contains('beschläge')) colFittings = c;
-        if (h.contains('fenster in ordnung')) colWinOK = c;
+        if (h.contains('fenster in ordnung') ||
+            h == 'fenster i.o.' ||
+            h == 'fenster ok') {
+          colWinOK = c;
+        }
         if (h.contains('fenster nicht in ordnung')) colWinNotOK = c;
-        if (h.contains('raffstore in ordnung') || h.contains('raffstore')) {
+        if ((h.contains('raffstore in ordnung') ||
+                h.contains('raffstore i.o.') ||
+                h.contains('raffstore ok') ||
+                h == 'raffstore') &&
+            !isDefectText(h)) {
           colRaffstore = c;
         }
-        if (h.contains('jalousie in ordnung') || h.contains('jalousie')) {
+        if ((h.contains('jalousie in ordnung') ||
+                h.contains('jalousie i.o.') ||
+                h.contains('jalousie ok') ||
+                h == 'jalousie') &&
+            !isDefectText(h)) {
           colJalousie = c;
         }
-        if (h.contains('anmerkung')) colNotes = c;
+        if (h.contains('anmerkung') ||
+            h.contains('beschreibung der mängel') ||
+            h.contains('beschreibung') ||
+            h.contains('bemerkung') ||
+            h.contains('notiz')) {
+          colNotes = c;
+        }
       }
 
       // Check row above header (e.g. row 0) for "anmerkung" if colNotes not found in headerRow
       if (colNotes == -1 && headerRowIndex > 0) {
         final rAbove = table.rows[headerRowIndex - 1];
         for (int c = 0; c < rAbove.length; c++) {
-          if (_toStr(_cell(rAbove, c))
-              .trim()
-              .toLowerCase()
-              .contains('anmerkung')) {
+          final cellAbove = _toStr(_cell(rAbove, c)).trim().toLowerCase();
+          if (cellAbove.contains('anmerkung') ||
+              cellAbove.contains('beschreibung') ||
+              cellAbove.contains('bemerkung') ||
+              cellAbove.contains('notiz')) {
             colNotes = c;
             break;
           }
@@ -1851,7 +2126,16 @@ class ExcelDataImporter {
           .fold<int>(-1, (prev, elem) => elem > prev ? elem : prev);
 
       if (colDefectsStart == -1) {
-        colDefectsStart = 9; // Fallback after fittings and condition
+        colDefectsStart = [
+          colWinNum,
+          colFloor,
+          colRoomNum,
+          colRoomDesig,
+          colWinType,
+          colMat,
+          colDimensions,
+          colFittings
+        ].where((c) => c >= 0).fold<int>(-1, (prev, elem) => elem > prev ? elem : prev);
       }
       colDefectsStart += 1;
 
@@ -1867,32 +2151,56 @@ class ExcelDataImporter {
         }
         if (headerText.isEmpty) continue;
 
+        // Check if row above contains a designated error code (e.g. 1, 2, ..., 15)
+        String colCode = '';
+        if (headerRowIndex > 0 && c < table.rows[headerRowIndex - 1].length) {
+          final rawCode =
+              _toStr(_cell(table.rows[headerRowIndex - 1], c)).trim();
+          if (rawCode.isNotEmpty &&
+              !rawCode.toLowerCase().contains('anmerkung') &&
+              !rawCode.toLowerCase().contains('beschreibung')) {
+            colCode = rawCode;
+          }
+        }
+
         ErrorCatalog? match;
         for (final cat in catalogList) {
           if (cat.description.trim().toLowerCase() ==
                   headerText.toLowerCase() ||
-              headerText.toLowerCase().contains(cat.code.toLowerCase())) {
+              (colCode.isNotEmpty &&
+                  cat.code.trim().toLowerCase() == colCode.toLowerCase() &&
+                  cat.assetType.toLowerCase() == 'window')) {
             match = cat;
             break;
           }
         }
 
         if (match == null) {
-          final code = 'WIN_COL_$c';
+          String codeToUse = colCode.isNotEmpty ? colCode : 'WIN_COL_$c';
+          final codeCollision = catalogList.any((cat) =>
+              cat.code.trim().toLowerCase() == codeToUse.toLowerCase());
+          if (codeCollision) {
+            codeToUse = 'W-$codeToUse';
+          }
+
+          final category = _determineWindowDefectCategory(headerText);
           final newEntry = ErrorCatalog(
-            code: code,
+            code: codeToUse,
             description: headerText,
-            category: 'Fenster Mängelerfassung',
+            category: category,
             severity: 'medium',
+            recommendation: 'Prüfen / Instandsetzen',
             assetType: 'window',
             status: 'Approved',
           );
-          await DatabaseService.insertErrorCatalog(newEntry);
-          match = newEntry;
-          catalogList.add(newEntry);
-          newCatalogProposals.add('$code: $headerText');
+          final insertedId =
+              await DatabaseService.insertErrorCatalog(newEntry);
+          match =
+              newEntry.copyWith(errorId: insertedId > 0 ? insertedId : null);
+          catalogList.add(match);
+          newCatalogProposals.add('$codeToUse: $headerText ($category)');
           logs.add(
-              'Neuer Katalogfehler aus Spalte $c angelegt: $code - $headerText');
+              'Neuer Fenster-Katalogfehler aus Spalte $c angelegt: $codeToUse - $headerText ($category)');
         }
 
         defectColumnMap[c] = match;
@@ -2015,15 +2323,24 @@ class ExcelDataImporter {
           if (colIdx < row.length) {
             final val = _toStr(_cell(row, colIdx)).trim();
             final qty = int.tryParse(val) ??
-                ((val.toLowerCase() == 'x' || val == '1') ? 1 : 0);
+                ((val.toLowerCase() == 'x' ||
+                        val == '1' ||
+                        val == '√' ||
+                        val.toLowerCase() == 'ja')
+                    ? 1
+                    : 0);
             if (qty > 0) {
               hasDefect = true;
               rowErrorCount += qty;
               rowErrors.add(MapEntry(defectColumnMap[colIdx]!, qty));
               if (defectColumnMap[colIdx]!
-                  .description
-                  .toLowerCase()
-                  .contains('raffstore')) {
+                      .description
+                      .toLowerCase()
+                      .contains('raffstore') ||
+                  defectColumnMap[colIdx]!
+                      .category
+                      .toLowerCase()
+                      .contains('raffstore')) {
                 hasRaffstore = true;
                 raffstoreOK = false;
               }
@@ -2031,9 +2348,35 @@ class ExcelDataImporter {
           }
         }
 
+        // If sheet has no separate defect columns (e.g. 2022, 2021, 2019), check notes for recorded defects
+        if (defectColumnMap.isEmpty && notes.isNotEmpty) {
+          final noteErrors = _extractErrorsFromNotes(notes, catalogList);
+          for (final ne in noteErrors) {
+            hasDefect = true;
+            rowErrorCount += 1;
+            rowErrors.add(MapEntry(ne, 1));
+            if (ne.description.toLowerCase().contains('raffstore') ||
+                ne.category.toLowerCase().contains('raffstore')) {
+              hasRaffstore = true;
+              raffstoreOK = false;
+            }
+          }
+        }
+
+        if (notes.toLowerCase().contains('kein raffstore')) {
+          hasRaffstore = false;
+          raffstoreOK = null;
+        }
+
+        final effectiveWinNum = (floor.isNotEmpty &&
+                !winNum.contains('-') &&
+                !winNum.contains('.'))
+            ? '${floor.replaceAll(' ', '')}-$winNum'
+            : winNum;
+
         final alias = Window.generateAlias(
           projectNumber: effectiveProj,
-          windowNumber: winNum,
+          windowNumber: effectiveWinNum,
         );
 
         if (floor.isNotEmpty) WindowOptionsService.addOption('floor', floor);
@@ -2090,7 +2433,7 @@ class ExcelDataImporter {
             id: null,
             windowAlias: alias,
             provisionalAlias: alias,
-            windowNumber: winNum,
+            windowNumber: effectiveWinNum,
             floor: floor,
             roomNumber: roomNum,
             roomDesignation: roomDesig,
@@ -2140,7 +2483,7 @@ class ExcelDataImporter {
         if (sheetIndex == 0) {
           allWindowChanges.add(DoorChangeItem(
             doorAlias: alias,
-            doorNumber: winNum,
+            doorNumber: effectiveWinNum,
             roomDesignation: roomDesig.isNotEmpty
                 ? roomDesig
                 : (roomNum.isNotEmpty ? 'Raum $roomNum' : ''),
@@ -2172,6 +2515,10 @@ class ExcelDataImporter {
       logs: logs,
       doorChanges: allWindowChanges,
       newCatalogProposals: newCatalogProposals,
+      clientName: fallbackClient,
+      objectAddress: canonicalObjectAddress,
+      jobNumber: fallbackJobNum,
+      inspectionDate: windowSheetsToProcess.firstOrNull?['dateStr'] ?? '',
     );
   }
 }

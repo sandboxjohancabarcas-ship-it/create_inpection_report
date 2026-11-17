@@ -882,16 +882,21 @@ class DatabaseService {
   }
 
   static Future<void> deleteWindow(int id) async {
+    await deleteWindows([id]);
+  }
+
+  static Future<void> deleteWindows(List<int> ids) async {
+    if (ids.isEmpty) return;
     final db = await getDb();
+    final inClause = ids.join(',');
     await db.delete(
       'inspection_window_errors',
       where:
-          'inspectionWindowId IN (SELECT id FROM inspection_windows WHERE windowId = ?)',
-      whereArgs: [id],
+          'inspectionWindowId IN (SELECT id FROM inspection_windows WHERE windowId IN ($inClause))',
     );
-    await db
-        .delete('inspection_windows', where: 'windowId = ?', whereArgs: [id]);
-    await db.delete('windows', where: 'id = ?', whereArgs: [id]);
+    await db.delete('inspection_windows',
+        where: 'windowId IN ($inClause)');
+    await db.delete('windows', where: 'id IN ($inClause)');
   }
 
   static Future<Window?> getWindowById(int id) async {
@@ -1053,15 +1058,187 @@ class DatabaseService {
   }
 
   static Future<List<Window>> getWindowsByInspectionId(int inspectionId) async {
+    return getWindowsByInspectionIds([inspectionId]);
+  }
+
+  static Future<List<Window>> getWindowsByInspectionIds(List<int> inspectionIds,
+      {String query = ''}) async {
+    if (inspectionIds.isEmpty) return [];
     final db = await getDb();
-    final rows = await db.rawQuery('''
-      SELECT w.*, iw.status as inspectionStatus, iw.notes as inspectionNotes, iw.attachments as inspectionAttachments
+    final String idString = inspectionIds.join(',');
+    final cleanQuery = query.trim();
+
+    if (cleanQuery.isEmpty) {
+      final List<Map<String, dynamic>> maps = await db.rawQuery('''
+        SELECT w.*, iw.status as inspectionStatus, iw.notes as inspectionNotes, iw.attachments as inspectionAttachments
+        FROM windows w
+        INNER JOIN inspection_windows iw ON w.id = iw.windowId
+        WHERE iw.inspectionId IN ($idString)
+        ORDER BY w.windowNumber ASC
+      ''');
+      return maps.map((map) => Window.fromMap(map)).toList();
+    }
+
+    final searchTerm = '%$cleanQuery%';
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT DISTINCT w.*, iw.status as inspectionStatus, iw.notes as inspectionNotes, iw.attachments as inspectionAttachments
       FROM windows w
       INNER JOIN inspection_windows iw ON w.id = iw.windowId
-      WHERE iw.inspectionId = ?
+      LEFT JOIN inspection_window_errors iwe ON iw.id = iwe.inspectionWindowId
+      LEFT JOIN error_catalog ec ON (iwe.errorId = ec.errorId OR (iwe.errorCode IS NOT NULL AND iwe.errorCode != '' AND iwe.errorCode = ec.code))
+      WHERE iw.inspectionId IN ($idString)
+        AND (
+          w.windowNumber LIKE ? 
+          OR w.roomNumber LIKE ? 
+          OR w.roomDesignation LIKE ?
+          OR w.windowAlias LIKE ?
+          OR w.provisionalAlias LIKE ?
+          OR w.floor LIKE ?
+          OR iw.notes LIKE ?
+          OR iwe.errorCode LIKE ?
+          OR iwe.notes LIKE ?
+          OR ec.code LIKE ? 
+          OR ec.description LIKE ?
+          OR ec.category LIKE ?
+        )
       ORDER BY w.windowNumber ASC
+    ''', [
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm,
+      searchTerm
+    ]);
+    return maps.map((map) => Window.fromMap(map)).toList();
+  }
+
+  static Future<Map<int, DoorErrorSummary>> getWindowErrorSummariesForInspection(
+      int inspectionId) async {
+    final db = await getDb();
+    final List<Map<String, dynamic>> rows = await db.rawQuery('''
+      SELECT 
+        iw.windowId,
+        COUNT(iwe.id) AS total_errors,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_errors,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_errors,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS notice_count,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_notices,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_notices,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) THEN 1 ELSE 0 END) AS defect_count,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_defects,
+        SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
+          LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
+          OR LOWER(COALESCE(ec.category, '')) LIKE '%anmerkung%'
+          OR LOWER(COALESCE(ec.description, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
+          OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
+          OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+        ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_defects
+      FROM inspection_windows iw
+      LEFT JOIN inspection_window_errors iwe ON iw.id = iwe.inspectionWindowId
+      LEFT JOIN error_catalog ec ON (iwe.errorId = ec.errorId OR (iwe.errorCode IS NOT NULL AND iwe.errorCode != '' AND iwe.errorCode = ec.code))
+      WHERE iw.inspectionId = ?
+      GROUP BY iw.windowId
     ''', [inspectionId]);
-    return rows.map((r) => Window.fromMap(r)).toList();
+
+    final Map<int, DoorErrorSummary> summaries = {};
+    for (final row in rows) {
+      final windowId = row['windowId'] as int;
+      summaries[windowId] = DoorErrorSummary(
+        totalErrors: (row['total_errors'] as num?)?.toInt() ?? 0,
+        openErrors: (row['open_errors'] as num?)?.toInt() ?? 0,
+        resolvedErrors: (row['resolved_errors'] as num?)?.toInt() ?? 0,
+        defectCount: (row['defect_count'] as num?)?.toInt() ?? 0,
+        openDefects: (row['open_defects'] as num?)?.toInt() ?? 0,
+        resolvedDefects: (row['resolved_defects'] as num?)?.toInt() ?? 0,
+        noticeCount: (row['notice_count'] as num?)?.toInt() ?? 0,
+        openNotices: (row['open_notices'] as num?)?.toInt() ?? 0,
+        resolvedNotices: (row['resolved_notices'] as num?)?.toInt() ?? 0,
+      );
+    }
+    return summaries;
+  }
+
+  static Future<Map<int, String>> getWindowInspectionStatuses(
+      int inspectionId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_windows',
+      columns: ['windowId', 'status'],
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+    final Map<int, String> map = {};
+    for (final r in rows) {
+      final windowId = r['windowId'] as int?;
+      if (windowId != null) {
+        map[windowId] = (r['status'] as String? ?? '').trim();
+      }
+    }
+    return map;
+  }
+
+  static Future<void> setWindowInspectionStatus({
+    required int inspectionId,
+    required int windowId,
+    required String status,
+    String? notes,
+  }) async {
+    final db = await getDb();
+    final updateData = <String, dynamic>{
+      'status': status,
+    };
+    if (notes != null) {
+      updateData['notes'] = notes;
+    }
+    await db.update(
+      'inspection_windows',
+      updateData,
+      where: 'inspectionId = ? AND windowId = ?',
+      whereArgs: [inspectionId, windowId],
+    );
   }
 
   static Future<int> insertInspectionWindowError(
@@ -1152,6 +1329,19 @@ class DatabaseService {
       where: 'id = ?',
       whereArgs: [error.id],
     );
+  }
+
+  static Future<List<Map<String, dynamic>>> getErrorsForInspectionWindowIds(
+      List<int> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await getDb();
+    final String idString = ids.join(',');
+    return await db.rawQuery('''
+      SELECT iwe.*, ec.code, ec.description, ec.category
+      FROM inspection_window_errors iwe
+      LEFT JOIN error_catalog ec ON (iwe.errorId = ec.errorId OR (iwe.errorCode IS NOT NULL AND iwe.errorCode != '' AND iwe.errorCode = ec.code))
+      WHERE iwe.inspectionWindowId IN ($idString)
+    ''');
   }
 
   static Future<List<Map<String, dynamic>>> searchMasterWindowsDetailed({
@@ -2588,6 +2778,140 @@ class DatabaseService {
     };
   }
 
+  static Future<Map<String, dynamic>?> getWindowHistoryData(
+      {int? windowId, String? windowAlias}) async {
+    final db = await getDb();
+
+    // 1. Fetch Window
+    List<Map<String, dynamic>> windowRows = [];
+    if (windowId != null) {
+      windowRows = await db.query('windows',
+          where: 'id = ?', whereArgs: [windowId], limit: 1);
+    } else if (windowAlias != null && windowAlias.isNotEmpty) {
+      windowRows = await db.query('windows',
+          where: 'windowAlias = ?', whereArgs: [windowAlias], limit: 1);
+      if (windowRows.isEmpty) {
+        windowRows = await db.query('windows',
+            where: 'provisionalAlias = ?', whereArgs: [windowAlias], limit: 1);
+      }
+    }
+
+    if (windowRows.isEmpty) return null;
+    final windowMap = windowRows.first;
+    final targetWindowId = windowMap['id'] as int;
+    final window = Window.fromMap(windowMap);
+
+    // 2. Fetch all inspection_windows entries linked to this window, joined with inspections
+    final List<Map<String, dynamic>> inspectionRows = await db.rawQuery('''
+      SELECT 
+        iw.id AS junctionId,
+        iw.status AS junctionStatus,
+        iw.notes AS junctionNotes,
+        iw.attachments AS junctionAttachments,
+        i.inspectionId,
+        i.clientName,
+        i.objectAddress,
+        i.date,
+        i.contactPerson,
+        i.inspectorName,
+        i.jobNumber,
+        i.projectNumber,
+        i.orderType,
+        i.repairDate
+      FROM inspection_windows iw
+      INNER JOIN inspections i ON iw.inspectionId = i.inspectionId
+      WHERE iw.windowId = ?
+      ORDER BY i.date DESC, i.inspectionId DESC
+    ''', [targetWindowId]);
+
+    // 3. For each inspection, fetch associated defects
+    List<Map<String, dynamic>> historyItems = [];
+    int totalLifetimeErrors = 0;
+    int currentOpenErrors = 0;
+    int resolvedErrors = 0;
+
+    for (var row in inspectionRows) {
+      final junctionId = row['junctionId'] as int;
+      final errors = await db.rawQuery('''
+        SELECT 
+          iwe.id AS errorInstanceId,
+          iwe.errorCode,
+          iwe.quantity,
+          iwe.severity,
+          iwe.notes,
+          iwe.resolutionStatus,
+          iwe.attachments,
+          ec.description AS catalogDescription,
+          ec.category AS catalogCategory,
+          ec.recommendation AS catalogRecommendation,
+          ec.normReference AS catalogNormReference
+        FROM inspection_window_errors iwe
+        LEFT JOIN error_catalog ec ON (
+          iwe.errorId = ec.errorId OR 
+          (iwe.errorCode IS NOT NULL AND iwe.errorCode != '' AND iwe.errorCode = ec.code)
+        )
+        WHERE iwe.inspectionWindowId = ?
+      ''', [junctionId]);
+
+      int rowErrorCount = errors.length;
+      totalLifetimeErrors += rowErrorCount;
+
+      for (var e in errors) {
+        final status =
+            (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+        if (status == 'resolved' ||
+            status == 'behoben' ||
+            status == 'beholfen' ||
+            status == 'gelöst') {
+          resolvedErrors++;
+        } else {
+          currentOpenErrors++;
+        }
+      }
+
+      historyItems.add({
+        'inspection': row,
+        'errors': errors,
+        'errorCount': rowErrorCount,
+      });
+    }
+
+    // 4. Compute Health Status
+    String healthStatus = 'green';
+    if (currentOpenErrors > 0) {
+      bool hasHighSeverity = historyItems.any((item) {
+        final errors = item['errors'] as List<Map<String, dynamic>>;
+        return errors.any((e) {
+          final sev = (e['severity']?.toString() ?? 'medium').toLowerCase();
+          final status =
+              (e['resolutionStatus']?.toString() ?? 'open').toLowerCase();
+          final isResolved = (status == 'resolved' ||
+              status == 'behoben' ||
+              status == 'beholfen' ||
+              status == 'gelöst');
+          return (sev == 'high' ||
+                  sev == 'critical' ||
+                  sev == 'hoch' ||
+                  sev == 'kritisch') &&
+              !isResolved;
+        });
+      });
+      healthStatus = hasHighSeverity ? 'red' : 'yellow';
+    } else if (!window.windowFunctionOK || (window.hasRaffstore && window.raffstoreOK == false)) {
+      healthStatus = 'yellow';
+    }
+
+    return {
+      'window': window,
+      'historyItems': historyItems,
+      'totalInspections': historyItems.length,
+      'totalLifetimeErrors': totalLifetimeErrors,
+      'currentOpenErrors': currentOpenErrors,
+      'resolvedErrors': resolvedErrors,
+      'healthStatus': healthStatus,
+    };
+  }
+
   static Future<int> insertInspectionDoor(Map<String, dynamic> data) async {
     final db = await getDb();
     final inspectionId = data['inspectionId'];
@@ -3243,9 +3567,9 @@ class DatabaseService {
     return finalResults;
   }
 
-  static Future<void> insertErrorCatalog(ErrorCatalog error) async {
+  static Future<int> insertErrorCatalog(ErrorCatalog error) async {
     final db = await getDb();
-    await db.insert(
+    return await db.insert(
       'error_catalog',
       error.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
