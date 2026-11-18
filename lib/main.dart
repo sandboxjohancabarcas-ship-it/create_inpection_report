@@ -26,10 +26,22 @@ void main() async {
     // Initialize Master Database & Error Catalog (Manager Role)
     await DatabaseService.getDb();
     await DatabaseService.checkAndInitializeCatalog();
+
+    // Reset window error catalog on startup for development and testing purposes
+    const bool resetWindowCatalogEveryTime =
+        bool.fromEnvironment('RESET_WINDOW_CATALOG', defaultValue: true);
+    if (resetWindowCatalogEveryTime) {
+      await DatabaseService.resetWindowCatalog();
+    } else {
+      await DatabaseService.checkAndInitializeWindowCatalog();
+    }
   }
 
   // Initialize Local Working Database (Both Roles)
   await LocalDatabaseService.getDb();
+  try {
+    await LocalDatabaseService.refreshLocalCatalogFromMain();
+  } catch (_) {}
 
   runApp(const MyApp());
 }

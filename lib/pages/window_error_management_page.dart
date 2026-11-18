@@ -809,13 +809,16 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                       const SizedBox(height: 4),
                                   itemBuilder: (context, index) {
                                     final err = filteredErrors[index];
+                                    final isErrNotice = err.isNotice;
                                     return Card(
                                       margin: EdgeInsets.zero,
                                       elevation: 1,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(6),
                                         side: BorderSide(
-                                            color: Colors.grey.shade200),
+                                            color: isErrNotice
+                                                ? Colors.amber.shade200
+                                                : Colors.grey.shade200),
                                       ),
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(6),
@@ -825,7 +828,9 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                             selectedSeverity =
                                                 err.severity.isNotEmpty
                                                     ? err.severity
-                                                    : 'medium';
+                                                    : (isErrNotice
+                                                        ? 'low'
+                                                        : 'medium');
                                           });
                                         },
                                         child: Padding(
@@ -838,15 +843,19 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                               CircleAvatar(
                                                 radius: 16,
                                                 backgroundColor:
-                                                    Colors.blue.shade100,
+                                                    isErrNotice
+                                                        ? Colors.amber.shade100
+                                                        : Colors.blue.shade100,
                                                 child: Text(
                                                   err.code.isNotEmpty
                                                       ? err.code.split('.')[0]
-                                                      : 'W',
+                                                      : (isErrNotice ? 'H' : 'W'),
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
-                                                    color: Colors.blue.shade900,
+                                                    color: isErrNotice
+                                                        ? Colors.amber.shade900
+                                                        : Colors.blue.shade900,
                                                   ),
                                                 ),
                                               ),
@@ -868,6 +877,27 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                                         ),
                                                         const SizedBox(
                                                             width: 8),
+                                                        if (isErrNotice) ...[
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(
+                                                                horizontal: 6, vertical: 1),
+                                                            decoration: BoxDecoration(
+                                                              color: Colors.amber.shade100,
+                                                              borderRadius: BorderRadius.circular(4),
+                                                              border: Border.all(
+                                                                  color: Colors.amber.shade400),
+                                                            ),
+                                                            child: Text(
+                                                              'Hinweis',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                color: Colors.amber.shade900,
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                        ],
                                                         Container(
                                                           padding:
                                                               const EdgeInsets
@@ -876,23 +906,25 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                                                   vertical: 1),
                                                           decoration:
                                                               BoxDecoration(
-                                                            color: Colors
-                                                                .blue.shade50,
+                                                            color: isErrNotice
+                                                                ? Colors.amber.shade50
+                                                                : Colors.blue.shade50,
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
                                                                         4),
                                                             border: Border.all(
-                                                                color: Colors
-                                                                    .blue
-                                                                    .shade200),
+                                                                color: isErrNotice
+                                                                    ? Colors.amber.shade300
+                                                                    : Colors.blue.shade200),
                                                           ),
                                                           child: Text(
                                                             err.category,
                                                             style: TextStyle(
                                                               fontSize: 11,
-                                                              color: Colors.blue
-                                                                  .shade800,
+                                                              color: isErrNotice
+                                                                  ? Colors.amber.shade900
+                                                                  : Colors.blue.shade800,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w500,
@@ -985,37 +1017,44 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                         ),
                       ] else ...[
                         // Selected Error Display Card
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            border: Border.all(
-                                color: Colors.green.shade300, width: 1.5),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                        Builder(
+                          builder: (context) {
+                            final isSelNotice = selectedError!.isNotice;
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelNotice ? Colors.amber.shade50 : Colors.green.shade50,
+                                border: Border.all(
+                                    color: isSelNotice ? Colors.amber.shade400 : Colors.green.shade300,
+                                    width: 1.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.check_circle,
-                                      color: Colors.green, size: 22),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Ausgewählter Mangel:',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green.shade900,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  OutlinedButton.icon(
-                                    onPressed: () => dialogSetState(
-                                        () => selectedError = null),
-                                    icon:
-                                        const Icon(Icons.swap_horiz, size: 16),
-                                    label: const Text('Anderen Mangel wählen'),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        isSelNotice ? Icons.info_outline : Icons.check_circle,
+                                        color: isSelNotice ? Colors.amber.shade900 : Colors.green,
+                                        size: 22,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isSelNotice ? 'Ausgewählter Hinweis:' : 'Ausgewählter Mangel:',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelNotice ? Colors.amber.shade900 : Colors.green.shade900,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      OutlinedButton.icon(
+                                        onPressed: () => dialogSetState(
+                                            () => selectedError = null),
+                                        icon:
+                                            const Icon(Icons.swap_horiz, size: 16),
+                                        label: Text(isSelNotice ? 'Anderen Hinweis wählen' : 'Anderen Mangel wählen'),
                                     style: OutlinedButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 4),
@@ -1036,18 +1075,38 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                         fontSize: 15),
                                   ),
                                   const SizedBox(width: 8),
+                                  if (isSelNotice) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.amber.shade400),
+                                      ),
+                                      child: Text(
+                                        'Hinweis',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.amber.shade900,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.shade100,
+                                      color: isSelNotice ? Colors.amber.shade100 : Colors.blue.shade100,
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
                                       selectedError!.category,
                                       style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.blue.shade900,
+                                          color: isSelNotice ? Colors.amber.shade900 : Colors.blue.shade900,
                                           fontWeight: FontWeight.w600),
                                     ),
                                   ),
@@ -1077,7 +1136,9 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                                   style: const TextStyle(fontSize: 13)),
                             ],
                           ),
-                        ),
+                        );
+                      },
+                    ),
                         const SizedBox(height: 16),
 
                         // Quantity & Severity Configuration
@@ -1734,11 +1795,12 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                     } else {
                       await LocalDatabaseService.insertInspectionWindowError(
                           newError);
+                      await _markWindowAsInspectedIfInspector();
                     }
 
                     await _loadData();
                   },
-                  child: const Text('Mangel hinzufügen'),
+                  child: Text(selectedError != null && selectedError!.isNotice ? 'Hinweis hinzufügen' : 'Mangel hinzufügen'),
                 ),
               if (isProvisional) ...[
                 OutlinedButton(
@@ -1786,6 +1848,7 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                     } else {
                       await LocalDatabaseService.insertInspectionWindowError(
                           newError);
+                      await _markWindowAsInspectedIfInspector();
                     }
 
                     await _loadData();
@@ -1859,6 +1922,7 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                     } else {
                       await LocalDatabaseService.insertInspectionWindowError(
                           newError);
+                      await _markWindowAsInspectedIfInspector();
                     }
 
                     await _loadData();
@@ -2001,6 +2065,7 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                   } else {
                     await LocalDatabaseService.updateInspectionWindowError(
                         updated);
+                    await _markWindowAsInspectedIfInspector();
                   }
                   await _loadData();
                 },
@@ -2013,24 +2078,263 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
     );
   }
 
+  Future<void> _markWindowAsInspectedIfInspector() async {
+    if (!widget.isManagerMode) {
+      await LocalDatabaseService.updateInspectionWindowStatus(
+        inspectionId: widget.inspectionId,
+        windowId: widget.windowId,
+        status: 'Inspected',
+      );
+    }
+  }
+
+  bool _isErrorNotice(InspectionWindowError err, [ErrorCatalog? catalog]) {
+    final cat = catalog ??
+        _catalog.firstWhereOrNull((c) =>
+            (err.errorId != null && err.errorId! > 0 && c.errorId == err.errorId) ||
+            (err.errorCode.isNotEmpty && c.code == err.errorCode));
+    return err.isNotice(cat);
+  }
+
+  void _showErrorDetails(InspectionWindowError error) async {
+    // 1. Try finding from already loaded catalog items in memory
+    ErrorCatalog? currentCatalog = _catalog
+        .where(
+          (e) =>
+              (error.errorId != null &&
+                  error.errorId! > 0 &&
+                  e.errorId == error.errorId) ||
+              (error.errorCode.isNotEmpty && e.code == error.errorCode),
+        )
+        .firstOrNull;
+
+    // 2. If not found in memory, query the database
+    if (currentCatalog == null) {
+      if (widget.isManagerMode) {
+        if (error.errorId != null && error.errorId! > 0) {
+          currentCatalog =
+              await DatabaseService.getErrorCatalogItemById(error.errorId!);
+        }
+        if (currentCatalog == null && error.errorCode.isNotEmpty) {
+          final results =
+              await DatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog =
+              results.where((e) => e.code == error.errorCode).firstOrNull ??
+                  results.firstOrNull;
+        }
+      } else {
+        if (error.errorId != null && error.errorId! > 0) {
+          currentCatalog = await LocalDatabaseService.getErrorCatalogItemById(
+              error.errorId!);
+        }
+        if (currentCatalog == null && error.errorCode.isNotEmpty) {
+          final results =
+              await LocalDatabaseService.searchErrorCatalog(error.errorCode);
+          currentCatalog =
+              results.where((e) => e.code == error.errorCode).firstOrNull ??
+                  results.firstOrNull;
+        }
+      }
+    }
+
+    final isNotice = _isErrorNotice(error, currentCatalog);
+
+    final ErrorCatalog catalogDetails = currentCatalog ??
+        ErrorCatalog(
+          code: error.errorCode.isNotEmpty ? error.errorCode : 'Unbekannt',
+          description: error.notes.isNotEmpty
+              ? error.notes
+              : 'Fehler nicht im Katalog gefunden',
+          category: isNotice ? 'Hinweis' : 'Unbekannt',
+          assetType: 'window',
+        );
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              isNotice ? Icons.info_outline : Icons.warning_amber_rounded,
+              color: isNotice ? Colors.amber.shade800 : Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Text(isNotice ? 'Hinweis-Details' : 'Mangel-Details'),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Code: ${catalogDetails.code}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    const SizedBox(width: 8),
+                    if (isNotice)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade400),
+                        ),
+                        child: Text(
+                          'Hinweis',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Beschreibung: ${catalogDetails.description.isNotEmpty ? catalogDetails.description : (error.notes.isNotEmpty ? error.notes : 'Keine Beschreibung')}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Text('Kategorie: ${catalogDetails.category}'),
+                const SizedBox(height: 8),
+                Text('Schweregrad: ${_getSeverityDisplay(error.severity)}'),
+                const SizedBox(height: 8),
+                Text('Status: ${_getStatusDisplay(error.resolutionStatus)}'),
+                if (error.quantity > 1) ...[
+                  const SizedBox(height: 8),
+                  Text('Anzahl: ${error.quantity}'),
+                ],
+                if (catalogDetails.recommendation.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Empfehlung: ${catalogDetails.recommendation}'),
+                ],
+                if (catalogDetails.normReference.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Normreferenz: ${catalogDetails.normReference}'),
+                ],
+                if (error.notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text('Notizen: ${error.notes}',
+                      style: const TextStyle(fontStyle: FontStyle.italic)),
+                ],
+                _buildPhotoGallery(error),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (!widget.isReadOnly) ...[
+            if (error.resolutionStatus.toLowerCase() != 'resolved') ...[
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Als gelöst markieren'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () async {
+                  final updatedError =
+                      error.copyWith(resolutionStatus: 'Resolved');
+                  if (widget.isManagerMode) {
+                    await DatabaseService.updateInspectionWindowError(
+                        updatedError);
+                  } else {
+                    await LocalDatabaseService.updateInspectionWindowError(
+                        updatedError);
+                    await _markWindowAsInspectedIfInspector();
+                  }
+                  if (mounted) {
+                    Navigator.pop(context);
+                    await _loadData();
+                  }
+                },
+              ),
+            ] else ...[
+              TextButton.icon(
+                icon: const Icon(Icons.replay),
+                label: const Text('Als offen markieren'),
+                onPressed: () async {
+                  final updatedError =
+                      error.copyWith(resolutionStatus: 'Open');
+                  if (widget.isManagerMode) {
+                    await DatabaseService.updateInspectionWindowError(
+                        updatedError);
+                  } else {
+                    await LocalDatabaseService.updateInspectionWindowError(
+                        updatedError);
+                    await _markWindowAsInspectedIfInspector();
+                  }
+                  if (mounted) {
+                    Navigator.pop(context);
+                    await _loadData();
+                  }
+                },
+              ),
+            ],
+          ],
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _deleteError(InspectionWindowError error) async {
     if (error.id == null) return;
+    final isNotice = _isErrorNotice(error);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Mangel löschen'),
+        title: Text(isNotice ? 'Hinweis löschen' : 'Mangel löschen'),
         content: Text(
-            'Möchten Sie den Mangel "${error.errorCode}" wirklich entfernen?'),
+            'Möchten Sie den Eintrag "${error.errorCode}" wirklich entfernen?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Abbrechen')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red, foregroundColor: Colors.white),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Löschen'),
+            child: const Text('Trotzdem löschen (Fehleingabe)'),
           ),
+          if (error.resolutionStatus.toLowerCase() != 'resolved' &&
+              !widget.isReadOnly)
+            ElevatedButton.icon(
+              onPressed: () async {
+                final updatedError =
+                    error.copyWith(resolutionStatus: 'Resolved');
+                if (widget.isManagerMode) {
+                  await DatabaseService.updateInspectionWindowError(
+                      updatedError);
+                } else {
+                  await LocalDatabaseService.updateInspectionWindowError(
+                      updatedError);
+                  await _markWindowAsInspectedIfInspector();
+                }
+                if (mounted) {
+                  Navigator.pop(ctx, false);
+                  await _loadData();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade700,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.check_circle_outline, size: 18),
+              label: const Text('Als "Gelöst" markieren'),
+            ),
         ],
       ),
     );
@@ -2040,6 +2344,7 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
         await DatabaseService.deleteInspectionWindowError(error.id!);
       } else {
         await LocalDatabaseService.deleteInspectionWindowError(error.id!);
+        await _markWindowAsInspectedIfInspector();
       }
       await _loadData();
     }
@@ -2092,208 +2397,327 @@ class _WindowErrorManagementPageState extends State<WindowErrorManagementPage> {
                   itemCount: _errors.length,
                   itemBuilder: (context, index) {
                     final err = _errors[index];
-                    final catalogMatch =
-                        _catalog.firstWhereOrNull((c) => c.code == err.errorCode);
-                    final desc = catalogMatch?.description ?? err.notes;
+                    final catalogMatch = _catalog.firstWhereOrNull((c) =>
+                        (err.errorId != null && err.errorId! > 0 && c.errorId == err.errorId) ||
+                        (err.errorCode.isNotEmpty && c.code == err.errorCode));
+                    final isNotice = _isErrorNotice(err, catalogMatch);
+                    final isResolved =
+                        err.resolutionStatus.toLowerCase() == 'resolved';
+                    final desc = catalogMatch?.description ??
+                        (err.notes.isNotEmpty
+                            ? err.notes
+                            : 'Mangel ${err.errorCode}');
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
+                        side: isNotice
+                            ? BorderSide(
+                                color: Colors.amber.shade300, width: 1.2)
+                            : BorderSide(color: Colors.grey.shade200),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 14,
-                                      backgroundColor:
-                                          _getStatusColor(err.resolutionStatus),
-                                      child: Icon(
-                                        _getStatusIcon(err.resolutionStatus),
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color: Colors.blue.shade200),
-                                      ),
-                                      child: Text(
-                                        err.errorCode,
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue.shade900),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: _getSeverityColor(err.severity)
-                                            .withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                            color:
-                                                _getSeverityColor(err.severity)),
-                                      ),
-                                      child: Text(
-                                        _getSeverityDisplay(err.severity),
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color:
-                                              _getSeverityColor(err.severity),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _showErrorDetails(err),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: isNotice
+                                            ? (isResolved
+                                                ? Colors.green
+                                                : Colors.amber.shade700)
+                                            : (isResolved
+                                                ? Colors.green
+                                                : _getStatusColor(
+                                                    err.resolutionStatus)),
+                                        child: Icon(
+                                          isNotice
+                                              ? (isResolved
+                                                  ? Icons.check_circle
+                                                  : Icons.info_outline)
+                                              : (isResolved
+                                                  ? Icons.check_circle
+                                                  : _getStatusIcon(
+                                                      err.resolutionStatus)),
+                                          color: Colors.white,
+                                          size: 16,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    InkWell(
-                                      onTap: widget.isReadOnly
-                                          ? null
-                                          : () async {
-                                              final nextStatus =
-                                                  err.resolutionStatus
-                                                              .toLowerCase() ==
-                                                          'resolved'
-                                                      ? 'Open'
-                                                      : 'Resolved';
-                                              final updated = err.copyWith(
-                                                  resolutionStatus: nextStatus);
-                                              if (widget.isManagerMode) {
-                                                await DatabaseService
-                                                    .updateInspectionWindowError(
-                                                        updated);
-                                              } else {
-                                                await LocalDatabaseService
-                                                    .updateInspectionWindowError(
-                                                        updated);
-                                              }
-                                              await _loadData();
-                                            },
-                                      child: Container(
+                                      const SizedBox(width: 8),
+                                      if (isNotice) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade50,
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            border: Border.all(
+                                                color: Colors.amber.shade400),
+                                          ),
+                                          child: Text(
+                                            'Hinweis',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.amber.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: isNotice
+                                              ? Colors.amber.shade50
+                                              : Colors.blue.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: isNotice
+                                                ? Colors.amber.shade300
+                                                : Colors.blue.shade200,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          err.errorCode,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: isNotice
+                                                ? Colors.amber.shade900
+                                                : Colors.blue.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 6, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: _getStatusColor(
-                                                  err.resolutionStatus)
+                                          color: _getSeverityColor(err.severity)
                                               .withValues(alpha: 0.15),
                                           borderRadius:
                                               BorderRadius.circular(4),
                                           border: Border.all(
-                                              color: _getStatusColor(
-                                                  err.resolutionStatus)),
+                                              color: _getSeverityColor(
+                                                  err.severity)),
                                         ),
                                         child: Text(
-                                          _getStatusDisplay(
-                                              err.resolutionStatus),
+                                          _getSeverityDisplay(err.severity),
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
-                                            color: _getStatusColor(
-                                                err.resolutionStatus),
+                                            color: _getSeverityColor(
+                                                err.severity),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                if (!widget.isReadOnly)
-                                  PopupMenuButton<String>(
-                                    onSelected: (val) {
-                                      if (val == 'edit') {
-                                        _showEditDialog(err);
-                                      } else if (val == 'delete') {
-                                        _deleteError(err);
-                                      }
-                                    },
-                                    itemBuilder: (ctx) => const [
-                                      PopupMenuItem(
-                                        value: 'edit',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.edit, size: 18),
-                                            SizedBox(width: 8),
-                                            Text('Bearbeiten'),
-                                          ],
-                                        ),
-                                      ),
-                                      PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.delete,
-                                                color: Colors.red, size: 18),
-                                            SizedBox(width: 8),
-                                            Text('Löschen',
-                                                style: TextStyle(
-                                                    color: Colors.red)),
-                                          ],
+                                      const SizedBox(width: 6),
+                                      InkWell(
+                                        onTap: widget.isReadOnly
+                                            ? null
+                                            : () async {
+                                                final nextStatus = isResolved
+                                                    ? 'Open'
+                                                    : 'Resolved';
+                                                final updated = err.copyWith(
+                                                    resolutionStatus:
+                                                        nextStatus);
+                                                if (widget.isManagerMode) {
+                                                  await DatabaseService
+                                                      .updateInspectionWindowError(
+                                                          updated);
+                                                } else {
+                                                  await LocalDatabaseService
+                                                      .updateInspectionWindowError(
+                                                          updated);
+                                                  await _markWindowAsInspectedIfInspector();
+                                                }
+                                                await _loadData();
+                                              },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(
+                                                    err.resolutionStatus)
+                                                .withValues(alpha: 0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                            border: Border.all(
+                                                color: _getStatusColor(
+                                                    err.resolutionStatus)),
+                                          ),
+                                          child: Text(
+                                            _getStatusDisplay(
+                                                err.resolutionStatus),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: _getStatusColor(
+                                                  err.resolutionStatus),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              desc.isNotEmpty
-                                  ? desc
-                                  : 'Mangel ${err.errorCode}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                            if (catalogMatch?.category != null &&
-                                catalogMatch!.category.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text('Kategorie: ${catalogMatch.category}',
-                                  style: TextStyle(
-                                      color: Colors.grey.shade600,
-                                      fontSize: 12)),
-                            ],
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                const Icon(Icons.numbers,
-                                    size: 16, color: Colors.grey),
-                                const SizedBox(width: 4),
-                                Text('Anzahl: ${err.quantity}',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12)),
-                                if (err.notes.isNotEmpty) ...[
-                                  const SizedBox(width: 16),
-                                  const Icon(Icons.comment_outlined,
-                                      size: 16, color: Colors.grey),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      err.notes,
-                                      style: const TextStyle(
-                                          fontStyle: FontStyle.italic,
-                                          fontSize: 12),
-                                      overflow: TextOverflow.ellipsis,
+                                  if (!widget.isReadOnly)
+                                    PopupMenuButton<String>(
+                                      onSelected: (val) async {
+                                        if (val == 'toggle_status') {
+                                          final nextStatus = isResolved
+                                              ? 'Open'
+                                              : 'Resolved';
+                                          final updated = err.copyWith(
+                                              resolutionStatus: nextStatus);
+                                          if (widget.isManagerMode) {
+                                            await DatabaseService
+                                                .updateInspectionWindowError(
+                                                    updated);
+                                          } else {
+                                            await LocalDatabaseService
+                                                .updateInspectionWindowError(
+                                                    updated);
+                                            await _markWindowAsInspectedIfInspector();
+                                          }
+                                          await _loadData();
+                                        } else if (val == 'edit') {
+                                          _showEditDialog(err);
+                                        } else if (val == 'delete') {
+                                          _deleteError(err);
+                                        }
+                                      },
+                                      itemBuilder: (ctx) => [
+                                        PopupMenuItem(
+                                          value: 'toggle_status',
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                isResolved
+                                                    ? Icons.replay
+                                                    : Icons.check_circle,
+                                                color: isResolved
+                                                    ? Colors.orange
+                                                    : Colors.green,
+                                                size: 18,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(isResolved
+                                                  ? 'Als offen markieren'
+                                                  : 'Als gelöst markieren'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Bearbeiten'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.delete,
+                                                  color: Colors.red, size: 18),
+                                              SizedBox(width: 8),
+                                              Text('Löschen',
+                                                  style: TextStyle(
+                                                      color: Colors.red)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                desc.isNotEmpty
+                                    ? desc
+                                    : 'Mangel ${err.errorCode}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 14),
+                              ),
+                              if (catalogMatch?.category != null &&
+                                  catalogMatch!.category.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isNotice
+                                        ? Colors.amber.shade50
+                                        : Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: isNotice
+                                        ? Border.all(
+                                            color: Colors.amber.shade300)
+                                        : null,
+                                  ),
+                                  child: Text(
+                                    'Kategorie: ${catalogMatch.category}',
+                                    style: TextStyle(
+                                      color: isNotice
+                                          ? Colors.amber.shade900
+                                          : Colors.grey.shade800,
+                                      fontWeight: isNotice
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                      fontSize: 12,
                                     ),
                                   ),
-                                ],
+                                ),
                               ],
-                            ),
-                            _buildPhotoGallery(err),
-                          ],
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  const Icon(Icons.numbers,
+                                      size: 16, color: Colors.grey),
+                                  const SizedBox(width: 4),
+                                  Text('Anzahl: ${err.quantity}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12)),
+                                  if (err.notes.isNotEmpty) ...[
+                                    const SizedBox(width: 16),
+                                    const Icon(Icons.comment_outlined,
+                                        size: 16, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        err.notes,
+                                        style: const TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                            fontSize: 12),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              _buildPhotoGallery(err),
+                            ],
+                          ),
                         ),
                       ),
                     );

@@ -5,6 +5,7 @@ import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/services/local_database_service.dart';
 import 'package:wartungstool/services/window_options_service.dart';
 
 class ExcelImportResult {
@@ -160,11 +161,15 @@ class ExcelDataImporter {
           resolvedCodes[res.conflict.code] = newCode;
           resolvedCodes[res.conflict.description] = newCode;
           resolvedCodes[res.conflict.incoming.description] = newCode;
-          await DatabaseService.insertErrorCatalog(
-              res.conflict.incoming.copyWith(
+          final approvedIncoming = res.conflict.incoming.copyWith(
             code: newCode,
             status: 'Approved',
-          ));
+            assetType: 'door',
+          );
+          await DatabaseService.insertErrorCatalog(approvedIncoming);
+          try {
+            await LocalDatabaseService.insertErrorCatalog(approvedIncoming);
+          } catch (_) {}
         } else if (res.action == ResolutionAction.replaceExisting ||
             res.action == ResolutionAction.keepExisting) {
           if (res.newCode != null && res.newCode!.isNotEmpty) {
@@ -178,13 +183,14 @@ class ExcelDataImporter {
           'Konfliktlösungen angewendet: ${resolvedCodes.length} Codes überschrieben, ${skippedCodes.length} übersprungen.');
     }
 
-    // Refresh memory catalog list
-    final catalog = await DatabaseService.getAllErrorCatalog();
+    // Refresh memory catalog list (doors only)
+    final catalog = await DatabaseService.getAllErrorCatalog(assetType: 'door');
     final officialCatalog = catalog
         .where((e) =>
             e.status == 'Approved' &&
             e.category != 'Altdaten' &&
-            !e.code.toUpperCase().startsWith('ALT-'))
+            !e.code.toUpperCase().startsWith('ALT-') &&
+            e.assetType.toLowerCase() != 'window')
         .toList();
     int sheetsProcessed = 0;
     int totalDoorsImported = 0;
@@ -428,6 +434,7 @@ class ExcelDataImporter {
                   category: cat,
                   severity: sev,
                   status: 'Proposed',
+                  assetType: 'door',
                 ),
                 existing: existingMatch ?? existingForCode ?? existingForDesc,
                 reason: reason,
@@ -1710,6 +1717,9 @@ class ExcelDataImporter {
               status: 'Approved',
             );
             await DatabaseService.insertErrorCatalog(newError);
+            try {
+              await LocalDatabaseService.insertErrorCatalog(newError);
+            } catch (_) {}
             existingCodes.add(code.toLowerCase());
             existingDescriptions.add(desc.toLowerCase());
             newCatalogProposals.add('$code: $desc ($currentCategory)');
@@ -2164,23 +2174,58 @@ class ExcelDataImporter {
         }
 
         ErrorCatalog? match;
+        // 1. Try matching by exact or clean description first
         for (final cat in catalogList) {
           if (cat.description.trim().toLowerCase() ==
-                  headerText.toLowerCase() ||
-              (colCode.isNotEmpty &&
-                  cat.code.trim().toLowerCase() == colCode.toLowerCase() &&
-                  cat.assetType.toLowerCase() == 'window')) {
+              headerText.toLowerCase()) {
             match = cat;
             break;
           }
         }
 
+        // 2. Only if NOT matched by description, check if colCode is a structured error code (e.g. "9.1", "WIN_...", NOT a plain integer like "1", "2")
+        if (match == null &&
+            colCode.isNotEmpty &&
+            !RegExp(r'^\d+$').hasMatch(colCode)) {
+          for (final cat in catalogList) {
+            if (cat.code.trim().toLowerCase() == colCode.toLowerCase() &&
+                cat.assetType.toLowerCase() == 'window') {
+              match = cat;
+              break;
+            }
+          }
+        }
+
         if (match == null) {
-          String codeToUse = colCode.isNotEmpty ? colCode : 'WIN_COL_$c';
-          final codeCollision = catalogList.any((cat) =>
-              cat.code.trim().toLowerCase() == codeToUse.toLowerCase());
-          if (codeCollision) {
-            codeToUse = 'W-$codeToUse';
+          String codeToUse = '';
+          if (colCode.isNotEmpty && !RegExp(r'^\d+$').hasMatch(colCode)) {
+            codeToUse = colCode;
+          }
+
+          if (codeToUse.isEmpty) {
+            // Check if plain integer colCode can be used without collision
+            if (colCode.isNotEmpty && RegExp(r'^\d+$').hasMatch(colCode)) {
+              final exists = catalogList.any((cat) =>
+                  cat.code.trim().toLowerCase() == colCode.toLowerCase());
+              if (!exists) {
+                codeToUse = colCode;
+              }
+            }
+            if (codeToUse.isEmpty) {
+              codeToUse = 'WIN_COL_$c';
+              int suffix = 1;
+              while (catalogList.any((cat) =>
+                  cat.code.trim().toLowerCase() == codeToUse.toLowerCase())) {
+                codeToUse = 'WIN_COL_${c}_$suffix';
+                suffix++;
+              }
+            }
+          } else {
+            final codeCollision = catalogList.any((cat) =>
+                cat.code.trim().toLowerCase() == codeToUse.toLowerCase());
+            if (codeCollision) {
+              codeToUse = 'W-$codeToUse';
+            }
           }
 
           final category = _determineWindowDefectCategory(headerText);
@@ -2195,6 +2240,9 @@ class ExcelDataImporter {
           );
           final insertedId =
               await DatabaseService.insertErrorCatalog(newEntry);
+          try {
+            await LocalDatabaseService.insertErrorCatalog(newEntry);
+          } catch (_) {}
           match =
               newEntry.copyWith(errorId: insertedId > 0 ? insertedId : null);
           catalogList.add(match);
@@ -2294,19 +2342,41 @@ class ExcelDataImporter {
           raffStr = _toStr(_cell(row, colJalousie)).trim().toLowerCase();
         }
 
-        if (raffStr.isNotEmpty) {
-          hasRaffstore = true;
-          if (raffStr == 'j' ||
+        if (raffStr.isNotEmpty &&
+            raffStr != '-' &&
+            raffStr != '/' &&
+            raffStr != 'nein' &&
+            raffStr != 'nicht vorhanden' &&
+            raffStr != 'kein raffstore' &&
+            raffStr != 'keine' &&
+            raffStr != 'kein') {
+          if (raffStr == 'x' ||
+              raffStr == 'j' ||
               raffStr == 'ja' ||
               raffStr == '1' ||
-              raffStr == 'true') {
+              raffStr == 'ok' ||
+              raffStr == 'i.o.' ||
+              raffStr == '√' ||
+              raffStr == 'true' ||
+              raffStr == 'in ordnung') {
+            hasRaffstore = true;
             raffstoreOK = true;
           } else if (raffStr == 'n' ||
-              raffStr == 'nein' ||
               raffStr == '0' ||
-              raffStr == 'false') {
+              raffStr == 'false' ||
+              raffStr == 'defekt' ||
+              raffStr == 'nicht in ordnung' ||
+              raffStr == 'schaden') {
+            hasRaffstore = true;
             raffstoreOK = false;
+          } else {
+            hasRaffstore = true;
+            raffstoreOK = true;
           }
+        } else {
+          // If there is no value in this parameter (or explicitly 'nein'/'nicht vorhanden'), set as "nicht vorhanden"
+          hasRaffstore = false;
+          raffstoreOK = null;
         }
 
         final notes = (colNotes >= 0 && colNotes < row.length
@@ -2422,8 +2492,8 @@ class ExcelDataImporter {
               fittings:
                   fittings.isNotEmpty ? fittings : existingWindow.fittings,
               windowFunctionOK: windowFunctionOK,
-              hasRaffstore: hasRaffstore || existingWindow.hasRaffstore,
-              raffstoreOK: raffstoreOK ?? existingWindow.raffstoreOK,
+              hasRaffstore: hasRaffstore,
+              raffstoreOK: raffstoreOK,
               notes: notes.isNotEmpty ? notes : existingWindow.notes,
             );
             await DatabaseService.updateWindow(updated);
@@ -2501,6 +2571,9 @@ class ExcelDataImporter {
     }
 
     await WindowOptionsService.save();
+    try {
+      await LocalDatabaseService.refreshLocalCatalogFromMain();
+    } catch (_) {}
     logs.add(
         'Fenster-Import vollständig: ${windowSheetsToProcess.length} Blätter verarbeitet, '
         '${distinctWindowAliases.length} eindeutige Fenster, $totalErrorsLinked Mängel verknüpft.');

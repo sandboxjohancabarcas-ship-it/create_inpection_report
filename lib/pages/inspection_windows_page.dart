@@ -530,9 +530,9 @@ class _InspectionWindowsPageState extends State<InspectionWindowsPage> {
   Widget _buildErrorStatusBadge(DoorErrorSummary summary, Window window) {
     final List<Widget> badges = [];
 
-    // Raffstore badge if applicable
-    if (window.hasRaffstore) {
-      final raffstoreOk = window.raffstoreOK ?? false;
+    // Raffstore badge if applicable (only if Raffstore is present and evaluated)
+    if (window.hasRaffstore && window.raffstoreOK != null) {
+      final raffstoreOk = window.raffstoreOK == true;
       badges.add(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),

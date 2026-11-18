@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
@@ -616,6 +617,110 @@ void main() {
       final history1 = await DatabaseService.getWindowHistoryData(windowId: win1!.id!);
       expect(history1, isNotNull);
       expect(history1!['totalLifetimeErrors'], greaterThan(0));
+    });
+
+    test('Diagnose Willinghusener Weg import and error catalogue', () async {
+      final file = File(r'test/test_data/Fenster/26-15318-AB P-003732 Willinghusener Weg 5, 22113 Oststeinbek Mieter GOTTWALD Fensterliste final.xlsx');
+      expect(file.existsSync(), isTrue);
+
+      final result = await ExcelDataImporter.importFromFile(file);
+
+      print('=== Willinghusener Import Result ===');
+      print('Windows imported: ${result.windowsImported}');
+      print('Sheets processed: ${result.sheetsProcessed}');
+      print('Errors linked: ${result.errorsLinked}');
+      print('New catalog proposals: ${result.newCatalogProposals}');
+      print('Logs:');
+      for (final l in result.logs) {
+        print('  $l');
+      }
+      print('Warnings:');
+      for (final w in result.warnings) {
+        print('  $w');
+      }
+
+      final catalog = await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      print('=== Window Error Catalog in DB (total: ${catalog.length}) ===');
+      for (final e in catalog) {
+        print('  Code: "${e.code}", Desc: "${e.description}", Cat: "${e.category}", Status: "${e.status}"');
+      }
+
+      final db = await DatabaseService.getDb();
+      final win4 = await db.query('windows', where: 'windowNumber = ?', whereArgs: ['03-004']);
+      expect(win4.isNotEmpty, isTrue);
+      expect(win4.first['hasRaffstore'], equals(1));
+      expect(win4.first['raffstoreOK'], equals(1));
+
+      final win1 = await db.query('windows', where: 'windowNumber = ?', whereArgs: ['03-001']);
+      expect(win1.isNotEmpty, isTrue);
+      expect(win1.first['hasRaffstore'], equals(0));
+      expect(win1.first['raffstoreOK'], isNull);
+    });
+
+    test('resetWindowCatalog resets window catalog while keeping door catalog intact', () async {
+      // 1. Initialize both catalogs
+      await DatabaseService.checkAndInitializeCatalog();
+      await DatabaseService.checkAndInitializeWindowCatalog();
+
+      final initialDoors = await DatabaseService.getAllErrorCatalog(assetType: 'door');
+      final initialWindows = await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      expect(initialDoors.isNotEmpty, isTrue);
+      expect(initialWindows.isNotEmpty, isTrue);
+
+      // 2. Add a custom window error and a custom door error
+      await DatabaseService.insertErrorCatalog(ErrorCatalog(
+        code: 'TEST_CUSTOM_WIN',
+        description: 'Test Custom Window Defect',
+        category: 'Fenster Mängelerfassung',
+        assetType: 'window',
+        status: 'Approved',
+      ));
+      await DatabaseService.insertErrorCatalog(ErrorCatalog(
+        code: 'TEST_CUSTOM_DOOR',
+        description: 'Test Custom Door Defect',
+        category: 'Allgemein',
+        assetType: 'door',
+        status: 'Approved',
+      ));
+
+      final windowsBeforeReset = await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      expect(windowsBeforeReset.any((e) => e.code == 'TEST_CUSTOM_WIN'), isTrue);
+
+      // 3. Reset Window Catalog
+      await DatabaseService.resetWindowCatalog();
+
+      final windowsAfterReset = await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      final doorsAfterReset = await DatabaseService.getAllErrorCatalog(assetType: 'door');
+
+      // Window custom error is gone, baseline restored
+      expect(windowsAfterReset.any((e) => e.code == 'TEST_CUSTOM_WIN'), isFalse);
+      expect(windowsAfterReset.length, equals(initialWindows.length));
+
+      // Door custom error and baseline doors remain untouched
+      expect(doorsAfterReset.any((e) => e.code == 'TEST_CUSTOM_DOOR'), isTrue);
+      expect(doorsAfterReset.length, equals(initialDoors.length + 1));
+    });
+
+    test('Excel Migration strictly separates door and window errors', () async {
+      await DatabaseService.resetWindowCatalog();
+
+      final winFile = File(r'test/test_data/Fenster/26-15318-AB P-003732 Willinghusener Weg 5, 22113 Oststeinbek Mieter GOTTWALD Fensterliste final.xlsx');
+      final winResult = await ExcelDataImporter.importFromFile(winFile);
+
+      expect(winResult.assetType, equals('window'));
+      expect(winResult.windowsImported, greaterThan(0));
+      expect(winResult.doorsImported, equals(0));
+
+      final winErrors = await DatabaseService.getAllErrorCatalog(assetType: 'window');
+      // Ensure all errors retrieved with assetType: 'window' are indeed windows
+      for (final e in winErrors) {
+        expect(e.assetType.toLowerCase(), equals('window'));
+      }
+
+      final doorErrors = await DatabaseService.getAllErrorCatalog(assetType: 'door');
+      for (final e in doorErrors) {
+        expect(e.assetType.toLowerCase(), isNot(equals('window')));
+      }
     });
   });
 }

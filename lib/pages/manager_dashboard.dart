@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:wartungstool/models/error_catalog.dart';
 import '../services/database_service.dart';
+import '../services/local_database_service.dart';
 import '../models/models.dart';
 import 'error_consolidation_page.dart';
 import 'door_options_manager_page.dart';
@@ -404,6 +405,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     setState(() => isLoading = true);
     try {
       await DatabaseService.checkAndInitializeCatalog(force: true);
+      await DatabaseService.resetWindowCatalog();
+      try {
+        await LocalDatabaseService.refreshLocalCatalogFromMain();
+      } catch (_) {}
       await _loadErrors();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

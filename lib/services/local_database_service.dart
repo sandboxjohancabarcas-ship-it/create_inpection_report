@@ -1271,6 +1271,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) THEN 1 ELSE 0 END) AS notice_count,
         SUM(CASE WHEN iwe.id IS NOT NULL AND (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1279,6 +1281,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_notices,
         SUM(CASE WHEN iwe.id IS NOT NULL AND (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1287,6 +1291,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_notices,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1295,6 +1301,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) THEN 1 ELSE 0 END) AS defect_count,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1303,6 +1311,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_defects,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1311,6 +1321,8 @@ class LocalDatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_defects
       FROM inspection_windows iw
       LEFT JOIN inspection_window_errors iwe ON iw.id = iwe.inspectionWindowId
@@ -2813,6 +2825,15 @@ class LocalDatabaseService {
       final masterCatalog =
           await DatabaseService.getAllErrorCatalog(status: 'Approved');
 
+      // Clear local window catalog entries so any deleted/reset window entries do not linger
+      final db = await getDb();
+      try {
+        await db.delete(
+          'error_catalog',
+          where: "LOWER(COALESCE(assetType, 'door')) = 'window'",
+        );
+      } catch (_) {}
+
       // Delegate the insertion to the standard catalog update routine
       await insertErrorCatalogItems(masterCatalog);
       print(
@@ -2820,6 +2841,19 @@ class LocalDatabaseService {
     } catch (e) {
       print('Error refreshing catalog: $e');
       rethrow;
+    }
+  }
+
+  /// Resets window error catalog entries in local database.
+  static Future<void> resetWindowCatalog() async {
+    final db = await getDb();
+    try {
+      await db.delete(
+        'error_catalog',
+        where: "LOWER(COALESCE(assetType, 'door')) = 'window'",
+      );
+    } catch (e) {
+      print('[LocalDatabaseService] Error deleting local window entries: $e');
     }
   }
 

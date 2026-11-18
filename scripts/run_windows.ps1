@@ -84,7 +84,12 @@ if ($Mode -eq "clean") {
     
     $filesToDelete = @(
         "$rootDir\.dart_tool\sqflite_common_ffi\databases\door_inspection.db",
+        "$rootDir\.dart_tool\sqflite_common_ffi\databases\working.db",
+        "$rootDir\.dart_tool\sqflite_common_ffi\databases\result_package.db",
+        "$rootDir\.dart_tool\sqflite_common_ffi\databases\selective_export_test.db",
         "$env:APPDATA\Cabarcas WartungTool\WartungsTool\working.db",
+        "$env:APPDATA\Cabarcas WartungTool\WartungsTool\door_inspection.db",
+        "$env:LOCALAPPDATA\Cabarcas WartungTool\WartungsTool\working.db",
         "$rootDir\working.db",
         "$rootDir\migration_protocol.log"
     )
@@ -117,6 +122,9 @@ Write-Host "[3/3] Launching application on Windows..." -ForegroundColor Cyan
 $flutterArgs = @("run", "-d", "Windows", "--no-enable-impeller")
 if ($Release) {
     $flutterArgs += "--release"
+}
+if ($Mode -eq "clean") {
+    $flutterArgs += "--dart-define=RESET_WINDOW_CATALOG=true"
 }
 
 Write-Host "Executing: flutter $($flutterArgs -join ' ')" -ForegroundColor DarkGray

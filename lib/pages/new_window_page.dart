@@ -117,7 +117,7 @@ class _NewWindowPageState extends State<NewWindowPage> {
 
     _windowFunctionOK = w?.windowFunctionOK ?? true;
 
-    if (w?.hasRaffstore == true) {
+    if (w?.hasRaffstore == true && w?.raffstoreOK != null) {
       _raffstoreState = (w?.raffstoreOK == false) ? 2 : 1;
     } else {
       _raffstoreState = 0;

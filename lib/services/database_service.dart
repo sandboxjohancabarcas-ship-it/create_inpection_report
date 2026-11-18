@@ -894,8 +894,7 @@ class DatabaseService {
       where:
           'inspectionWindowId IN (SELECT id FROM inspection_windows WHERE windowId IN ($inClause))',
     );
-    await db.delete('inspection_windows',
-        where: 'windowId IN ($inClause)');
+    await db.delete('inspection_windows', where: 'windowId IN ($inClause)');
     await db.delete('windows', where: 'id IN ($inClause)');
   }
 
@@ -1119,8 +1118,8 @@ class DatabaseService {
     return maps.map((map) => Window.fromMap(map)).toList();
   }
 
-  static Future<Map<int, DoorErrorSummary>> getWindowErrorSummariesForInspection(
-      int inspectionId) async {
+  static Future<Map<int, DoorErrorSummary>>
+      getWindowErrorSummariesForInspection(int inspectionId) async {
     final db = await getDb();
     final List<Map<String, dynamic>> rows = await db.rawQuery('''
       SELECT 
@@ -1135,6 +1134,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) THEN 1 ELSE 0 END) AS notice_count,
         SUM(CASE WHEN iwe.id IS NOT NULL AND (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1143,6 +1144,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_notices,
         SUM(CASE WHEN iwe.id IS NOT NULL AND (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1151,6 +1154,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_notices,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1159,6 +1164,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) THEN 1 ELSE 0 END) AS defect_count,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1167,6 +1174,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) NOT IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS open_defects,
         SUM(CASE WHEN iwe.id IS NOT NULL AND NOT (
           LOWER(COALESCE(ec.category, '')) LIKE '%hinweis%'
@@ -1175,6 +1184,8 @@ class DatabaseService {
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'hinweis%'
           OR COALESCE(ec.code, iwe.errorCode, '') LIKE '0.%'
           OR LOWER(COALESCE(ec.code, iwe.errorCode, '')) LIKE 'h-%'
+          OR LOWER(COALESCE(iwe.notes, '')) LIKE 'hinweis%'
+          OR LOWER(COALESCE(iwe.severity, '')) = 'hinweis'
         ) AND LOWER(COALESCE(iwe.resolutionStatus, 'open')) IN ('resolved', 'gelöst', 'geloest', 'beholfen', 'erledigt') THEN 1 ELSE 0 END) AS resolved_defects
       FROM inspection_windows iw
       LEFT JOIN inspection_window_errors iwe ON iw.id = iwe.inspectionWindowId
@@ -2897,7 +2908,8 @@ class DatabaseService {
         });
       });
       healthStatus = hasHighSeverity ? 'red' : 'yellow';
-    } else if (!window.windowFunctionOK || (window.hasRaffstore && window.raffstoreOK == false)) {
+    } else if (!window.windowFunctionOK ||
+        (window.hasRaffstore && window.raffstoreOK == false)) {
       healthStatus = 'yellow';
     }
 
@@ -4541,7 +4553,9 @@ class DatabaseService {
       whereClauses.add('status = ?');
       whereArgs.add(status);
     }
-    if (assetType != null && assetType.isNotEmpty && assetType.toLowerCase() != 'all') {
+    if (assetType != null &&
+        assetType.isNotEmpty &&
+        assetType.toLowerCase() != 'all') {
       whereClauses.add("LOWER(COALESCE(assetType, 'door')) = ?");
       whereArgs.add(assetType.toLowerCase());
     }
@@ -4556,11 +4570,14 @@ class DatabaseService {
   }
 
   /// Fetches unique categories currently present in the error catalog.
-  static Future<List<String>> getErrorCatalogCategories({String? assetType}) async {
+  static Future<List<String>> getErrorCatalogCategories(
+      {String? assetType}) async {
     final db = await getDb();
     String query = 'SELECT DISTINCT category FROM error_catalog';
     List<dynamic> args = [];
-    if (assetType != null && assetType.isNotEmpty && assetType.toLowerCase() != 'all') {
+    if (assetType != null &&
+        assetType.isNotEmpty &&
+        assetType.toLowerCase() != 'all') {
       query += " WHERE LOWER(COALESCE(assetType, 'door')) = ?";
       args.add(assetType.toLowerCase());
     }
@@ -4688,7 +4705,8 @@ class DatabaseService {
 
     if (!force && count > 0 && nonPlaceholderCount > 0) {
       print(
-          '[Catalog] Database has $count entries including seeded ones. Initialization skipped.');
+          '[Catalog] Database has $count entries including seeded ones. Door initialization skipped.');
+      await checkAndInitializeWindowCatalog(force: force);
       return;
     }
 
@@ -4760,7 +4778,7 @@ class DatabaseService {
         for (final error in errors) {
           final existing = await txn.query(
             'error_catalog',
-            columns: ['errorId', 'description', 'severity'],
+            columns: ['errorId', 'description', 'severity', 'assetType'],
             where: 'code = ?',
             whereArgs: [error.code],
             limit: 1,
@@ -4771,12 +4789,15 @@ class DatabaseService {
             final existingDesc = existing.first['description'] as String? ?? '';
             final existingSeverity =
                 existing.first['severity'] as String? ?? '';
-            // Update in-place if forced, or if it is a placeholder or has invalid severity
+            final existingAsset =
+                existing.first['assetType'] as String? ?? 'door';
+            // Update in-place if forced, or if it is a placeholder or has invalid severity, or if assetType needs update
             if (force ||
                 existingDesc.startsWith('Excel-Fehler') ||
                 existingDesc.isEmpty ||
                 !['low', 'medium', 'high', 'critical']
-                    .contains(existingSeverity.toLowerCase())) {
+                    .contains(existingSeverity.toLowerCase()) ||
+                existingAsset.toLowerCase() != error.assetType.toLowerCase()) {
               await txn.update(
                 'error_catalog',
                 error.toMap()..remove('errorId'),
@@ -4804,15 +4825,26 @@ class DatabaseService {
   }
 
   /// Startup module to check and initialize the Window Error Catalog.
-  static Future<void> checkAndInitializeWindowCatalog({bool force = false}) async {
+  static Future<void> checkAndInitializeWindowCatalog(
+      {bool force = false}) async {
     final db = await getDb();
-    final countRows = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'window'");
-    final count = Sqflite.firstIntValue(countRows) ?? 0;
 
-    if (!force && count > 0) {
-      print('[Catalog] Window catalog already initialized ($count entries).');
-      return;
+    // Ensure any existing catalog entries matching window patterns have assetType = 'window'
+    try {
+      await db.rawUpdate('''
+        UPDATE error_catalog
+        SET assetType = 'window'
+        WHERE LOWER(COALESCE(assetType, 'door')) != 'window'
+          AND (
+            LOWER(category) LIKE '%fenster%'
+            OR LOWER(category) = 'holzfenster'
+            OR LOWER(description) LIKE '%fenster%'
+            OR code LIKE '9.%'
+            OR code LIKE '20.%'
+          )
+      ''');
+    } catch (e) {
+      print('[Catalog] Notice updating window assetType: $e');
     }
 
     final dbPath = await getDatabasesPath();
@@ -4847,7 +4879,8 @@ class DatabaseService {
     // 3. Fallback to bundled asset
     if (errors.isEmpty) {
       try {
-        final content = await rootBundle.loadString('window_error_catalog.json');
+        final content =
+            await rootBundle.loadString('window_error_catalog.json');
         errors = _parseJsonCatalog(content, defaultAssetType: 'window');
       } catch (_) {}
     }
@@ -4859,18 +4892,24 @@ class DatabaseService {
         for (final error in errors) {
           final existing = await txn.query(
             'error_catalog',
-            columns: ['errorId'],
+            columns: ['errorId', 'description', 'assetType'],
             where: 'code = ?',
             whereArgs: [error.code],
             limit: 1,
           );
           if (existing.isNotEmpty) {
-            if (force) {
+            final existingId = existing.first['errorId'] as int;
+            final existingDesc = existing.first['description'] as String? ?? '';
+            final existingAsset = existing.first['assetType'] as String? ?? '';
+            if (force ||
+                existingDesc.startsWith('Excel-Fehler') ||
+                existingDesc.isEmpty ||
+                existingAsset.toLowerCase() != 'window') {
               await txn.update(
                 'error_catalog',
                 error.toMap()..remove('errorId'),
-                where: 'code = ?',
-                whereArgs: [error.code],
+                where: 'errorId = ?',
+                whereArgs: [existingId],
               );
             }
           } else {
@@ -4882,27 +4921,61 @@ class DatabaseService {
           }
         }
       });
-      print('[Catalog] Window Error Catalog initialized with ${errors.length} items.');
+      print(
+          '[Catalog] Window Error Catalog initialized with ${errors.length} items.');
     } catch (e) {
       print('[Catalog] Error during window catalog initialization: $e');
     }
   }
 
+  /// Resets the Window Error Catalog back to the baseline template (window_error_catalog.json).
+  /// Completely removes any custom/imported window errors from previous test runs.
+  /// Door errors (assetType: 'door') remain untouched.
+  static Future<void> resetWindowCatalog() async {
+    final db = await getDb();
+    print('[Catalog] Resetting Window Error Catalog to standard template...');
+    try {
+      await db.delete(
+        'error_catalog',
+        where: "LOWER(COALESCE(assetType, 'door')) = 'window'",
+      );
+    } catch (e) {
+      print('[Catalog] Error deleting window entries: $e');
+    }
+    await checkAndInitializeWindowCatalog(force: true);
+  }
+
   /// Parses JSON catalog formatted data
-  static List<ErrorCatalog> _parseJsonCatalog(String jsonStr, {String defaultAssetType = 'door'}) {
+  static List<ErrorCatalog> _parseJsonCatalog(String jsonStr,
+      {String defaultAssetType = 'door'}) {
     final List<ErrorCatalog> results = [];
     try {
       final Map<String, dynamic> data = jsonDecode(jsonStr);
       data.forEach((code, value) {
         if (value is Map<String, dynamic>) {
+          final desc = value['description'] as String? ?? '';
+          final cat = value['category'] as String? ?? 'Allgemein';
+          String assetType = value['assetType'] as String? ?? defaultAssetType;
+
+          if (assetType == 'door' && defaultAssetType == 'door') {
+            final lowerCat = cat.toLowerCase();
+            final lowerDesc = desc.toLowerCase();
+            if (lowerCat.contains('fenster') ||
+                lowerCat == 'holzfenster' ||
+                lowerDesc.contains('fenster') ||
+                RegExp(r'^(9|20)\.\d+').hasMatch(code)) {
+              assetType = 'window';
+            }
+          }
+
           results.add(ErrorCatalog(
             code: code,
-            description: value['description'] as String? ?? '',
-            category: value['category'] as String? ?? 'Allgemein',
+            description: desc,
+            category: cat,
             severity: value['severity'] as String? ?? 'medium',
             recommendation: value['recommendation'] as String? ?? '',
             normReference: value['normReference'] as String? ?? '',
-            assetType: value['assetType'] as String? ?? defaultAssetType,
+            assetType: assetType,
           ));
         }
       });

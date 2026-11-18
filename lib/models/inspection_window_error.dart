@@ -1,3 +1,5 @@
+import 'error_catalog.dart';
+
 class InspectionWindowError {
   final int? id;
   final int inspectionWindowId;
@@ -73,6 +75,20 @@ class InspectionWindowError {
   bool get isOpen => resolutionStatus == 'Open';
   bool get isInProgress => resolutionStatus == 'In Progress';
   bool get isResolved => resolutionStatus == 'Resolved';
+
+  bool isNotice([ErrorCatalog? catalog]) {
+    if (catalog != null && catalog.isNotice) return true;
+    final c = errorCode.trim().toLowerCase();
+    final n = notes.trim().toLowerCase();
+    final s = severity.trim().toLowerCase();
+    return c.startsWith('hinweis') ||
+        c.startsWith('0.') ||
+        c.startsWith('h-') ||
+        n.startsWith('hinweis') ||
+        n.contains('[hinweis]') ||
+        s == 'hinweis' ||
+        s == 'notice';
+  }
 
   @override
   String toString() {
