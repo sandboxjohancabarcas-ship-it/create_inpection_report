@@ -281,7 +281,7 @@ class _DoorListPageState extends State<DoorListPage> {
         if (hasInspections) {
           final workingDbPath = await LocalDatabaseService.getWorkingDbPath();
           final workingDbFile = File(workingDbPath);
-          final timeStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+          final timeStr = DateFormat('ddMMyyyy_HHmmss').format(DateTime.now());
           final tag = action == 'replace' ? 'pre_replace' : 'pre_merge';
           final defaultFileName =
               'Sicherheitskopie_WartungsTool_${tag}_$timeStr.db';
@@ -407,7 +407,7 @@ class _DoorListPageState extends State<DoorListPage> {
         projectNumber: inspData?['projectNumber']?.toString(),
         objectAddress: inspData?['objectAddress']?.toString() ??
             inspData?['clientName']?.toString(),
-        packageType: 'inspektion_ergebnis',
+        packageType: 'paket_ergebnis',
       );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 

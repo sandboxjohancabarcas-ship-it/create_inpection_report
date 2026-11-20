@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../utils/inspection_year_utils.dart';
+import '../utils/date_format_helper.dart';
 
 /// A reusable widget to display a summary of an inspection.
 /// Tapping on it will trigger the provided [onTap] callback.
@@ -247,7 +248,7 @@ class InspectionSummaryCard extends StatelessWidget {
               Text('Projekt: $projectNumber'),
             if (isReparatur || (isErledigt && repairDate != null && repairDate!.isNotEmpty))
               Text(
-                'Reparaturdatum: ${repairDate ?? formattedDate}',
+                'Reparaturdatum: ${repairDate != null ? DateFormatHelper.formatDate(repairDate) : formattedDate}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,

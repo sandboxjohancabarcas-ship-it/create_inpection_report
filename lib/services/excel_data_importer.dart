@@ -79,6 +79,10 @@ class ExcelDataImporter {
     final String projectNumber =
         projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
 
+    // Strictly extract job number (Auftragsnummer) from the file name
+    final jobMatch = RegExp(r'\b(\d{2}-\d{4,5}(?:-[A-Za-z0-9]+)?)\b').firstMatch(fileName);
+    final String fileNameJobNumber = jobMatch != null ? jobMatch.group(1)! : '';
+
     File fileToRead = excelFile;
     File? tempXlsx;
 
@@ -233,6 +237,8 @@ class ExcelDataImporter {
       }
 
       final meta = _parseMetadata(metadataText);
+      // Strictly set job number from file name, not from inside the Excel file
+      meta['jobNumber'] = fileNameJobNumber;
 
       // Extract date from sheet name if present (e.g. "Türlisten 04.09.2025")
       final sheetDateMatch =
@@ -1203,17 +1209,6 @@ class ExcelDataImporter {
       'Auftragsnr.',
       'Projekt'
     ]);
-    final jobNum = extract('(?:Auftragsnummer|Auftragsnr\\.)', [
-      'Kunde',
-      'Objekt',
-      'Datum',
-      'Ansprechpartner',
-      'Kontakt Person vor Ort',
-      'Monteur',
-      'Service Techniker',
-      'Projekt'
-    ]);
-
     String formattedDate = '';
     if (dateStr.isNotEmpty) {
       final dateMatch =
@@ -1235,7 +1230,7 @@ class ExcelDataImporter {
       'date': formattedDate,
       'contactPerson': contact.isNotEmpty ? contact : 'Herr Basau',
       'inspectorName': inspector.isNotEmpty ? inspector : 'Gert',
-      'jobNumber': jobNum.isNotEmpty ? jobNum : '25-12115-AB',
+      'jobNumber': '',
     };
   }
 
@@ -1648,6 +1643,10 @@ class ExcelDataImporter {
     await DatabaseService.checkAndInitializeCatalog();
     await DatabaseService.checkAndInitializeWindowCatalog();
 
+    // Strictly extract job number (Auftragsnummer) from file name
+    final jobMatch = RegExp(r'\b(\d{2}-\d{4,5}(?:-[A-Za-z0-9]+)?)\b').firstMatch(fileName);
+    final String fileNameJobNumber = jobMatch != null ? jobMatch.group(1)! : '';
+
     final List<String> newCatalogProposals = [];
 
     // ── STEP 1: Process "Fehlerliste Codes" sheet if present ──
@@ -1786,7 +1785,7 @@ class ExcelDataImporter {
       // Parse metadata from header area / row 0 (and row 1)
       String sClient = '';
       String sObject = _extractObjectAddressFromWindowSheet(table);
-      String sJobNum = '';
+      String sJobNum = fileNameJobNumber; // Strictly from file name, not within the Excel file
       String sDateStr = '';
 
       if (table.maxRows > 0) {
@@ -1822,14 +1821,6 @@ class ExcelDataImporter {
             } else if (i + 2 < r0.length &&
                 _toStr(_cell(r0, i + 2)).trim().isNotEmpty) {
               sObject = _toStr(_cell(r0, i + 2)).trim();
-            }
-          } else if (cellLower.contains('angebot') ||
-              cellLower.contains('auftrag')) {
-            final match = RegExp(r'(\d{2}-\d{5}-[A-Z]+|\d{2}-\d{5})',
-                    caseSensitive: false)
-                .firstMatch(cellStr);
-            if (match != null) {
-              sJobNum = match.group(1)!;
             }
           } else if (cellLower.startsWith('datum:')) {
             sDateStr = cellStr.substring(6).trim();
@@ -1933,9 +1924,7 @@ class ExcelDataImporter {
 
     // Fallbacks from filename if not in row 0
     String fallbackClient = '';
-    String fallbackJobNum = '';
-    final jobMatch = RegExp(r'(\d{2}-\d{5}-[A-Z]+)').firstMatch(fileName);
-    if (jobMatch != null) fallbackJobNum = jobMatch.group(1)!;
+    String fallbackJobNum = fileNameJobNumber;
 
     // ── Resolve Canonical Object Address for this Project/File ──────────
     final String fileNameAddress = _extractAddressFromFileName(fileName);

@@ -4,6 +4,7 @@ import 'dart:ui' show Rect;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/utils/date_format_helper.dart';
 
 class PdfExportService {
   static String _boolToStr(dynamic val) {
@@ -162,7 +163,7 @@ class PdfExportService {
     );
 
     // Metadata Block
-    final metaText = 'Kunde: ${insp['clientName'] ?? ''} | Objekt: ${insp['objectAddress'] ?? ''} | Datum: ${insp['date'] ?? ''} | Auftragsnr.: ${insp['jobNumber'] ?? ''} | Projekt: ${insp['projectNumber'] ?? ''} | Prüfer: ${insp['inspectorName'] ?? ''}';
+    final metaText = 'Kunde: ${insp['clientName'] ?? ''} | Objekt: ${insp['objectAddress'] ?? ''} | Datum: ${DateFormatHelper.formatDate(insp['date'])} | Auftragsnr.: ${insp['jobNumber'] ?? ''} | Projekt: ${insp['projectNumber'] ?? ''} | Prüfer: ${insp['inspectorName'] ?? ''}';
 
     page.graphics.drawString(
       metaText,
@@ -645,7 +646,7 @@ class PdfExportService {
         return '';
       }).where((s) => s.isNotEmpty).join('\n');
 
-      row.cells[0].value = (insp['date'] ?? '').toString();
+      row.cells[0].value = DateFormatHelper.formatDate(insp['date']);
       row.cells[1].value = (insp['clientName'] ?? '').toString();
       row.cells[2].value = (insp['jobNumber'] ?? '').toString();
       row.cells[3].value = (insp['junctionStatus'] ?? insp['status'] ?? '').toString();

@@ -21,7 +21,7 @@ class GaebExportService {
     final now = DateTime.now();
     final String content = generateXmlString(exportData);
     final String sanitizedCustomer = _sanitizeXmlId(customer);
-    final String dateTimeString = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final String dateTimeString = DateFormat('ddMMyyyy_HHmmss').format(now);
     final String fileName = "${sanitizedCustomer}_Wartung_$dateTimeString.x83";
     return _saveFile(content, fileName);
   }
@@ -71,7 +71,7 @@ class GaebExportService {
     buf.writeln('        <BoQBkdn>');
     buf.writeln('          <Type>BoQLevel</Type>');
     buf.writeln('          <LblBoQBkdn>Tür</LblBoQBkdn>');
-        buf.writeln('          <Length>10</Length>');
+    buf.writeln('          <Length>10</Length>');
     buf.writeln('          <Num>No</Num>');
     buf.writeln('        </BoQBkdn>');
     buf.writeln('        <BoQBkdn>');
@@ -83,7 +83,8 @@ class GaebExportService {
     buf.writeln('        <LblUPComp1 Type="Wages">Lohn</LblUPComp1>');
     buf.writeln('        <LblUPComp2 Type="Materials">Material</LblUPComp2>');
     buf.writeln('        <LblUPComp3 Type="Plant">Gerät</LblUPComp3>');
-    buf.writeln('        <LblUPComp4 Type="Miscellaneous">Sonstiges</LblUPComp4>');
+    buf.writeln(
+        '        <LblUPComp4 Type="Miscellaneous">Sonstiges</LblUPComp4>');
     buf.writeln('        <LblTime>Stunden</LblTime>');
     buf.writeln('      </BoQInfo>');
     buf.writeln('      <BoQBody>');
@@ -101,9 +102,11 @@ class GaebExportService {
       // Level 2: Door as Category — ID and RNoPart both derived from doorNumber
       final sanitizedId = _sanitizeXmlId(door.doorNumber);
       final sanitizedRNo = _sanitizeRNoPart(door.doorNumber);
-      buf.writeln('        <BoQCtgy ID="$sanitizedId" RNoPart="$sanitizedRNo">');
+      buf.writeln(
+          '        <BoQCtgy ID="$sanitizedId" RNoPart="$sanitizedRNo">');
       buf.writeln('          <LblTx>');
-      buf.writeln('            <p><span style="font-weight:bold;">Tür: ${door.doorNumber}</span></p>');
+      buf.writeln(
+          '            <p><span style="font-weight:bold;">Tür: ${door.doorNumber}</span></p>');
       buf.writeln('          </LblTx>');
       buf.writeln('          <BoQBody>');
       buf.writeln('            <Itemlist>');
@@ -116,18 +119,21 @@ class GaebExportService {
         final String desc = err['description']?.toString() ?? '';
         final String qty = err['quantity']?.toString() ?? '1.000';
 
-        buf.writeln('              <Item ID="${sanitizedProjectId}_$sanitizedCode" RNoPart="$sanitizedCode">');
+        buf.writeln(
+            '              <Item ID="${sanitizedProjectId}_$sanitizedCode" RNoPart="$sanitizedCode">');
         buf.writeln('                <Qty>$qty</Qty>');
         buf.writeln('                <QU>Stck</QU>');
         buf.writeln('                <Description>');
         buf.writeln('                  <CompleteText>');
         buf.writeln('                    <DetailTxt>');
         buf.writeln('                      <Text>');
-        buf.writeln('                        <p><span style="font-weight:bold;">$desc</span></p>');
+        buf.writeln(
+            '                        <p><span style="font-weight:bold;">$desc</span></p>');
         buf.writeln('                      </Text>');
         buf.writeln('                    </DetailTxt>');
         buf.writeln('                    <OutlineText>');
-        buf.writeln('                      <OutlTxt><TextOutlTxt><p><span>$desc</span></p></TextOutlTxt></OutlTxt>');
+        buf.writeln(
+            '                      <OutlTxt><TextOutlTxt><p><span>$desc</span></p></TextOutlTxt></OutlTxt>');
         buf.writeln('                    </OutlineText>');
         buf.writeln('                  </CompleteText>');
         buf.writeln('                </Description>');
@@ -168,9 +174,9 @@ class GaebExportService {
       final dynamic doorRaw = entry['door'];
       if (doorRaw == null || doorRaw is! Door) continue;
       final Door door = doorRaw;
-      
+
       final List<dynamic> errorsRaw = entry['errors'] ?? [];
-      
+
       // Omit mangelfrei doors
       if (errorsRaw.isEmpty) continue;
 

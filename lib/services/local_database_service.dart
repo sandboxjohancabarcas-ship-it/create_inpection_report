@@ -3051,7 +3051,7 @@ class LocalDatabaseService {
         await backupDir.create(recursive: true);
       }
 
-      final timeStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final timeStr = DateFormat('ddMMyyyy_HHmmss').format(DateTime.now());
       final backupFileName = 'auto_backup_${tag}_$timeStr.db';
       final backupFilePath = join(backupDir.path, backupFileName);
 

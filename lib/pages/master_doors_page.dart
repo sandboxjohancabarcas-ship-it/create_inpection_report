@@ -24,6 +24,7 @@ import 'inspection_doors_page.dart';
 import 'inspection_windows_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
+import '../utils/date_format_helper.dart';
 
 class MasterDoorsPage extends StatefulWidget {
   const MasterDoorsPage({super.key});
@@ -50,7 +51,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
   String _selectedProject = 'Alle';
   bool _isLoading = true;
   bool _isProcessing = false;
-  bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
   final Set<int> _selectedDoorIds = {};
   final Set<int> _selectedInspectionIds = {};
@@ -806,30 +806,20 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ? Text('${_selectedDoorIds.length} Türen ausgewählt')
             : isInspectionSelectionMode
                 ? Text('${_selectedInspectionIds.length} Aufträge ausgewählt')
-                : _isSearching
-                    ? TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          hintText: 'Suchen (Kunde, Türnummer, Alias, Raum)...',
-                          border: InputBorder.none,
-                        ),
-                        onChanged: (val) => _loadData(),
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('Master-Portal (Manager)',
-                              style: TextStyle(fontSize: 18)),
-                          Text(
-                            AppVersionService.getCompactVersionInfo(
-                                isManager: true),
-                            style: const TextStyle(
-                                fontSize: 11, color: Colors.white70),
-                          ),
-                        ],
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Master-Portal (Manager)',
+                          style: TextStyle(fontSize: 18)),
+                      Text(
+                        AppVersionService.getCompactVersionInfo(
+                            isManager: true),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.white70),
                       ),
+                    ],
+                  ),
         leading: (isDoorSelectionMode || isInspectionSelectionMode)
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -899,19 +889,6 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                   color: Colors.tealAccent),
               tooltip: 'Anwendungsprotokoll (Log) anzeigen & herunterladen',
               onPressed: () => AppLogDialog.show(context),
-            ),
-            IconButton(
-              icon: Icon(_isSearching ? Icons.close : Icons.search),
-              tooltip: _isSearching ? 'Suche schließen' : 'Suchen',
-              onPressed: () {
-                setState(() {
-                  _isSearching = !_isSearching;
-                  if (!_isSearching) {
-                    _searchController.clear();
-                    _loadData();
-                  }
-                });
-              },
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
@@ -1096,32 +1073,44 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                 ),
               ),
 
-              // Project / Liegenschaft Filter Chips
-              if (_projects.length > 1)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.domain,
-                          size: 18, color: Colors.blueAccent),
-                      const SizedBox(width: 8),
-                      const Text('Projekt:',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 13)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: _projects.map((proj) {
+              // Unified Single Search Bar & Project Dropdown Filter
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final bool isNarrow = constraints.maxWidth < 600;
+                    final projectDropdown = _projects.length > 1
+                        ? DropdownButtonFormField<String>(
+                            value: _projects.any((p) {
+                              final k = p['projectNumber']!.isNotEmpty
+                                  ? p['projectNumber']!
+                                  : p['objectAddress']!;
+                              return k == _selectedProject ||
+                                  p['projectNumber'] == _selectedProject;
+                            })
+                                ? _selectedProject
+                                : 'Alle',
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(Icons.domain,
+                                  size: 18, color: Colors.blueAccent),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey.shade50,
+                            ),
+                            items: _projects.map((proj) {
                               final projNum = proj['projectNumber'] ?? '';
                               final objAddr = proj['objectAddress'] ?? '';
                               final projKey = projNum.isNotEmpty
                                   ? projNum
                                   : (objAddr.isNotEmpty ? objAddr : 'Alle');
-                              final isSelected = projKey == _selectedProject;
-
                               String labelText = 'Alle Projekte';
                               if (projKey != 'Alle') {
                                 if (projNum.isNotEmpty && objAddr.isNotEmpty) {
@@ -1132,32 +1121,89 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                                   labelText = objAddr;
                                 }
                               }
-
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 6.0),
-                                child: ChoiceChip(
-                                  avatar: isSelected && projKey != 'Alle'
-                                      ? const Icon(Icons.check, size: 14)
-                                      : null,
-                                  label: Text(labelText,
-                                      style: const TextStyle(fontSize: 12)),
-                                  selected: isSelected,
-                                  onSelected: (selected) {
-                                    if (selected) {
-                                      setState(
-                                          () => _selectedProject = projKey);
-                                      _loadData();
-                                    }
-                                  },
+                              return DropdownMenuItem<String>(
+                                value: projKey,
+                                child: Text(
+                                  labelText,
+                                  style: const TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               );
                             }).toList(),
-                          ),
+                            onChanged: (newProj) {
+                              if (newProj != null) {
+                                setState(() => _selectedProject = newProj);
+                                _loadData();
+                              }
+                            },
+                          )
+                        : null;
+
+                    final searchField = TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText:
+                            'Suchen (Adresse, Auftragsnr., Projekt, Kunde, Tür, Alias, Raum)...',
+                        hintStyle: TextStyle(
+                            fontSize: 13, color: Colors.grey.shade600),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                  });
+                                  _loadData();
+                                },
+                              )
+                            : null,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
                       ),
-                    ],
-                  ),
+                      onChanged: (val) {
+                        setState(() {});
+                        _loadData();
+                      },
+                    );
+
+                    if (projectDropdown == null) {
+                      return searchField;
+                    }
+
+                    if (isNarrow) {
+                      return Column(
+                        children: [
+                          searchField,
+                          const SizedBox(height: 6),
+                          projectDropdown,
+                        ],
+                      );
+                    } else {
+                      return Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: searchField,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 4,
+                            child: projectDropdown,
+                          ),
+                        ],
+                      );
+                    }
+                  },
                 ),
+              ),
 
               const Divider(height: 1),
 
@@ -1391,7 +1437,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ExpansionTile(
             key: PageStorageKey('project_group_${projectGroupTitle}_$index'),
-            initiallyExpanded: true,
+            initiallyExpanded: false,
             leading: Checkbox(
               value: isAllProjectSelected
                   ? true
@@ -1643,7 +1689,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              job['date'].toString(),
+                              DateFormatHelper.formatDate(job['date']),
                               style: TextStyle(
                                   fontSize: 11, color: Colors.grey.shade700),
                             ),
@@ -1673,7 +1719,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                               repairDateStr != null &&
                               repairDateStr.isNotEmpty)
                             Text(
-                              'Reparaturdatum: $repairDateStr',
+                              'Reparaturdatum: ${DateFormatHelper.formatDate(repairDateStr)}',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,

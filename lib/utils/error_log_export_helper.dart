@@ -383,7 +383,7 @@ class ErrorLogExportHelper {
             icon: const Icon(Icons.file_download),
             label: const Text('Fehlerbericht speichern (.txt)'),
             onPressed: () async {
-              final timestamp = DateFormat('yyyyMMdd-HHmmss').format(DateTime.now());
+              final timestamp = DateFormat('ddMMyyyy-HHmmss').format(DateTime.now());
               final defaultFileName = 'wartungstool-fehlerbericht-$timestamp.txt';
               
               final savedPath = await FileExportHelper.saveFileSafely(

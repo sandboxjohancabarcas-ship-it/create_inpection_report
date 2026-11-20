@@ -3241,9 +3241,11 @@ class DatabaseService {
           OR i.projectNumber LIKE ?
           OR i.clientName LIKE ?
           OR i.jobNumber LIKE ?
+          OR i.objectAddress LIKE ?
         )
       ''';
       whereArgs.addAll([
+        searchTerm,
         searchTerm,
         searchTerm,
         searchTerm,

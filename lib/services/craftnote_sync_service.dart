@@ -850,7 +850,7 @@ class CraftnoteSyncService {
         projectNumber: insp['projectNumber']?.toString(),
         objectAddress:
             insp['objectAddress']?.toString() ?? insp['clientName']?.toString(),
-        packageType: 'inspektion_ergebnis',
+        packageType: 'paket_ergebnis',
       );
       final exportPackagePath = p.join(docDir.path, fileName);
       await LocalDatabaseService.exportSelectiveJobPackage(

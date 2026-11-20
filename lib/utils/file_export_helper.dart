@@ -26,23 +26,23 @@ class FileExportHelper {
   }
 
   /// Builds a standard package filename according to the convention:
-  /// [Auftrag number]_[Project number]_[Address]_[packageType]_[datetime].db
+  /// [Auftrag number]_[Project number]_[Address]_[datetime]_[packageType].db
   ///
   /// Examples:
   /// - To Inspector package:
-  ///   25-13610-AB_P-000604_LPS-Museum_inspektion_paket_20260925_101103.db
+  ///   25-13610-AB_P-000604_LPS-Museum_25092026_101103_inspektion_paket.db
   /// - To Manager result:
-  ///   25-13610-AB_P-000604_LPS-Museum_inspektion_ergebnis_20260925_101103.db
+  ///   25-13610-AB_P-000604_LPS-Museum_25092026_101103_paket_ergebnis.db
   static String buildPackageFileName({
     String? jobNumber,
     String? projectNumber,
     String? objectAddress,
-    required String packageType, // 'inspektion_paket' or 'inspektion_ergebnis'
+    required String packageType, // 'inspektion_paket' or 'paket_ergebnis'
     DateTime? timestamp,
     String extension = 'db',
   }) {
     final now = timestamp ?? DateTime.now();
-    final timeStr = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final timeStr = DateFormat('ddMMyyyy_HHmmss').format(now);
 
     final parts = <String>[];
 
@@ -55,22 +55,28 @@ class FileExportHelper {
     final safeAddr = sanitizePathComponent(objectAddress);
     if (safeAddr.isNotEmpty) parts.add(safeAddr);
 
-    final safeType = sanitizePathComponent(packageType, fallback: 'inspektion');
-    parts.add(safeType);
-
     parts.add(timeStr);
+
+    var effectiveType = packageType;
+    if (effectiveType == 'inspektion_ergebnis') {
+      effectiveType = 'paket_ergebnis';
+    }
+    final safeType =
+        sanitizePathComponent(effectiveType, fallback: 'inspektion_paket');
+    parts.add(safeType);
 
     final baseName = parts.join('_');
     return extension.isNotEmpty ? '$baseName.$extension' : baseName;
   }
+
   /// Prompts the user to choose a save destination and saves the file content safely.
-  /// 
+  ///
   /// - [defaultFileName]: Pre-filled file name in the system file picker (e.g. 'inspektion_ergebnis_2026.db').
   /// - [dialogTitle]: Title displayed on the file picker dialog.
   /// - [sourceFile]: Optional local file to read bytes from.
   /// - [fileBytes]: Optional explicit byte data to save.
   /// - [allowedExtensions]: List of allowed extensions (without dot, e.g. ['db', 'xlsx', 'pdf']).
-  /// 
+  ///
   /// Returns the saved destination path or string identifier, or `null` if the user cancelled the dialog.
   static Future<String?> saveFileSafely({
     required String defaultFileName,
@@ -154,7 +160,9 @@ class FileExportHelper {
         alias = d.doorAlias?.toString() ?? d.provisionalAlias?.toString() ?? '';
       }
 
-      final statusStr = (doorId != null ? statuses[doorId] : null) ?? (d is Map ? d['status']?.toString() : null) ?? '';
+      final statusStr = (doorId != null ? statuses[doorId] : null) ??
+          (d is Map ? d['status']?.toString() : null) ??
+          '';
       final s = statusStr.trim().toLowerCase();
       final isProcessed = s == 'inspected' ||
           s == 'geprüft' ||
@@ -166,7 +174,9 @@ class FileExportHelper {
 
       if (!isProcessed) {
         unprocessed.add({
-          'doorNumber': doorNum.isNotEmpty ? doorNum : (alias.isNotEmpty ? alias : 'Ohne Nummer'),
+          'doorNumber': doorNum.isNotEmpty
+              ? doorNum
+              : (alias.isNotEmpty ? alias : 'Ohne Nummer'),
           'floor': floor,
           'room': roomDesig,
           'alias': alias,
@@ -186,7 +196,8 @@ class FileExportHelper {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         title: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
+            Icon(Icons.warning_amber_rounded,
+                color: Colors.orange.shade800, size: 28),
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
@@ -240,17 +251,27 @@ class FileExportHelper {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = unprocessed[index];
-                      final loc = [if (item['floor']!.isNotEmpty) item['floor']!, if (item['room']!.isNotEmpty) item['room']!].join(' | ');
+                      final loc = [
+                        if (item['floor']!.isNotEmpty) item['floor']!,
+                        if (item['room']!.isNotEmpty) item['room']!
+                      ].join(' | ');
                       return ListTile(
                         dense: true,
-                        leading: const Icon(Icons.pending_actions, color: Colors.orange, size: 20),
+                        leading: const Icon(Icons.pending_actions,
+                            color: Colors.orange, size: 20),
                         title: Text(
                           'Tür ${item['doorNumber']}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         subtitle: Text(
-                          [if (loc.isNotEmpty) loc, if (item['alias']!.isNotEmpty) 'Alias: ${item['alias']}'].join(' • '),
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
+                          [
+                            if (loc.isNotEmpty) loc,
+                            if (item['alias']!.isNotEmpty)
+                              'Alias: ${item['alias']}'
+                          ].join(' • '),
+                          style: TextStyle(
+                              color: Colors.grey.shade700, fontSize: 11),
                         ),
                       );
                     },

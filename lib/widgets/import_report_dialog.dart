@@ -592,7 +592,7 @@ class ImportReportDialog extends StatelessWidget {
                           onPressed: () async {
                             final text = audit.generateFormattedReportText();
                             final defaultName =
-                                '${FileExportHelper.sanitizePathComponent(audit.jobNumber, fallback: "migration")}_audit_${DateFormat("yyyyMMdd_HHmmss").format(DateTime.now())}.txt';
+                                '${FileExportHelper.sanitizePathComponent(audit.jobNumber, fallback: "migration")}_audit_${DateFormat("ddMMyyyy_HHmmss").format(DateTime.now())}.txt';
                             await FileExportHelper.saveFileSafely(
                               defaultFileName: defaultName,
                               dialogTitle: 'Migrationsbericht speichern',

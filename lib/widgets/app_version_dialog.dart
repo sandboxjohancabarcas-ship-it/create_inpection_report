@@ -40,7 +40,7 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
 
     String? tempExportPath;
     try {
-      final nowStr = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final nowStr = DateFormat('ddMMyyyy_HHmmss').format(DateTime.now());
       final roleName = widget.isManager ? 'Manager' : 'Inspector';
       final defaultFileName = 'Backup_WartungsTool_${roleName}_$nowStr.db';
 
@@ -63,7 +63,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
       if (savedPath != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Datenbank-Backup erfolgreich gespeichert:\n$savedPath'),
+            content:
+                Text('Datenbank-Backup erfolgreich gespeichert:\n$savedPath'),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 4),
           ),
@@ -111,7 +112,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           title: const Row(
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
@@ -158,7 +160,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Datenbank erfolgreich wiederhergestellt! Bitte Ansicht aktualisieren.'),
+            content: const Text(
+                'Datenbank erfolgreich wiederhergestellt! Bitte Ansicht aktualisieren.'),
             backgroundColor: Colors.green.shade700,
             duration: const Duration(seconds: 4),
           ),
@@ -186,7 +189,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final platformName = AppVersionService.getPlatformName(isManager: widget.isManager);
+    final platformName =
+        AppVersionService.getPlatformName(isManager: widget.isManager);
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -226,12 +230,15 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
                   children: [
                     _buildInfoRow(
                       'Anwendung:',
-                      widget.isManager ? 'Manager-Portal ($platformName)' : 'Techniker-App ($platformName)',
+                      widget.isManager
+                          ? 'Manager-Portal ($platformName)'
+                          : 'Techniker-App ($platformName)',
                     ),
                     const Divider(height: 16),
                     _buildInfoRow('Plattform-Build:', '$platformName Version'),
                     const SizedBox(height: 6),
-                    _buildInfoRow('Version:', 'v${AppVersionService.fullVersion}'),
+                    _buildInfoRow(
+                        'Version:', 'v${AppVersionService.fullVersion}'),
                     const SizedBox(height: 6),
                     _buildInfoRow('Build-Datum:', AppVersionService.buildDate),
                   ],
@@ -265,7 +272,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
                       Expanded(
                         child: Text(
                           _statusMessage ?? 'Bitte warten...',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
@@ -326,7 +334,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
                 child: OutlinedButton.icon(
                   onPressed: () => AppLogDialog.show(context),
                   icon: const Icon(Icons.receipt_long, size: 18),
-                  label: const Text('Anwendungsprotokoll (Log) anzeigen & herunterladen'),
+                  label: const Text(
+                      'Anwendungsprotokoll (Log) anzeigen & herunterladen'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.teal.shade800,
                     side: BorderSide(color: Colors.teal.shade300),
@@ -375,7 +384,8 @@ class _AppVersionDialogState extends State<AppVersionDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 13),
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 13),
         ),
         const SizedBox(width: 8),
         Flexible(

@@ -291,7 +291,7 @@ class _InspectionDoorsPageState extends State<InspectionDoorsPage> {
         jobNumber: inspData?['jobNumber']?.toString() ?? inspData?['auftragsnummer']?.toString(),
         projectNumber: inspData?['projectNumber']?.toString(),
         objectAddress: inspData?['objectAddress']?.toString() ?? inspData?['clientName']?.toString(),
-        packageType: widget.isManagerMode ? 'inspektion_paket' : 'inspektion_ergebnis',
+        packageType: widget.isManagerMode ? 'inspektion_paket' : 'paket_ergebnis',
       );
       tempExportPath = await FileExportHelper.getTempFilePath(defaultFileName);
 

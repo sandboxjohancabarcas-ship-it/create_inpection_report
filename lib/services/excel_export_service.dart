@@ -6,6 +6,7 @@ import 'package:excel/excel.dart';
 import 'package:path/path.dart' as p;
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/database_service.dart';
+import 'package:wartungstool/utils/date_format_helper.dart';
 
 class ExcelExportService {
   /// Wraps text to a maximum line length at word boundaries.
@@ -303,7 +304,7 @@ class ExcelExportService {
     });
 
     final String clientName = _cleanText(insp['clientName']);
-    final String dateStr = _cleanText(insp['date']);
+    final String dateStr = _formatDateValue(insp['date']);
     final String jobNumber = _cleanText(insp['jobNumber']);
     final String objectAddress = _cleanText(insp['objectAddress']);
     final String projectNumber = _cleanText(insp['projectNumber']);
@@ -1249,7 +1250,7 @@ class ExcelExportService {
     });
 
     final String clientName = _cleanText(insp['clientName']);
-    final String dateStr = _cleanText(insp['date']);
+    final String dateStr = _formatDateValue(insp['date']);
     final String jobNumber = _cleanText(insp['jobNumber']);
     final String objectAddress = _cleanText(insp['objectAddress']);
     final String projectNumber = _cleanText(insp['projectNumber']);
@@ -2038,7 +2039,7 @@ class ExcelExportService {
       ..cellStyle = metaStyle;
 
     overviewSheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 2))
-      ..value = TextCellValue('Erstellungsdatum des Berichts: ${DateTime.now().toString().split('.').first}')
+      ..value = TextCellValue('Erstellungsdatum des Berichts: ${DateFormatHelper.formatDate(DateTime.now())}')
       ..cellStyle = metaStyle;
 
     final overviewHeaders = ['Inspektions-ID', 'Auftragsnummer', 'Datum', 'Objektadresse', 'Projektnummer', 'Anzahl Türen'];
@@ -2065,7 +2066,7 @@ class ExcelExportService {
 
       _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 0, row: rowIdx, text: '${insp['inspectionId']}', style: cStyle);
       _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 1, row: rowIdx, text: _cleanText(insp['jobNumber']), style: cStyle);
-      _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 2, row: rowIdx, text: _cleanText(insp['date']), style: cStyle);
+      _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 2, row: rowIdx, text: _formatDateValue(insp['date']), style: cStyle);
       _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 3, row: rowIdx, text: _wrapText(insp['objectAddress'], 40), style: lStyle);
       _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 4, row: rowIdx, text: _cleanText(insp['projectNumber']), style: cStyle);
       _setCell(overviewSheet, overviewColWidths, overviewRowLineCounts, col: 5, row: rowIdx, text: '${doors.length}', style: cStyle);
@@ -2108,7 +2109,7 @@ class ExcelExportService {
     for (final inspData in inspections) {
       final insp = inspData['inspection'] as Map<String, dynamic>;
       final doors = inspData['doors'] as List<Map<String, dynamic>>;
-      final date = _cleanText(insp['date']);
+      final date = _formatDateValue(insp['date']);
       final job = _cleanText(insp['jobNumber']);
 
       for (final d in doors) {
@@ -2369,7 +2370,7 @@ class ExcelExportService {
       final cStyle = isEven ? dataCenterEven : dataCenterOdd;
       final lStyle = isEven ? dataLeftEven : dataLeftOdd;
 
-      _setCell(sheet, colWidths, rowLineCounts, col: 0, row: rowIdx, text: _cleanText(insp['date']), style: cStyle);
+      _setCell(sheet, colWidths, rowLineCounts, col: 0, row: rowIdx, text: _formatDateValue(insp['date']), style: cStyle);
       _setCell(sheet, colWidths, rowLineCounts, col: 1, row: rowIdx, text: _wrapText(insp['clientName'], 40), style: lStyle);
       _setCell(sheet, colWidths, rowLineCounts, col: 2, row: rowIdx, text: _wrapText(insp['objectAddress'], 40), style: lStyle);
       _setCell(sheet, colWidths, rowLineCounts, col: 3, row: rowIdx, text: _cleanText(insp['jobNumber']), style: cStyle);
