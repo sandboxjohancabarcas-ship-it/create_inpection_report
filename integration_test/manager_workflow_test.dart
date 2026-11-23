@@ -11,9 +11,12 @@ import 'package:wartungstool/services/excel_data_importer.dart';
 import 'package:wartungstool/services/batch_migration_service.dart';
 import 'package:wartungstool/services/catalog_integrity_service.dart';
 import 'package:wartungstool/services/door_options_service.dart';
+import 'package:wartungstool/services/window_options_service.dart';
 import 'package:wartungstool/services/photo_export_service.dart';
 import 'package:wartungstool/services/excel_export_service.dart';
 import 'package:wartungstool/utils/inspection_year_utils.dart';
+import 'package:wartungstool/utils/date_format_helper.dart';
+import 'package:wartungstool/utils/file_export_helper.dart';
 import 'package:wartungstool/models/craftnote_models.dart';
 import 'package:wartungstool/services/craftnote_api_service.dart';
 import 'package:wartungstool/services/craftnote_credentials_service.dart';
@@ -117,6 +120,7 @@ void main() {
     await DatabaseService.clearDatabase();
     await LocalDatabaseService.clearSyncedData();
     DoorOptionsService.reset();
+    WindowOptionsService.resetToDefaults();
     CraftnoteCredentialsService.resetToDefaults();
     CraftnoteCredentialsService.setMockMode(true);
   });
@@ -891,6 +895,172 @@ void main() {
 
       // Reset back to defaults
       CraftnoteCredentialsService.resetToDefaults();
+    });
+
+    // =========================================================================
+    // M-UC-17: Window Master Data & Options Separation (WindowOptionsService vs DoorOptionsService)
+    // =========================================================================
+    testWidgets(
+        'M-UC-17 [Manager Desktop]: Window Master Data & Options Separation (WindowOptionsService vs DoorOptionsService)',
+        (WidgetTester tester) async {
+      expect(WindowOptionsService.getStringOptions('windowType'),
+          contains('DKL'));
+      expect(WindowOptionsService.getStringOptions('material'),
+          contains('Alu'));
+
+      // Verify separation: DoorOptionsService remains completely isolated
+      expect(DoorOptionsService.getStringOptions('windowType'), isEmpty);
+
+      // Insert and retrieve Window record in Master DB
+      final testWindow = Window(
+        windowAlias: 'WIN-MGR-TEST-01',
+        windowNumber: 'F-101',
+        floor: 'EG',
+        roomNumber: '101',
+        roomDesignation: 'Büro GF',
+        windowType: 'DKL',
+        material: 'Kunststoff',
+        fittings: 'Schüco',
+        wingDimensions: '1200x800',
+        windowFunctionOK: true,
+      );
+
+      final winId = await DatabaseService.insertWindow(testWindow);
+      expect(winId, greaterThan(0));
+
+      final fetchedWindow = await DatabaseService.getWindowById(winId);
+      expect(fetchedWindow, isNotNull);
+      expect(fetchedWindow!.windowAlias, equals('WIN-MGR-TEST-01'));
+      expect(fetchedWindow.fittings, equals('Schüco'));
+      expect(fetchedWindow.material, equals('Kunststoff'));
+    });
+
+    // =========================================================================
+    // M-UC-18: Window Lifetime Clinical Record ("Fenster-Akte" / Patient Timeline)
+    // =========================================================================
+    testWidgets(
+        'M-UC-18 [Manager Desktop]: Query Window Lifetime Clinical Record (Historical Inspections & Defect Evolution)',
+        (WidgetTester tester) async {
+      final windowId = await DatabaseService.insertWindow(Window(
+        windowAlias: 'FENSTER-AKTE-42',
+        windowNumber: 'F-AKTE-42',
+        floor: 'EG',
+        roomNumber: '10',
+        roomDesignation: 'Labor',
+        windowType: 'DKL',
+        material: 'Holz',
+        windowFunctionOK: false,
+      ));
+
+      // Inspection 1 (2024): Discovered Defective
+      final insp1Id = await DatabaseService.insertInspection({
+        'clientName': 'Clinic Client',
+        'objectAddress': 'Klinikweg 1',
+        'date': '10.05.2024',
+        'jobNumber': 'JOB-WIN-2024-01',
+        'orderType': 'Wartung',
+      });
+      final j1Id = await DatabaseService.insertInspectionWindow({
+        'inspectionId': insp1Id,
+        'windowId': windowId,
+        'status': 'Defective',
+      });
+      await DatabaseService.insertInspectionWindowError(InspectionWindowError(
+        inspectionWindowId: j1Id,
+        errorId: 1,
+        errorCode: '9.21',
+        quantity: 1,
+        severity: 'high',
+        notes: 'Kammergetriebe defekt',
+        resolutionStatus: 'Offen',
+      ));
+
+      // Inspection 2 (2025): Repaired
+      final insp2Id = await DatabaseService.insertInspection({
+        'clientName': 'Clinic Client',
+        'objectAddress': 'Klinikweg 1',
+        'date': '15.06.2025',
+        'jobNumber': 'JOB-WIN-2025-02',
+        'orderType': 'Reparatur',
+        'repairDate': '15.06.2025',
+      });
+      final j2Id = await DatabaseService.insertInspectionWindow({
+        'inspectionId': insp2Id,
+        'windowId': windowId,
+        'status': 'Passed',
+      });
+      await DatabaseService.insertInspectionWindowError(InspectionWindowError(
+        inspectionWindowId: j2Id,
+        errorId: 1,
+        errorCode: '9.21',
+        quantity: 1,
+        severity: 'high',
+        notes: 'Kammergetriebe getauscht',
+        resolutionStatus: 'Behoben',
+      ));
+
+      // Query Window History Data ("Fenster-Akte")
+      final historyData =
+          await DatabaseService.getWindowHistoryData(windowAlias: 'FENSTER-AKTE-42');
+      expect(historyData, isNotNull);
+      expect(historyData!['window'], isNotNull);
+      expect((historyData['window'] as Window).windowNumber, equals('F-AKTE-42'));
+
+      final items = (historyData['historyItems'] as List<dynamic>?) ?? [];
+      expect(items.length, equals(2));
+      // Chronological order descending by date (latest first)
+      expect(items.first['inspection']['jobNumber'], equals('JOB-WIN-2025-02'));
+      expect(items.last['inspection']['jobNumber'], equals('JOB-WIN-2024-01'));
+
+      expect(historyData['totalLifetimeErrors'], equals(2));
+      expect(historyData['currentOpenErrors'], equals(1));
+      expect(historyData['resolvedErrors'], equals(1));
+    });
+
+    // =========================================================================
+    // M-UC-19: General Inspection Enhancements (Auftragsnummer Strict Extraction & Package Naming)
+    // =========================================================================
+    testWidgets(
+        'M-UC-19 [Manager Desktop]: General Inspection Enhancements - Auftragsnummer Strict Filename Extraction & DDMMYYYY Package Naming',
+        (WidgetTester tester) async {
+      // 1. Strict Auftragsnummer extraction from filename
+      final job1 = ExcelDataImporter.extractJobNumberFromFileName(
+          '26-15230-AB P-003527 FFW Saseler Parkweg.xlsm');
+      expect(job1, equals('26-15230-AB'));
+
+      final job2 = ExcelDataImporter.extractJobNumberFromFileName(
+          '25-12115-AB_P-002026_Inspektion.xlsx');
+      expect(job2, equals('25-12115-AB'));
+
+      // 2. German date formatting (DD.MM.YYYY and DDMMYYYY_HHmmss)
+      final fixedDate = DateTime(2026, 11, 20, 11, 57, 58);
+      expect(DateFormatHelper.formatDate(fixedDate), equals('20.11.2026'));
+      expect(DateFormatHelper.formatDateForFileName(fixedDate), equals('20112026_115758'));
+
+      // 3. Package naming convention with package type strictly at the end
+      final inspPkg = FileExportHelper.buildPackageFileName(
+        jobNumber: '26-15230-AB',
+        projectNumber: 'P-003527',
+        objectAddress: 'FFW Saseler Parkweg 1 22393 Hamburg',
+        packageType: 'inspektion_paket',
+        timestamp: fixedDate,
+      );
+      expect(
+        inspPkg,
+        equals('26-15230-AB_P-003527_FFW_Saseler_Parkweg_1_22393_Hamburg_20112026_115758_inspektion_paket.db'),
+      );
+
+      final resultPkg = FileExportHelper.buildPackageFileName(
+        jobNumber: '26-15230-AB',
+        projectNumber: 'P-003527',
+        objectAddress: 'FFW Saseler Parkweg 1 22393 Hamburg',
+        packageType: 'paket_ergebnis',
+        timestamp: fixedDate,
+      );
+      expect(
+        resultPkg,
+        equals('26-15230-AB_P-003527_FFW_Saseler_Parkweg_1_22393_Hamburg_20112026_115758_paket_ergebnis.db'),
+      );
     });
   });
 }

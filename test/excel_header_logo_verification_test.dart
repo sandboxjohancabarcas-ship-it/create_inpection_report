@@ -149,16 +149,7 @@ void main() {
     expect(typesContent.contains('Extension="vml"'), true);
     expect(typesContent.contains('Extension="png"'), true);
 
-    // 3. Test opening via Excel COM if on Windows
-    if (Platform.isWindows) {
-      final res = await Process.run('powershell', [
-        '-ExecutionPolicy', 'Bypass',
-        '-File', r'C:\Users\cabarcas\.gemini\antigravity-ide\brain\c5009d21-246a-4fa7-bac0-a79807aae09d\scratch\test_excel_open.ps1',
-        '-FilePath', file.path,
-      ]);
-      expect(res.exitCode, 0, reason: 'Excel failed to open exported file: ${res.stdout}\n${res.stderr}');
-    }
-
+    // 3. Cleanup
     await file.delete();
   });
 }

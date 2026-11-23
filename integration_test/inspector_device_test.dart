@@ -13,6 +13,8 @@ import 'package:wartungstool/services/craftnote_sync_service.dart';
 import 'package:wartungstool/services/app_logger.dart';
 import 'package:wartungstool/widgets/app_log_dialog.dart';
 import 'package:wartungstool/widgets/craftnote_test_mode_switch.dart';
+import 'package:wartungstool/utils/date_format_helper.dart';
+import 'package:wartungstool/utils/file_export_helper.dart';
 
 Door _makeTestDoor({
   int? id,
@@ -115,6 +117,9 @@ void main() {
     await db.delete('doors');
     await db.delete('error_catalog');
     await db.delete('craftnote_upload_queue');
+    await db.delete('inspection_window_errors');
+    await db.delete('inspection_windows');
+    await db.delete('windows');
   });
 
   group('Inspector Android Device Integration Test Suite (I-UC-01 to I-UC-12)',
@@ -879,6 +884,144 @@ void main() {
 
       // Return to default
       CraftnoteCredentialsService.resetToDefaults();
+    });
+
+    // =========================================================================
+    // I-UC-13: Window Inspection Lifecycle in Field & Defect/Hint Differentiation
+    // =========================================================================
+    testWidgets(
+        'I-UC-13 [Android Device]: Window Inspection Lifecycle in Field & Defect/Hint Differentiation',
+        (WidgetTester tester) async {
+      final window = Window(
+        windowAlias: 'WIN-DEVICE-01',
+        windowNumber: 'F-101',
+        floor: 'EG',
+        roomNumber: '101',
+        roomDesignation: 'Büro',
+        windowType: 'DKL',
+        material: 'Kunststoff',
+        fittings: 'Schüco',
+        wingDimensions: '1200x800',
+        windowFunctionOK: false,
+      );
+
+      final windowId = await LocalDatabaseService.insertWindow(window);
+      expect(windowId, greaterThan(0));
+
+      final inspectionId = await LocalDatabaseService.insertInspection({
+        'clientName': 'Window Field Client',
+        'objectAddress': 'Fensterweg 5, Hamburg',
+        'date': '20.11.2026',
+        'jobNumber': '26-99001-AB',
+        'orderType': 'Wartung',
+      });
+
+      final inspWinId = await LocalDatabaseService.insertInspectionWindow({
+        'inspectionId': inspectionId,
+        'windowId': windowId,
+        'status': 'Defective',
+      });
+
+      // 1. Insert a defect
+      final defectId = await LocalDatabaseService.insertInspectionWindowError(
+        InspectionWindowError(
+          inspectionWindowId: inspWinId,
+          errorId: 201,
+          errorCode: '9.21',
+          quantity: 1,
+          severity: 'high',
+          notes: 'Kammergetriebe defekt',
+          resolutionStatus: 'Offen',
+        ),
+      );
+      expect(defectId, greaterThan(0));
+
+      // 2. Insert a hint (starts with 'Hinweis')
+      final hintId = await LocalDatabaseService.insertInspectionWindowError(
+        InspectionWindowError(
+          inspectionWindowId: inspWinId,
+          errorId: 202,
+          errorCode: '20.1',
+          quantity: 1,
+          severity: 'low',
+          notes: 'Hinweis: Schadhafter Oberflächenschutz',
+          resolutionStatus: 'Offen',
+        ),
+      );
+      expect(hintId, greaterThan(0));
+
+      // 3. Query errors and verify defect vs notice differentiation
+      final errors =
+          await LocalDatabaseService.getInspectionWindowErrors(inspWinId);
+      expect(errors.length, equals(2));
+
+      final defect = errors.firstWhere((e) => e.errorCode == '9.21');
+      expect(defect.isNotice(), isFalse);
+
+      final hint = errors.firstWhere((e) => e.errorCode == '20.1');
+      expect(hint.isNotice(), isTrue);
+
+      // 4. Rectify defect on site during repair visit
+      final localDb = await LocalDatabaseService.getDb();
+      await localDb.update(
+        'inspection_window_errors',
+        {'resolutionStatus': 'Behoben', 'notes': 'Getriebe vor Ort ausgetauscht.'},
+        where: 'id = ?',
+        whereArgs: [defectId],
+      );
+
+      await LocalDatabaseService.updateInspectionWindowStatus(
+        inspectionId: inspectionId,
+        windowId: windowId,
+        status: 'Passed',
+      );
+      await localDb.update('windows', {'windowFunctionOK': 1},
+          where: 'id = ?', whereArgs: [windowId]);
+
+      final updatedWindow = await LocalDatabaseService.getWindowById(windowId);
+      expect(updatedWindow!.windowFunctionOK, isTrue);
+
+      final recheckedErrors =
+          await LocalDatabaseService.getInspectionWindowErrors(inspWinId);
+      expect(recheckedErrors.firstWhere((e) => e.id == defectId).resolutionStatus,
+          equals('Behoben'));
+    });
+
+    // =========================================================================
+    // I-UC-14: Standardized Package Naming with DDMMYYYY Timestamp on Device
+    // =========================================================================
+    testWidgets(
+        'I-UC-14 [Android Device]: Standardized Package Naming with DDMMYYYY Timestamp on Device',
+        (WidgetTester tester) async {
+      final fixedDate = DateTime(2026, 11, 20, 11, 57, 58);
+
+      final inspFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: '26-15230-AB',
+        projectNumber: 'P-003527',
+        objectAddress: 'FFW Saseler Parkweg 1 22393 Hamburg',
+        packageType: 'inspektion_paket',
+        timestamp: fixedDate,
+      );
+      expect(
+        inspFileName,
+        equals('26-15230-AB_P-003527_FFW_Saseler_Parkweg_1_22393_Hamburg_20112026_115758_inspektion_paket.db'),
+      );
+
+      final resultFileName = FileExportHelper.buildPackageFileName(
+        jobNumber: '26-15230-AB',
+        projectNumber: 'P-003527',
+        objectAddress: 'FFW Saseler Parkweg 1 22393 Hamburg',
+        packageType: 'paket_ergebnis',
+        timestamp: fixedDate,
+      );
+      expect(
+        resultFileName,
+        equals('26-15230-AB_P-003527_FFW_Saseler_Parkweg_1_22393_Hamburg_20112026_115758_paket_ergebnis.db'),
+      );
+
+      // Verify date format helper
+      expect(DateFormatHelper.formatDate(fixedDate), equals('20.11.2026'));
+      expect(DateFormatHelper.formatDateForFileName(fixedDate), equals('20112026_115758'));
     });
   });
 }

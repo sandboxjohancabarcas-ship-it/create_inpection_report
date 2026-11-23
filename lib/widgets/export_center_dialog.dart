@@ -317,9 +317,21 @@ class _ExportCenterDialogState extends State<ExportCenterDialog> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _craftnoteProjectsError = '$e';
-          _errorMessage = 'Craftnote-Projekte konnten nicht geladen werden: $e';
-          _selectedCraftnoteProject = null;
+          if (CraftnoteCredentialsService.isTestMode) {
+            // In Test Mode: fallback gracefully to sandbox test project even if network search fails
+            _selectedCraftnoteProject = CraftnoteProject(
+              id: CraftnoteCredentialsService.testProjectId,
+              name: CraftnoteCredentialsService.testProjectName,
+              orderNumber: CraftnoteCredentialsService.testProjectOrderNumber,
+            );
+            _craftnoteProjects = [_selectedCraftnoteProject!];
+            _craftnoteProjectsError = null;
+            _errorMessage = null;
+          } else {
+            _craftnoteProjectsError = '$e';
+            _errorMessage = 'Craftnote-Projekte konnten nicht geladen werden: $e';
+            _selectedCraftnoteProject = null;
+          }
         });
       }
     } finally {

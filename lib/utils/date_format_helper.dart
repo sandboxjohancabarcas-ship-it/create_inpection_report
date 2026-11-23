@@ -29,4 +29,9 @@ class DateFormatHelper {
 
     return s;
   }
+
+  /// Formats a DateTime for package filenames in standard DDMMYYYY_HHmmss format.
+  static String formatDateForFileName(DateTime dt) {
+    return DateFormat('ddMMyyyy_HHmmss').format(dt);
+  }
 }

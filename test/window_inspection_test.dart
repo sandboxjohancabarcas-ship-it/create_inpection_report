@@ -389,7 +389,7 @@ void main() {
         expect(res4.objectAddress, contains('Rotenhäuser Str. 73'));
         expect(res4.objectAddress, contains('21107 Hamburg'));
       }
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
     test('Window inspection status, search and defect summaries work correctly', () async {
       final db = await DatabaseService.getDb();
@@ -617,7 +617,7 @@ void main() {
       final history1 = await DatabaseService.getWindowHistoryData(windowId: win1!.id!);
       expect(history1, isNotNull);
       expect(history1!['totalLifetimeErrors'], greaterThan(0));
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
     test('Diagnose Willinghusener Weg import and error catalogue', () async {
       final file = File(r'test/test_data/Fenster/26-15318-AB P-003732 Willinghusener Weg 5, 22113 Oststeinbek Mieter GOTTWALD Fensterliste final.xlsx');

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+import 'package:sqflite/sqflite.dart' show ConflictAlgorithm;
 import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
@@ -62,6 +63,15 @@ class ExcelImportResult {
 
 class ExcelDataImporter {
   /// Main entry point: parses the Excel file and imports its door inspection history
+  /// Strictly extracts the job number (Auftragsnummer) from an Excel file name.
+  /// Matches German standard format: e.g., 26-15230-AB or 25-12115, separated by spaces or underscores.
+  static String extractJobNumberFromFileName(String fileName) {
+    final jobMatch = RegExp(
+            r'(?:^|[^0-9A-Za-z])(\d{2}-\d{4,5}(?:-[A-Za-z0-9]+)?)(?=[^0-9A-Za-z-]|$)')
+        .firstMatch(fileName);
+    return jobMatch != null ? jobMatch.group(1)! : '';
+  }
+
   static Future<ExcelImportResult> importFromFile(
     File excelFile, {
     List<ConflictResolution>? resolutions,
@@ -80,8 +90,7 @@ class ExcelDataImporter {
         projMatch != null ? projMatch.group(1)!.toUpperCase() : '';
 
     // Strictly extract job number (Auftragsnummer) from the file name
-    final jobMatch = RegExp(r'\b(\d{2}-\d{4,5}(?:-[A-Za-z0-9]+)?)\b').firstMatch(fileName);
-    final String fileNameJobNumber = jobMatch != null ? jobMatch.group(1)! : '';
+    final String fileNameJobNumber = extractJobNumberFromFileName(fileName);
 
     File fileToRead = excelFile;
     File? tempXlsx;
@@ -1644,8 +1653,7 @@ class ExcelDataImporter {
     await DatabaseService.checkAndInitializeWindowCatalog();
 
     // Strictly extract job number (Auftragsnummer) from file name
-    final jobMatch = RegExp(r'\b(\d{2}-\d{4,5}(?:-[A-Za-z0-9]+)?)\b').firstMatch(fileName);
-    final String fileNameJobNumber = jobMatch != null ? jobMatch.group(1)! : '';
+    final String fileNameJobNumber = extractJobNumberFromFileName(fileName);
 
     final List<String> newCatalogProposals = [];
 
@@ -1925,6 +1933,19 @@ class ExcelDataImporter {
     // Fallbacks from filename if not in row 0
     String fallbackClient = '';
     String fallbackJobNum = fileNameJobNumber;
+
+    final db = await DatabaseService.getDb();
+    final Map<String, Window> windowCache = {};
+    final existingWindowRows = await db.query('windows');
+    for (final r in existingWindowRows) {
+      final w = Window.fromMap(r);
+      if (w.windowAlias != null && w.windowAlias!.isNotEmpty) {
+        windowCache[w.windowAlias!] = w;
+      }
+      if (w.provisionalAlias != null && w.provisionalAlias!.isNotEmpty) {
+        windowCache[w.provisionalAlias!] = w;
+      }
+    }
 
     // ── Resolve Canonical Object Address for this Project/File ──────────
     final String fileNameAddress = _extractAddressFromFileName(fileName);
@@ -2249,311 +2270,349 @@ class ExcelDataImporter {
       // 4. Parse Window Rows for this sheet
       int sheetWindowsCount = 0;
       int sheetErrorsCount = 0;
+      final Map<int, int> sheetWindowJunctions = {};
 
-      for (int r = headerRowIndex + 1; r < table.maxRows; r++) {
-        final row = table.rows[r];
-        if (row.isEmpty) continue;
+      await db.transaction((txn) async {
+        for (int r = headerRowIndex + 1; r < table.maxRows; r++) {
+          final row = table.rows[r];
+          if (row.isEmpty) continue;
 
-        final winNum = _toStr(_cell(row, colWinNum)).trim();
-        if (winNum.isEmpty) continue;
+          final winNum = _toStr(_cell(row, colWinNum)).trim();
+          if (winNum.isEmpty) continue;
 
-        final fittingsVal = (colFittings >= 0 && colFittings < row.length
-                ? _toStr(_cell(row, colFittings))
-                : '')
-            .trim();
-        if (winNum.toLowerCase().startsWith('summe') ||
-            fittingsVal.toLowerCase().startsWith('summe')) {
-          logs.add(
-              'Blatt "$sName": Summenzeile bei Zeile ${r + 1} erreicht. Beende Zeilen-Import.');
-          break;
-        }
-
-        final floor = (colFloor >= 0 && colFloor < row.length
-                ? _toStr(_cell(row, colFloor))
-                : '')
-            .trim();
-        final roomNum = (colRoomNum >= 0 && colRoomNum < row.length
-                ? _toStr(_cell(row, colRoomNum))
-                : '')
-            .trim();
-        final roomDesig = (colRoomDesig >= 0 && colRoomDesig < row.length
-                ? _toStr(_cell(row, colRoomDesig))
-                : '')
-            .trim();
-        final winType = (colWinType >= 0 && colWinType < row.length
-                ? _toStr(_cell(row, colWinType))
-                : '')
-            .trim();
-        final material = (colMat >= 0 && colMat < row.length
-                ? _toStr(_cell(row, colMat))
-                : '')
-            .trim();
-        final dimensions = (colDimensions >= 0 && colDimensions < row.length
-                ? _toStr(_cell(row, colDimensions))
-                : '')
-            .trim();
-        final fittings = (colFittings >= 0 && colFittings < row.length
-                ? _toStr(_cell(row, colFittings))
-                : '')
-            .trim();
-
-        // Evaluate window function OK
-        bool windowFunctionOK = true;
-        if (colWinOK >= 0 && colWinOK < row.length) {
-          final winOKStr = _toStr(_cell(row, colWinOK)).trim().toLowerCase();
-          if (winOKStr == 'n' ||
-              winOKStr == 'nein' ||
-              winOKStr == '0' ||
-              winOKStr == 'false') {
-            windowFunctionOK = false;
+          final fittingsVal = (colFittings >= 0 && colFittings < row.length
+                  ? _toStr(_cell(row, colFittings))
+                  : '')
+              .trim();
+          if (winNum.toLowerCase().startsWith('summe') ||
+              fittingsVal.toLowerCase().startsWith('summe')) {
+            logs.add(
+                'Blatt "$sName": Summenzeile bei Zeile ${r + 1} erreicht. Beende Zeilen-Import.');
+            break;
           }
-        }
-        if (colWinNotOK >= 0 && colWinNotOK < row.length) {
-          final winNotOKStr =
-              _toStr(_cell(row, colWinNotOK)).trim().toLowerCase();
-          if (winNotOKStr == 'j' ||
-              winNotOKStr == 'ja' ||
-              winNotOKStr == '1' ||
-              winNotOKStr == 'x' ||
-              winNotOKStr == 'true') {
-            windowFunctionOK = false;
+
+          final floor = (colFloor >= 0 && colFloor < row.length
+                  ? _toStr(_cell(row, colFloor))
+                  : '')
+              .trim();
+          final roomNum = (colRoomNum >= 0 && colRoomNum < row.length
+                  ? _toStr(_cell(row, colRoomNum))
+                  : '')
+              .trim();
+          final roomDesig = (colRoomDesig >= 0 && colRoomDesig < row.length
+                  ? _toStr(_cell(row, colRoomDesig))
+                  : '')
+              .trim();
+          final winType = (colWinType >= 0 && colWinType < row.length
+                  ? _toStr(_cell(row, colWinType))
+                  : '')
+              .trim();
+          final material = (colMat >= 0 && colMat < row.length
+                  ? _toStr(_cell(row, colMat))
+                  : '')
+              .trim();
+          final dimensions = (colDimensions >= 0 && colDimensions < row.length
+                  ? _toStr(_cell(row, colDimensions))
+                  : '')
+              .trim();
+          final fittings = (colFittings >= 0 && colFittings < row.length
+                  ? _toStr(_cell(row, colFittings))
+                  : '')
+              .trim();
+
+          // Evaluate window function OK
+          bool windowFunctionOK = true;
+          if (colWinOK >= 0 && colWinOK < row.length) {
+            final winOKStr = _toStr(_cell(row, colWinOK)).trim().toLowerCase();
+            if (winOKStr == 'n' ||
+                winOKStr == 'nein' ||
+                winOKStr == '0' ||
+                winOKStr == 'false') {
+              windowFunctionOK = false;
+            }
           }
-        }
+          if (colWinNotOK >= 0 && colWinNotOK < row.length) {
+            final winNotOKStr =
+                _toStr(_cell(row, colWinNotOK)).trim().toLowerCase();
+            if (winNotOKStr == 'j' ||
+                winNotOKStr == 'ja' ||
+                winNotOKStr == '1' ||
+                winNotOKStr == 'x' ||
+                winNotOKStr == 'true') {
+              windowFunctionOK = false;
+            }
+          }
 
-        // Evaluate Raffstore / Jalousie
-        bool hasRaffstore = false;
-        bool? raffstoreOK;
+          // Evaluate Raffstore / Jalousie
+          bool hasRaffstore = false;
+          bool? raffstoreOK;
 
-        String raffStr = '';
-        if (colRaffstore >= 0 && colRaffstore < row.length) {
-          raffStr = _toStr(_cell(row, colRaffstore)).trim().toLowerCase();
-        } else if (colJalousie >= 0 && colJalousie < row.length) {
-          raffStr = _toStr(_cell(row, colJalousie)).trim().toLowerCase();
-        }
+          String raffStr = '';
+          if (colRaffstore >= 0 && colRaffstore < row.length) {
+            raffStr = _toStr(_cell(row, colRaffstore)).trim().toLowerCase();
+          } else if (colJalousie >= 0 && colJalousie < row.length) {
+            raffStr = _toStr(_cell(row, colJalousie)).trim().toLowerCase();
+          }
 
-        if (raffStr.isNotEmpty &&
-            raffStr != '-' &&
-            raffStr != '/' &&
-            raffStr != 'nein' &&
-            raffStr != 'nicht vorhanden' &&
-            raffStr != 'kein raffstore' &&
-            raffStr != 'keine' &&
-            raffStr != 'kein') {
-          if (raffStr == 'x' ||
-              raffStr == 'j' ||
-              raffStr == 'ja' ||
-              raffStr == '1' ||
-              raffStr == 'ok' ||
-              raffStr == 'i.o.' ||
-              raffStr == '√' ||
-              raffStr == 'true' ||
-              raffStr == 'in ordnung') {
-            hasRaffstore = true;
-            raffstoreOK = true;
-          } else if (raffStr == 'n' ||
-              raffStr == '0' ||
-              raffStr == 'false' ||
-              raffStr == 'defekt' ||
-              raffStr == 'nicht in ordnung' ||
-              raffStr == 'schaden') {
-            hasRaffstore = true;
-            raffstoreOK = false;
+          if (raffStr.isNotEmpty &&
+              raffStr != '-' &&
+              raffStr != '/' &&
+              raffStr != 'nein' &&
+              raffStr != 'nicht vorhanden' &&
+              raffStr != 'kein raffstore' &&
+              raffStr != 'keine' &&
+              raffStr != 'kein') {
+            if (raffStr == 'x' ||
+                raffStr == 'j' ||
+                raffStr == 'ja' ||
+                raffStr == '1' ||
+                raffStr == 'ok' ||
+                raffStr == 'i.o.' ||
+                raffStr == '√' ||
+                raffStr == 'true' ||
+                raffStr == 'in ordnung') {
+              hasRaffstore = true;
+              raffstoreOK = true;
+            } else if (raffStr == 'n' ||
+                raffStr == '0' ||
+                raffStr == 'false' ||
+                raffStr == 'defekt' ||
+                raffStr == 'nicht in ordnung' ||
+                raffStr == 'schaden') {
+              hasRaffstore = true;
+              raffstoreOK = false;
+            } else {
+              hasRaffstore = true;
+              raffstoreOK = true;
+            }
           } else {
-            hasRaffstore = true;
-            raffstoreOK = true;
+            // If there is no value in this parameter (or explicitly 'nein'/'nicht vorhanden'), set as "nicht vorhanden"
+            hasRaffstore = false;
+            raffstoreOK = null;
           }
-        } else {
-          // If there is no value in this parameter (or explicitly 'nein'/'nicht vorhanden'), set as "nicht vorhanden"
-          hasRaffstore = false;
-          raffstoreOK = null;
-        }
 
-        final notes = (colNotes >= 0 && colNotes < row.length
-                ? _toStr(_cell(row, colNotes))
-                : '')
-            .trim();
+          final notes = (colNotes >= 0 && colNotes < row.length
+                  ? _toStr(_cell(row, colNotes))
+                  : '')
+              .trim();
 
-        // Check defect marks
-        bool hasDefect = false;
-        int rowErrorCount = 0;
-        final List<MapEntry<ErrorCatalog, int>> rowErrors = [];
+          // Check defect marks
+          bool hasDefect = false;
+          int rowErrorCount = 0;
+          final List<MapEntry<ErrorCatalog, int>> rowErrors = [];
 
-        for (final colIdx in defectColumnMap.keys) {
-          if (colIdx < row.length) {
-            final val = _toStr(_cell(row, colIdx)).trim();
-            final qty = int.tryParse(val) ??
-                ((val.toLowerCase() == 'x' ||
-                        val == '1' ||
-                        val == '√' ||
-                        val.toLowerCase() == 'ja')
-                    ? 1
-                    : 0);
-            if (qty > 0) {
+          for (final colIdx in defectColumnMap.keys) {
+            if (colIdx < row.length) {
+              final val = _toStr(_cell(row, colIdx)).trim();
+              final qty = int.tryParse(val) ??
+                  ((val.toLowerCase() == 'x' ||
+                          val == '1' ||
+                          val == '√' ||
+                          val.toLowerCase() == 'ja')
+                      ? 1
+                      : 0);
+              if (qty > 0) {
+                hasDefect = true;
+                rowErrorCount += qty;
+                rowErrors.add(MapEntry(defectColumnMap[colIdx]!, qty));
+                if (defectColumnMap[colIdx]!
+                        .description
+                        .toLowerCase()
+                        .contains('raffstore') ||
+                    defectColumnMap[colIdx]!
+                        .category
+                        .toLowerCase()
+                        .contains('raffstore')) {
+                  hasRaffstore = true;
+                  raffstoreOK = false;
+                }
+              }
+            }
+          }
+
+          // If sheet has no separate defect columns (e.g. 2022, 2021, 2019), check notes for recorded defects
+          if (defectColumnMap.isEmpty && notes.isNotEmpty) {
+            final noteErrors = _extractErrorsFromNotes(notes, catalogList);
+            for (final ne in noteErrors) {
               hasDefect = true;
-              rowErrorCount += qty;
-              rowErrors.add(MapEntry(defectColumnMap[colIdx]!, qty));
-              if (defectColumnMap[colIdx]!
-                      .description
-                      .toLowerCase()
-                      .contains('raffstore') ||
-                  defectColumnMap[colIdx]!
-                      .category
-                      .toLowerCase()
-                      .contains('raffstore')) {
+              rowErrorCount += 1;
+              rowErrors.add(MapEntry(ne, 1));
+              if (ne.description.toLowerCase().contains('raffstore') ||
+                  ne.category.toLowerCase().contains('raffstore')) {
                 hasRaffstore = true;
                 raffstoreOK = false;
               }
             }
           }
-        }
 
-        // If sheet has no separate defect columns (e.g. 2022, 2021, 2019), check notes for recorded defects
-        if (defectColumnMap.isEmpty && notes.isNotEmpty) {
-          final noteErrors = _extractErrorsFromNotes(notes, catalogList);
-          for (final ne in noteErrors) {
-            hasDefect = true;
-            rowErrorCount += 1;
-            rowErrors.add(MapEntry(ne, 1));
-            if (ne.description.toLowerCase().contains('raffstore') ||
-                ne.category.toLowerCase().contains('raffstore')) {
-              hasRaffstore = true;
-              raffstoreOK = false;
-            }
+          if (notes.toLowerCase().contains('kein raffstore')) {
+            hasRaffstore = false;
+            raffstoreOK = null;
           }
-        }
 
-        if (notes.toLowerCase().contains('kein raffstore')) {
-          hasRaffstore = false;
-          raffstoreOK = null;
-        }
+          final effectiveWinNum = (floor.isNotEmpty &&
+                  !winNum.contains('-') &&
+                  !winNum.contains('.'))
+              ? '${floor.replaceAll(' ', '')}-$winNum'
+              : winNum;
 
-        final effectiveWinNum = (floor.isNotEmpty &&
-                !winNum.contains('-') &&
-                !winNum.contains('.'))
-            ? '${floor.replaceAll(' ', '')}-$winNum'
-            : winNum;
+          final alias = Window.generateAlias(
+            projectNumber: effectiveProj,
+            windowNumber: effectiveWinNum,
+          );
 
-        final alias = Window.generateAlias(
-          projectNumber: effectiveProj,
-          windowNumber: effectiveWinNum,
-        );
+          if (floor.isNotEmpty) WindowOptionsService.addOption('floor', floor);
+          if (roomNum.isNotEmpty) {
+            WindowOptionsService.addOption('roomNumber', roomNum);
+          }
+          if (roomDesig.isNotEmpty) {
+            WindowOptionsService.addOption('roomDesignation', roomDesig);
+          }
+          if (winType.isNotEmpty) {
+            WindowOptionsService.addOption('windowType', winType);
+          }
+          if (material.isNotEmpty) {
+            WindowOptionsService.addOption('material', material);
+          }
+          if (dimensions.isNotEmpty) {
+            WindowOptionsService.addOption('wingDimensions', dimensions);
+          }
+          if (fittings.isNotEmpty) {
+            WindowOptionsService.addOption('fittings', fittings);
+          }
 
-        if (floor.isNotEmpty) WindowOptionsService.addOption('floor', floor);
-        if (roomNum.isNotEmpty) {
-          WindowOptionsService.addOption('roomNumber', roomNum);
-        }
-        if (roomDesig.isNotEmpty) {
-          WindowOptionsService.addOption('roomDesignation', roomDesig);
-        }
-        if (winType.isNotEmpty) {
-          WindowOptionsService.addOption('windowType', winType);
-        }
-        if (material.isNotEmpty) {
-          WindowOptionsService.addOption('material', material);
-        }
-        if (dimensions.isNotEmpty) {
-          WindowOptionsService.addOption('wingDimensions', dimensions);
-        }
-        if (fittings.isNotEmpty) {
-          WindowOptionsService.addOption('fittings', fittings);
-        }
-
-        final existingWindow = await DatabaseService.findWindowByBarcode(alias);
-        int windowId;
-        if (existingWindow != null && existingWindow.id != null) {
-          windowId = existingWindow.id!;
-          // If this is the newest sheet, update latest master properties
-          if (sheetIndex == 0) {
-            final updated = existingWindow.copyWith(
-              floor: floor.isNotEmpty ? floor : existingWindow.floor,
-              roomNumber:
-                  roomNum.isNotEmpty ? roomNum : existingWindow.roomNumber,
-              roomDesignation: roomDesig.isNotEmpty
-                  ? roomDesig
-                  : existingWindow.roomDesignation,
-              windowType:
-                  winType.isNotEmpty ? winType : existingWindow.windowType,
-              material:
-                  material.isNotEmpty ? material : existingWindow.material,
-              wingDimensions: dimensions.isNotEmpty
-                  ? dimensions
-                  : existingWindow.wingDimensions,
-              fittings:
-                  fittings.isNotEmpty ? fittings : existingWindow.fittings,
+          final existingWindow = windowCache[alias];
+          int windowId;
+          if (existingWindow != null && existingWindow.id != null) {
+            windowId = existingWindow.id!;
+            // If this is the newest sheet, update latest master properties
+            if (sheetIndex == 0) {
+              final updated = existingWindow.copyWith(
+                floor: floor.isNotEmpty ? floor : existingWindow.floor,
+                roomNumber:
+                    roomNum.isNotEmpty ? roomNum : existingWindow.roomNumber,
+                roomDesignation: roomDesig.isNotEmpty
+                    ? roomDesig
+                    : existingWindow.roomDesignation,
+                windowType:
+                    winType.isNotEmpty ? winType : existingWindow.windowType,
+                material:
+                    material.isNotEmpty ? material : existingWindow.material,
+                wingDimensions: dimensions.isNotEmpty
+                    ? dimensions
+                    : existingWindow.wingDimensions,
+                fittings:
+                    fittings.isNotEmpty ? fittings : existingWindow.fittings,
+                windowFunctionOK: windowFunctionOK,
+                hasRaffstore: hasRaffstore,
+                raffstoreOK: raffstoreOK,
+                notes: notes.isNotEmpty ? notes : existingWindow.notes,
+              );
+              await txn.update(
+                'windows',
+                updated.toMap(),
+                where: 'id = ?',
+                whereArgs: [windowId],
+              );
+              windowCache[alias] = updated;
+            }
+          } else {
+            final newWin = Window(
+              id: null,
+              windowAlias: alias,
+              provisionalAlias: alias,
+              windowNumber: effectiveWinNum,
+              floor: floor,
+              roomNumber: roomNum,
+              roomDesignation: roomDesig,
+              windowType: winType,
+              material: material,
+              wingDimensions: dimensions,
+              fittings: fittings,
               windowFunctionOK: windowFunctionOK,
               hasRaffstore: hasRaffstore,
               raffstoreOK: raffstoreOK,
-              notes: notes.isNotEmpty ? notes : existingWindow.notes,
+              notes: notes,
             );
-            await DatabaseService.updateWindow(updated);
+            windowId = await txn.insert(
+              'windows',
+              newWin.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            final cached = newWin.copyWith(id: windowId);
+            windowCache[alias] = cached;
           }
-        } else {
-          final newWin = Window(
-            id: null,
-            windowAlias: alias,
-            provisionalAlias: alias,
-            windowNumber: effectiveWinNum,
-            floor: floor,
-            roomNumber: roomNum,
-            roomDesignation: roomDesig,
-            windowType: winType,
-            material: material,
-            wingDimensions: dimensions,
-            fittings: fittings,
-            windowFunctionOK: windowFunctionOK,
-            hasRaffstore: hasRaffstore,
-            raffstoreOK: raffstoreOK,
-            notes: notes,
-          );
-          windowId = await DatabaseService.insertWindow(newWin);
+
+          distinctWindowAliases.add(alias);
+
+          final status =
+              (!windowFunctionOK || hasDefect) ? 'HasErrors' : 'Inspected';
+          int inspWinId;
+          if (sheetWindowJunctions.containsKey(windowId)) {
+            inspWinId = sheetWindowJunctions[windowId]!;
+            await txn.update(
+              'inspection_windows',
+              {
+                'status': status,
+                'notes': notes,
+              },
+              where: 'id = ?',
+              whereArgs: [inspWinId],
+            );
+          } else {
+            inspWinId = await txn.insert(
+              'inspection_windows',
+              {
+                'inspectionId': inspectionId,
+                'windowId': windowId,
+                'status': status,
+                'notes': notes,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            sheetWindowJunctions[windowId] = inspWinId;
+          }
+
+          for (final errEntry in rowErrors) {
+            final catError = errEntry.key;
+            final qty = errEntry.value;
+            final winError = InspectionWindowError(
+              inspectionWindowId: inspWinId,
+              errorId: catError.errorId,
+              errorCode: catError.code,
+              quantity: qty,
+              severity: catError.severity,
+              notes: '',
+              resolutionStatus: 'Open',
+            );
+            await txn.insert(
+              'inspection_window_errors',
+              winError.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            sheetErrorsCount++;
+            totalErrorsLinked++;
+          }
+
+          sheetWindowsCount++;
+
+          // Add to allWindowChanges for the primary report (from latest sheet)
+          if (sheetIndex == 0) {
+            allWindowChanges.add(DoorChangeItem(
+              doorAlias: alias,
+              doorNumber: effectiveWinNum,
+              roomDesignation: roomDesig.isNotEmpty
+                  ? roomDesig
+                  : (roomNum.isNotEmpty ? 'Raum $roomNum' : ''),
+              floor: floor,
+              changeType: existingWindow != null ? 'updated' : 'new',
+              status: (!windowFunctionOK || hasDefect) ? 'HasErrors' : 'geprüft',
+              errorCount: rowErrorCount,
+              assetType: 'window',
+            ));
+          }
         }
-
-        distinctWindowAliases.add(alias);
-
-        final status =
-            (!windowFunctionOK || hasDefect) ? 'HasErrors' : 'Inspected';
-        final inspWinId = await DatabaseService.insertInspectionWindow({
-          'inspectionId': inspectionId,
-          'windowId': windowId,
-          'status': status,
-          'notes': notes,
-        });
-
-        for (final errEntry in rowErrors) {
-          final catError = errEntry.key;
-          final qty = errEntry.value;
-          final winError = InspectionWindowError(
-            inspectionWindowId: inspWinId,
-            errorId: catError.errorId,
-            errorCode: catError.code,
-            quantity: qty,
-            severity: catError.severity,
-            notes: '',
-            resolutionStatus: 'Open',
-          );
-          await DatabaseService.insertInspectionWindowError(winError);
-          sheetErrorsCount++;
-          totalErrorsLinked++;
-        }
-
-        sheetWindowsCount++;
-
-        // Add to allWindowChanges for the primary report (from latest sheet)
-        if (sheetIndex == 0) {
-          allWindowChanges.add(DoorChangeItem(
-            doorAlias: alias,
-            doorNumber: effectiveWinNum,
-            roomDesignation: roomDesig.isNotEmpty
-                ? roomDesig
-                : (roomNum.isNotEmpty ? 'Raum $roomNum' : ''),
-            floor: floor,
-            changeType: existingWindow != null ? 'updated' : 'new',
-            status: (!windowFunctionOK || hasDefect) ? 'HasErrors' : 'geprüft',
-            errorCount: rowErrorCount,
-            assetType: 'window',
-          ));
-        }
-      }
+      });
 
       logs.add(
           'Blatt "$sName" abgeschlossen: $sheetWindowsCount Fenster erfasst, $sheetErrorsCount Mängel verknüpft.');

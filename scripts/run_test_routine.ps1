@@ -153,7 +153,7 @@ if ($File) {
 # ------------------------------------------------------------------------------
 if (-not $Quick -and -not $File) {
     Write-Host "`n[Stage 3] Executing Manager Desktop Integration Test Suite..." -ForegroundColor Yellow
-    Write-Host "Running 14 Manager Use Cases (M-UC-01 to M-UC-14) on Windows Desktop..." -ForegroundColor DarkGray
+    Write-Host "Running 19 Manager Use Cases (M-UC-01 to M-UC-19) on Windows Desktop..." -ForegroundColor DarkGray
     
     flutter test integration_test/manager_workflow_test.dart -d windows
     if ($LASTEXITCODE -ne 0) {
@@ -181,7 +181,7 @@ if ($Full) {
     }
     
     Write-Host "-> Target Android Device: $DeviceSerial" -ForegroundColor Green
-    Write-Host "Executing Inspector Mobile Integration Tests (I-UC-01 to I-UC-10) on device..." -ForegroundColor DarkGray
+    Write-Host "Executing Inspector Mobile Integration Tests (I-UC-01 to I-UC-14) on device..." -ForegroundColor DarkGray
     
     flutter test integration_test/inspector_device_test.dart -d $DeviceSerial
     if ($LASTEXITCODE -ne 0) {

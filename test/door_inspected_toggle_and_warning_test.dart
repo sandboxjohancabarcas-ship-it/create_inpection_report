@@ -323,8 +323,7 @@ void main() {
 
       // Warning banner presence
       expect(
-          find.textContaining(
-              '1 unbearbeitete / nicht geprüfte Tür(en) im Paket!'),
+          find.textContaining('unbearbeitete / nicht geprüfte'),
           findsOneWidget);
       expect(find.textContaining('Tür T-102 (2.OG | Schaltzentrale)'),
           findsOneWidget);

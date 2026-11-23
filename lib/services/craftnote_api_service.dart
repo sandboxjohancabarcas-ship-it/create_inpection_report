@@ -11,7 +11,8 @@ class CraftnoteApiException implements Exception {
   final String message;
   final String? responseBody;
 
-  const CraftnoteApiException(this.message, {this.statusCode = 0, this.responseBody});
+  const CraftnoteApiException(this.message,
+      {this.statusCode = 0, this.responseBody});
 
   @override
   String toString() {
@@ -40,8 +41,11 @@ class CraftnoteApiService {
         _explicitBaseUrl = baseUrl;
 
   String get _apiKey => _explicitApiKey ?? CraftnoteCredentialsService.apiKey;
-  String get _clientId => _explicitClientId ?? CraftnoteCredentialsService.clientId;
-  String get _baseUrl => (_explicitBaseUrl ?? CraftnoteCredentialsService.baseUrl).replaceAll(RegExp(r'/+$'), '');
+  String get _clientId =>
+      _explicitClientId ?? CraftnoteCredentialsService.clientId;
+  String get _baseUrl =>
+      (_explicitBaseUrl ?? CraftnoteCredentialsService.baseUrl)
+          .replaceAll(RegExp(r'/+$'), '');
 
   Map<String, String> get _headers => {
         'X-CN-API-KEY': _apiKey,
@@ -50,30 +54,40 @@ class CraftnoteApiService {
       };
 
   /// Logs outgoing API request with masked API key for security
-  void _logRequest(String method, Uri uri, {Map<String, String>? headers, String? body}) {
-    final effectiveHeaders = headers != null ? Map<String, String>.from(headers) : Map<String, String>.from(_headers);
+  void _logRequest(String method, Uri uri,
+      {Map<String, String>? headers, String? body}) {
+    final effectiveHeaders = headers != null
+        ? Map<String, String>.from(headers)
+        : Map<String, String>.from(_headers);
     if (effectiveHeaders.containsKey('X-CN-API-KEY')) {
       final key = effectiveHeaders['X-CN-API-KEY']!;
       if (key.length > 8) {
-        effectiveHeaders['X-CN-API-KEY'] = '${key.substring(0, 4)}...${key.substring(key.length - 4)}';
+        effectiveHeaders['X-CN-API-KEY'] =
+            '${key.substring(0, 4)}...${key.substring(key.length - 4)}';
       }
     }
     print('[CraftnoteApi] >>> REQUEST: $method ${uri.toString()}');
     print('[CraftnoteApi]     Headers: $effectiveHeaders');
     if (body != null && body.isNotEmpty) {
-      final preview = body.length > 250 ? '${body.substring(0, 250)}... (${body.length} chars)' : body;
+      final preview = body.length > 250
+          ? '${body.substring(0, 250)}... (${body.length} chars)'
+          : body;
       print('[CraftnoteApi]     Payload: $preview');
     }
   }
 
   /// Logs incoming API response status and body
-  void _logResponse(String method, Uri uri, int statusCode, {String? body, int? elapsedMs}) {
+  void _logResponse(String method, Uri uri, int statusCode,
+      {String? body, int? elapsedMs}) {
     final elapsedStr = elapsedMs != null ? ' in ${elapsedMs}ms' : '';
     final symbol = (statusCode >= 200 && statusCode < 300) ? '✅' : '❌';
-    print('[CraftnoteApi] <<< RESPONSE: $symbol [$statusCode] $method ${uri.toString()}$elapsedStr');
+    print(
+        '[CraftnoteApi] <<< RESPONSE: $symbol [$statusCode] $method ${uri.toString()}$elapsedStr');
     if (body != null && body.isNotEmpty) {
       if (statusCode >= 200 && statusCode < 300) {
-        final preview = body.length > 250 ? '${body.substring(0, 250)}... (${body.length} bytes)' : body;
+        final preview = body.length > 250
+            ? '${body.substring(0, 250)}... (${body.length} bytes)'
+            : body;
         print('[CraftnoteApi]     Response: $preview');
       } else {
         // Log full response body on error
@@ -112,12 +126,16 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 15));
       sw.stop();
-      _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('GET', uri, response.statusCode,
+          body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
       if (response.statusCode == 200) {
-        final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final body =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return CraftnoteMember.fromJson(body);
       } else if (response.statusCode == 401) {
         throw CraftnoteApiException(
@@ -218,16 +236,18 @@ class CraftnoteApiService {
       List<CraftnoteProject> list = mockProjects;
       if (status == 'active') {
         list = list.where((p) => !p.archived).toList();
-      } else if (status == 'archived') {
+      } else if (status == 'archived' || status == 'archive') {
         list = list.where((p) => p.archived).toList();
       }
 
       if (search != null && search.trim().isNotEmpty) {
         final query = search.trim().toLowerCase();
-        return list.where((p) =>
-            p.name.toLowerCase().contains(query) ||
-            p.orderNumber.toLowerCase().contains(query) ||
-            p.city.toLowerCase().contains(query)).toList();
+        return list
+            .where((p) =>
+                p.name.toLowerCase().contains(query) ||
+                p.orderNumber.toLowerCase().contains(query) ||
+                p.city.toLowerCase().contains(query))
+            .toList();
       }
       return list;
     }
@@ -243,14 +263,18 @@ class CraftnoteApiService {
       if (status != null && status.isNotEmpty) 'status': status,
     };
 
-    final uri = Uri.parse('$_baseUrl/projects').replace(queryParameters: queryParams);
+    final uri =
+        Uri.parse('$_baseUrl/projects').replace(queryParameters: queryParams);
     _logRequest('GET', uri);
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 60));
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 60));
       sw.stop();
-      _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('GET', uri, response.statusCode,
+          body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -258,18 +282,26 @@ class CraftnoteApiService {
         if (decoded is List) {
           list = decoded;
         } else if (decoded is Map<String, dynamic>) {
-          list = (decoded['projects'] ?? decoded['data'] ?? decoded['items'] ?? []) as List<dynamic>;
+          list = (decoded['projects'] ??
+              decoded['data'] ??
+              decoded['items'] ??
+              []) as List<dynamic>;
         } else {
           list = [];
         }
-        final projects = list.map((item) => CraftnoteProject.fromJson(item as Map<String, dynamic>)).toList();
+        final projects = list
+            .map((item) =>
+                CraftnoteProject.fromJson(item as Map<String, dynamic>))
+            .toList();
 
         if (search != null && search.trim().isNotEmpty) {
           final query = search.trim().toLowerCase();
-          return projects.where((p) =>
-              p.name.toLowerCase().contains(query) ||
-              p.orderNumber.toLowerCase().contains(query) ||
-              p.city.toLowerCase().contains(query)).toList();
+          return projects
+              .where((p) =>
+                  p.name.toLowerCase().contains(query) ||
+                  p.orderNumber.toLowerCase().contains(query) ||
+                  p.city.toLowerCase().contains(query))
+              .toList();
         }
         return projects;
       } else {
@@ -303,13 +335,16 @@ class CraftnoteApiService {
     final cleanOrder = orderNumber?.trim() ?? '';
     final cleanName = name?.trim() ?? '';
 
+    final isArchiveStatus = status == 'archived' || status == 'archive';
+
     // Direct UUID match check
-    final uuidRegex = RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
     if (uuidRegex.hasMatch(cleanQuery)) {
       try {
         final proj = await getProjectById(cleanQuery);
         if (status == 'active' && proj.archived) return [];
-        if (status == 'archived' && !proj.archived) return [];
+        if (isArchiveStatus && !proj.archived) return [];
         return [proj];
       } catch (_) {}
     }
@@ -320,17 +355,20 @@ class CraftnoteApiService {
       final ordLower = cleanOrder.toLowerCase();
       final nameLower = cleanName.toLowerCase();
       return all.where((p) {
-        final matchOrd = ordLower.isNotEmpty && p.orderNumber.toLowerCase().contains(ordLower);
-        final matchName = nameLower.isNotEmpty && p.name.toLowerCase().contains(nameLower);
+        final matchOrd = ordLower.isNotEmpty &&
+            p.orderNumber.toLowerCase().contains(ordLower);
+        final matchName =
+            nameLower.isNotEmpty && p.name.toLowerCase().contains(nameLower);
         final matchQuery = qLower.isNotEmpty &&
             (p.name.toLowerCase().contains(qLower) ||
-             p.orderNumber.toLowerCase().contains(qLower) ||
-             p.id.toLowerCase() == qLower);
+                p.orderNumber.toLowerCase().contains(qLower) ||
+                p.id.toLowerCase() == qLower);
         return matchOrd || matchName || matchQuery;
       }).toList();
     }
 
-    print('[CraftnoteApi] 🔍 Searching projects in Craftnote: orderNumber="$cleanOrder", name="$cleanName", query="$cleanQuery", status="${status ?? 'all'}" (maxPages: $maxPages, pageSize: $pageSize)...');
+    print(
+        '[CraftnoteApi] 🔍 Searching projects in Craftnote: orderNumber="$cleanOrder", name="$cleanName", query="$cleanQuery", status="${status ?? 'all'}" (maxPages: $maxPages, pageSize: $pageSize)...');
 
     final ordLower = cleanOrder.toLowerCase();
     final nameLower = cleanName.toLowerCase();
@@ -341,20 +379,23 @@ class CraftnoteApiService {
     final limit = pageSize;
 
     for (int page = 0; page < maxPages; page++) {
-      final pageProjects = await getProjects(limit: limit, offset: offset, status: status);
+      final pageProjects =
+          await getProjects(limit: limit, offset: offset, status: status);
       if (pageProjects.isEmpty) break;
 
       for (final p in pageProjects) {
         if (status == 'active' && p.archived) continue;
-        if (status == 'archived' && !p.archived) continue;
+        if (isArchiveStatus && !p.archived) continue;
 
         final pOrd = p.orderNumber.toLowerCase();
         final pName = p.name.toLowerCase();
         final pId = p.id.toLowerCase();
 
-        final matchOrd = ordLower.isNotEmpty && (pOrd.contains(ordLower) || pId == ordLower);
+        final matchOrd =
+            ordLower.isNotEmpty && (pOrd.contains(ordLower) || pId == ordLower);
         final matchName = nameLower.isNotEmpty && pName.contains(nameLower);
-        final matchQuery = qLower.isNotEmpty && (pName.contains(qLower) || pOrd.contains(qLower) || pId == qLower);
+        final matchQuery = qLower.isNotEmpty &&
+            (pName.contains(qLower) || pOrd.contains(qLower) || pId == qLower);
 
         if (matchOrd || matchName || matchQuery) {
           matches.add(p);
@@ -362,8 +403,10 @@ class CraftnoteApiService {
       }
 
       // If we found an exact match for orderNumber, we can stop early
-      if (ordLower.isNotEmpty && matches.any((p) => p.orderNumber.toLowerCase() == ordLower)) {
-        print('[CraftnoteApi] 🎯 Exact match for orderNumber "$cleanOrder" found at offset $offset: "${matches.first.name}" (ID: ${matches.first.id})');
+      if (ordLower.isNotEmpty &&
+          matches.any((p) => p.orderNumber.toLowerCase() == ordLower)) {
+        print(
+            '[CraftnoteApi] 🎯 Exact match for orderNumber "$cleanOrder" found at offset $offset: "${matches.first.name}" (ID: ${matches.first.id})');
         break;
       }
 
@@ -371,7 +414,8 @@ class CraftnoteApiService {
       offset += pageProjects.length;
     }
 
-    print('[CraftnoteApi] 🔍 Project search finished. Found ${matches.length} matching project(s).');
+    print(
+        '[CraftnoteApi] 🔍 Project search finished. Found ${matches.length} matching project(s).');
     return matches;
   }
 
@@ -407,11 +451,11 @@ class CraftnoteApiService {
       );
     }
 
-    // 2. If no active project was found, search in archived projects
+    // 2. If no active project was found, search in archived projects (supports 'archive' and 'archived')
     final archivedResults = await findProjects(
       orderNumber: cleanOrder,
       query: cleanQuery,
-      status: 'archived',
+      status: 'archive',
       maxPages: maxPages,
     );
 
@@ -454,12 +498,16 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 15));
       sw.stop();
-      _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('GET', uri, response.statusCode,
+          body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
       if (response.statusCode == 200) {
-        final map = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        final map =
+            jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         return CraftnoteProject.fromJson(map);
       } else {
         throw CraftnoteApiException(
@@ -509,10 +557,12 @@ class CraftnoteApiService {
         ),
         CraftnoteFile(
           id: 'CN-FILE-MOCK-ERGEBNIS-01',
-          name: '26-15440-AB_Universitätsklinikum_inspektion_ergebnis_20261104.db',
+          name:
+              '26-15440-AB_Universitätsklinikum_inspektion_ergebnis_20261104.db',
           type: 'DOCUMENT',
           size: 512000,
-          creationTimestamp: (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 100,
+          creationTimestamp:
+              (DateTime.now().millisecondsSinceEpoch ~/ 1000) + 100,
           folderId: 'CN-FOLDER-WARTUNGLISTEN',
         ),
         CraftnoteFile(
@@ -530,9 +580,12 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(const Duration(seconds: 60));
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 60));
       sw.stop();
-      _logResponse('GET', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('GET', uri, response.statusCode,
+          body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
       if (response.statusCode == 200) {
         final dynamic decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -540,11 +593,14 @@ class CraftnoteApiService {
         if (decoded is List) {
           list = decoded;
         } else if (decoded is Map<String, dynamic>) {
-          list = (decoded['files'] ?? decoded['data'] ?? decoded['items'] ?? []) as List<dynamic>;
+          list = (decoded['files'] ?? decoded['data'] ?? decoded['items'] ?? [])
+              as List<dynamic>;
         } else {
           list = [];
         }
-        return list.map((item) => CraftnoteFile.fromJson(item as Map<String, dynamic>)).toList();
+        return list
+            .map((item) => CraftnoteFile.fromJson(item as Map<String, dynamic>))
+            .toList();
       } else {
         throw CraftnoteApiException(
           'Dateien für Projekt $projectId konnten nicht geladen werden.',
@@ -567,27 +623,43 @@ class CraftnoteApiService {
     await targetFile.parent.create(recursive: true);
 
     if (CraftnoteCredentialsService.isMockMode) {
-      print('[CraftnoteApi] (Mock) downloadFile for $fileId -> $targetFilePath');
+      print(
+          '[CraftnoteApi] (Mock) downloadFile for $fileId -> $targetFilePath');
       if (targetFilePath.toLowerCase().endsWith('.db')) {
         try {
           // Generate valid SQLite package for realistic mock testing
-          final mockDb = await openDatabase(targetFilePath, version: 1, onCreate: (db, v) async {
-            await db.execute('CREATE TABLE doors (id INTEGER PRIMARY KEY, doorNumber TEXT, doorAlias TEXT)');
-            await db.execute('CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, clientName TEXT, jobNumber TEXT, date TEXT)');
-            await db.execute('CREATE TABLE inspection_doors (id INTEGER PRIMARY KEY, inspectionId INTEGER, doorId INTEGER, status TEXT, notes TEXT)');
-            await db.execute('CREATE TABLE inspection_door_errors (id INTEGER PRIMARY KEY, inspectionDoorId INTEGER, errorCode TEXT, code TEXT, description TEXT, attachments TEXT)');
-            await db.execute('CREATE TABLE error_catalog (id INTEGER PRIMARY KEY, errorId INTEGER, code TEXT, description TEXT, category TEXT)');
-            await db.insert('inspections', {'inspectionId': 99, 'clientName': 'Mock Kunde', 'jobNumber': '26-15440-AB', 'date': '2026-11-04'});
-            await db.insert('doors', {'id': 99, 'doorNumber': 'T-099', 'doorAlias': 'MOCK-DOOR-01'});
-            await db.insert('inspection_doors', {'id': 99, 'inspectionId': 99, 'doorId': 99, 'status': 'Open'});
+          final mockDb = await openDatabase(targetFilePath, version: 1,
+              onCreate: (db, v) async {
+            await db.execute(
+                'CREATE TABLE doors (id INTEGER PRIMARY KEY, doorNumber TEXT, doorAlias TEXT)');
+            await db.execute(
+                'CREATE TABLE inspections (inspectionId INTEGER PRIMARY KEY, clientName TEXT, jobNumber TEXT, date TEXT)');
+            await db.execute(
+                'CREATE TABLE inspection_doors (id INTEGER PRIMARY KEY, inspectionId INTEGER, doorId INTEGER, status TEXT, notes TEXT)');
+            await db.execute(
+                'CREATE TABLE inspection_door_errors (id INTEGER PRIMARY KEY, inspectionDoorId INTEGER, errorCode TEXT, code TEXT, description TEXT, attachments TEXT)');
+            await db.execute(
+                'CREATE TABLE error_catalog (id INTEGER PRIMARY KEY, errorId INTEGER, code TEXT, description TEXT, category TEXT)');
+            await db.insert('inspections', {
+              'inspectionId': 99,
+              'clientName': 'Mock Kunde',
+              'jobNumber': '26-15440-AB',
+              'date': '2026-11-04'
+            });
+            await db.insert('doors',
+                {'id': 99, 'doorNumber': 'T-099', 'doorAlias': 'MOCK-DOOR-01'});
+            await db.insert('inspection_doors',
+                {'id': 99, 'inspectionId': 99, 'doorId': 99, 'status': 'Open'});
           });
           await mockDb.close();
         } catch (_) {
           // Fallback if sqflite databaseFactory is not initialized in lightweight unit tests
-          await targetFile.writeAsBytes(utf8.encode('MOCK_SQLITE_PACKAGE_BINARY_DATA'));
+          await targetFile
+              .writeAsBytes(utf8.encode('MOCK_SQLITE_PACKAGE_BINARY_DATA'));
         }
       } else {
-        await targetFile.writeAsBytes(utf8.encode('MOCK_SQLITE_PACKAGE_BINARY_DATA'));
+        await targetFile
+            .writeAsBytes(utf8.encode('MOCK_SQLITE_PACKAGE_BINARY_DATA'));
       }
       return targetFile;
     }
@@ -601,7 +673,8 @@ class CraftnoteApiService {
         ..headers.addAll(_headers)
         ..followRedirects = true;
 
-      final streamedResponse = await _client.send(request).timeout(const Duration(seconds: 60));
+      final streamedResponse =
+          await _client.send(request).timeout(const Duration(seconds: 60));
       sw.stop();
 
       if (streamedResponse.statusCode == 200) {
@@ -610,12 +683,16 @@ class CraftnoteApiService {
         await sink.flush();
         await sink.close();
         final bytesCount = await targetFile.length();
-        _logResponse('GET', uri, streamedResponse.statusCode, body: '<Binary data: $bytesCount bytes>', elapsedMs: sw.elapsedMilliseconds);
-        print('[CraftnoteApi] 📥 Downloaded $fileId ($bytesCount bytes) to $targetFilePath');
+        _logResponse('GET', uri, streamedResponse.statusCode,
+            body: '<Binary data: $bytesCount bytes>',
+            elapsedMs: sw.elapsedMilliseconds);
+        print(
+            '[CraftnoteApi] 📥 Downloaded $fileId ($bytesCount bytes) to $targetFilePath');
         return targetFile;
       } else {
         final responseBody = await streamedResponse.stream.bytesToString();
-        _logResponse('GET', uri, streamedResponse.statusCode, body: responseBody, elapsedMs: sw.elapsedMilliseconds);
+        _logResponse('GET', uri, streamedResponse.statusCode,
+            body: responseBody, elapsedMs: sw.elapsedMilliseconds);
         throw CraftnoteApiException(
           'Dateidownload für $fileId fehlgeschlagen.',
           statusCode: streamedResponse.statusCode,
@@ -645,7 +722,8 @@ class CraftnoteApiService {
     final fileSize = await file.length();
 
     if (CraftnoteCredentialsService.isMockMode) {
-      print('[CraftnoteApi] (Mock) uploadFile $fileName ($fileSize bytes) to project $projectId (folderId: $folderId)');
+      print(
+          '[CraftnoteApi] (Mock) uploadFile $fileName ($fileSize bytes) to project $projectId (folderId: $folderId)');
       return CraftnoteFile(
         id: 'CN-FILE-UPLOADED-${DateTime.now().millisecondsSinceEpoch}',
         name: fileName,
@@ -657,7 +735,9 @@ class CraftnoteApiService {
     }
 
     final uri = Uri.parse('$_baseUrl/projects/$projectId/files');
-    _logRequest('POST', uri, body: 'Multipart payload: fileName="$fileName", size=$fileSize bytes, folderId="$folderId", localPath="${file.path}"');
+    _logRequest('POST', uri,
+        body:
+            'Multipart payload: fileName="$fileName", size=$fileSize bytes, folderId="$folderId", localPath="${file.path}"');
     final sw = Stopwatch()..start();
 
     try {
@@ -673,16 +753,21 @@ class CraftnoteApiService {
         request.fields['folderId'] = folderId;
       }
 
-      request.files.add(await http.MultipartFile.fromPath('data', file.path, filename: fileName));
+      request.files.add(await http.MultipartFile.fromPath('data', file.path,
+          filename: fileName));
 
-      final streamedResponse = await _client.send(request).timeout(const Duration(seconds: 90));
+      final streamedResponse =
+          await _client.send(request).timeout(const Duration(seconds: 90));
       sw.stop();
       final responseBody = await streamedResponse.stream.bytesToString();
-      _logResponse('POST', uri, streamedResponse.statusCode, body: responseBody, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('POST', uri, streamedResponse.statusCode,
+          body: responseBody, elapsedMs: sw.elapsedMilliseconds);
 
-      if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
+      if (streamedResponse.statusCode == 200 ||
+          streamedResponse.statusCode == 201) {
         final map = jsonDecode(responseBody) as Map<String, dynamic>;
-        print('[CraftnoteApi] 📤 Upload completed successfully for "$fileName" to project $projectId.');
+        print(
+            '[CraftnoteApi] 📤 Upload completed successfully for "$fileName" to project $projectId.');
         return CraftnoteFile.fromJson(map);
       } else {
         throw CraftnoteApiException(
@@ -703,7 +788,8 @@ class CraftnoteApiService {
   /// Calls POST /projects/{projectId}/messages
   Future<void> postMessage(String projectId, String message) async {
     if (CraftnoteCredentialsService.isMockMode) {
-      print('[CraftnoteApi] (Mock) postMessage to project $projectId: $message');
+      print(
+          '[CraftnoteApi] (Mock) postMessage to project $projectId: $message');
       return;
     }
 
@@ -717,9 +803,12 @@ class CraftnoteApiService {
     final sw = Stopwatch()..start();
 
     try {
-      final response = await _client.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 15));
+      final response = await _client
+          .post(uri, headers: headers, body: body)
+          .timeout(const Duration(seconds: 15));
       sw.stop();
-      _logResponse('POST', uri, response.statusCode, body: response.body, elapsedMs: sw.elapsedMilliseconds);
+      _logResponse('POST', uri, response.statusCode,
+          body: response.body, elapsedMs: sw.elapsedMilliseconds);
 
       if (response.statusCode != 200 && response.statusCode != 201) {
         throw CraftnoteApiException(

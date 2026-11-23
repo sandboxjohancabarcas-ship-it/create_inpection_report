@@ -17,11 +17,14 @@ void main() {
       await db.delete('error_catalog');
     });
 
-    test('checkAndInitializeCatalog should populate DB from bundled asset when empty', () async {
+    test(
+        'checkAndInitializeCatalog should populate DB from bundled asset when empty',
+        () async {
       // Catalog table is empty after setUp — initialize from bundled error_catalog.json asset
       await DatabaseService.checkAndInitializeCatalog();
 
-      final catalog = await DatabaseService.getAllErrorCatalog();
+      final catalog =
+          await DatabaseService.getAllErrorCatalog(assetType: 'door');
 
       // The bundled catalog has Retest entries; verify a known one (e.g. 0.10)
       expect(catalog.isNotEmpty, isTrue,
@@ -29,7 +32,8 @@ void main() {
       expect(
         catalog.any((item) => item.code == '0.10'),
         isTrue,
-        reason: 'Entry with code "0.10" (Hinweis: Kein Zugang / Keine Prüfung) must be present',
+        reason:
+            'Entry with code "0.10" (Hinweis: Kein Zugang / Keine Prüfung) must be present',
       );
       expect(
         catalog.firstWhere((item) => item.code == '0.10').description,
@@ -37,7 +41,9 @@ void main() {
       );
     });
 
-    test('checkAndInitializeCatalog should skip seeding when catalog already has entries', () async {
+    test(
+        'checkAndInitializeCatalog should skip seeding when catalog already has entries',
+        () async {
       // Pre-populate with one entry
       final db = await DatabaseService.getDb();
       await db.insert('error_catalog', {
@@ -47,14 +53,17 @@ void main() {
 
       await DatabaseService.checkAndInitializeCatalog();
 
-      final catalog = await DatabaseService.getAllErrorCatalog();
+      final catalog =
+          await DatabaseService.getAllErrorCatalog(assetType: 'door');
 
       // Should NOT have overwritten with bundled data — still only the pre-existing entry
       expect(catalog.length, equals(1));
       expect(catalog.first.code, equals('EXISTING'));
     });
 
-    test('checkAndInitializeCatalog with force: true should reload and upsert catalog entries even when catalog already has entries', () async {
+    test(
+        'checkAndInitializeCatalog with force: true should reload and upsert catalog entries even when catalog already has entries',
+        () async {
       // Pre-populate with placeholder/existing entry
       final db = await DatabaseService.getDb();
       await db.insert('error_catalog', {
@@ -65,12 +74,14 @@ void main() {
       // Force reload
       await DatabaseService.checkAndInitializeCatalog(force: true);
 
-      final catalog = await DatabaseService.getAllErrorCatalog();
+      final catalog =
+          await DatabaseService.getAllErrorCatalog(assetType: 'door');
 
       // Should have reloaded all catalog items and updated 0.10
       expect(catalog.length, greaterThan(1));
       final updated = catalog.firstWhere((item) => item.code == '0.10');
-      expect(updated.description, equals('Hinweis: Kein Zugang / Keine Prüfung'));
+      expect(
+          updated.description, equals('Hinweis: Kein Zugang / Keine Prüfung'));
     });
   });
 }

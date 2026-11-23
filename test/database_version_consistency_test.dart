@@ -12,13 +12,13 @@ void main() {
 
   group('Database Schema Version & SSOT Consistency Tests', () {
     test('Master DB canonical version constant matches active schema migration version', () {
-      expect(DatabaseService.currentDatabaseVersion, equals(28),
-          reason: 'Master DB schema version must be 28 (v28 includes Craftnote columns)');
+      expect(DatabaseService.currentDatabaseVersion, equals(29),
+          reason: 'Master DB schema version must be 29 (v29 includes Windows tables)');
     });
 
     test('Local DB canonical version constant matches active schema migration version', () {
-      expect(LocalDatabaseService.currentDatabaseVersion, equals(18),
-          reason: 'Local DB schema version must be 18 (v18 includes Craftnote queue and columns)');
+      expect(LocalDatabaseService.currentDatabaseVersion, equals(19),
+          reason: 'Local DB schema version must be 19 (v19 includes Windows tables)');
     });
 
     test('Master DB PRAGMA user_version matches currentDatabaseVersion on getDb()', () async {

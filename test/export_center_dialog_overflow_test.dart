@@ -33,9 +33,12 @@ void main() {
     await DatabaseService.clearDatabase();
     await DatabaseService.getDb();
     CraftnoteCredentialsService.setTestMode(true);
+    CraftnoteCredentialsService.setMockMode(true);
   });
 
   tearDown(() async {
+    CraftnoteCredentialsService.setTestMode(false);
+    CraftnoteCredentialsService.setMockMode(false);
     await DatabaseService.closeDb();
   });
 

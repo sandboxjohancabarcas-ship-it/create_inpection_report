@@ -4694,20 +4694,20 @@ class DatabaseService {
   static Future<void> checkAndInitializeCatalog({bool force = false}) async {
     final db = await getDb();
 
-    final existingCount =
-        await db.rawQuery('SELECT COUNT(*) as count FROM error_catalog');
+    final existingCount = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'door'");
     final count = Sqflite.firstIntValue(existingCount) ?? 0;
 
-    // Check if the database has any seeded/non-placeholder entries.
+    // Check if the database has any seeded/non-placeholder entries for doors.
     // Placeholders have description starting with 'Excel-Fehler' or are empty.
     final nonPlaceholderCountRows = await db.rawQuery(
-        "SELECT COUNT(*) as count FROM error_catalog WHERE description NOT LIKE 'Excel-Fehler %' AND description != ''");
+        "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'door' AND description NOT LIKE 'Excel-Fehler %' AND description != ''");
     final nonPlaceholderCount =
         Sqflite.firstIntValue(nonPlaceholderCountRows) ?? 0;
 
     if (!force && count > 0 && nonPlaceholderCount > 0) {
       print(
-          '[Catalog] Database has $count entries including seeded ones. Door initialization skipped.');
+          '[Catalog] Database has $count door entries including seeded ones. Door initialization skipped.');
       await checkAndInitializeWindowCatalog(force: force);
       return;
     }
