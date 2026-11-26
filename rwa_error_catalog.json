@@ -1,0 +1,146 @@
+{
+  "RWA-FT-001": {
+    "description": "Auslösekasten / Feuertaster im Außenbereich stark korrodiert / beschädigt",
+    "category": "Feuertaster",
+    "severity": "high",
+    "recommendation": "Feuertaster erneuern inkl. Wetterschutzdach",
+    "normReference": "DIN 18232 / EN 12101",
+    "assetType": "rwa"
+  },
+  "RWA-FT-002": {
+    "description": "Feuertaster Scheibe / Plombe beschädigt oder fehlend",
+    "category": "Feuertaster",
+    "severity": "medium",
+    "recommendation": "Ersatzscheibe / Plombe montieren",
+    "normReference": "DIN 18232 / EN 12101",
+    "assetType": "rwa"
+  },
+  "RWA-FT-003": {
+    "description": "Feuertaster Auslöseeinheit / Mikroschalter defekt",
+    "category": "Feuertaster",
+    "severity": "high",
+    "recommendation": "Auslöseeinheit austauschen",
+    "normReference": "DIN 18232 / EN 12101",
+    "assetType": "rwa"
+  },
+  "RWA-AK-001": {
+    "description": "Notstromakkus überaltert (> 4 Jahre laut Hersteller) / Akkutausch erforderlich",
+    "category": "Notstromversorgung",
+    "severity": "high",
+    "recommendation": "Notstromakkusatz erneuern und fachgerecht entsorgen",
+    "normReference": "DIN EN 12101-10",
+    "assetType": "rwa"
+  },
+  "RWA-AK-002": {
+    "description": "Notstrombatterie Tiefentladung / Ladekreisfehler / Kapazität unzureichend",
+    "category": "Notstromversorgung",
+    "severity": "high",
+    "recommendation": "Ladespannung prüfen, Akkus austauschen",
+    "normReference": "DIN EN 12101-10",
+    "assetType": "rwa"
+  },
+  "RWA-CO2-001": {
+    "description": "CO2-Patrone / Flasche Druckverlust / Mindestgewicht unterschritten oder überfällig",
+    "category": "CO2-Auslösung",
+    "severity": "high",
+    "recommendation": "CO2-Flasche wiegen, austauschen und verplomben",
+    "normReference": "DIN 18232-2",
+    "assetType": "rwa"
+  },
+  "RWA-CO2-002": {
+    "description": "CO2-Leitung / Verschraubung undicht oder beschädigt",
+    "category": "CO2-Auslösung",
+    "severity": "high",
+    "recommendation": "Druckprüfung durchführen, Leitung instandsetzen",
+    "normReference": "DIN 18232-2",
+    "assetType": "rwa"
+  },
+  "RWA-TH-001": {
+    "description": "Thermoflasche / Thermoglasampulle beschädigt / überaltert",
+    "category": "Thermoflasche",
+    "severity": "medium",
+    "recommendation": "Thermoflasche / Glasampulle austauschen",
+    "normReference": "DIN 18232-2",
+    "assetType": "rwa"
+  },
+  "RWA-AN-001": {
+    "description": "Antrieb öffnet oder schließt mit Unterbrechungen / schwergängig",
+    "category": "Antriebe",
+    "severity": "medium",
+    "recommendation": "Mechanik schmieren, justieren, Führung reinigen",
+    "normReference": "EN 12101-2",
+    "assetType": "rwa"
+  },
+  "RWA-AN-002": {
+    "description": "Antrieb (Spindel / Kette / CO2-Zylinder) mechanisch defekt / blockiert",
+    "category": "Antriebe",
+    "severity": "high",
+    "recommendation": "Antrieb erneuern",
+    "normReference": "EN 12101-2",
+    "assetType": "rwa"
+  },
+  "RWA-AN-003": {
+    "description": "Endlagenabschaltung / Mikroschalter am Antrieb verstellt oder defekt",
+    "category": "Antriebe",
+    "severity": "medium",
+    "recommendation": "Endschalter neu einstellen oder ersetzen",
+    "normReference": "EN 12101-2",
+    "assetType": "rwa"
+  },
+  "RWA-KL-001": {
+    "description": "RWA-Klappendichtung beschädigt / porös / undicht",
+    "category": "RWA-Klappen",
+    "severity": "medium",
+    "recommendation": "Dichtungsgummi erneuern",
+    "normReference": "DIN 18232",
+    "assetType": "rwa"
+  },
+  "RWA-KL-002": {
+    "description": "Verriegelung der RWA-Klappe schließt nicht ordnungsgemäß / verklemmt",
+    "category": "Verriegelung",
+    "severity": "high",
+    "recommendation": "Verriegelungsmechanik instandsetzen und justieren",
+    "normReference": "EN 12101-2",
+    "assetType": "rwa"
+  },
+  "RWA-BE-001": {
+    "description": "Beschläge / Scharniere ausgeschlagen oder korrodiert",
+    "category": "Beschläge",
+    "severity": "medium",
+    "recommendation": "Scharniere instandsetzen, schmieren oder austauschen",
+    "normReference": "DIN 18232",
+    "assetType": "rwa"
+  },
+  "RWA-RM-001": {
+    "description": "Rauch-/Wärmemelder verschmutzt / Störungsanzeige / Messkammer defekt",
+    "category": "Rauchmelder",
+    "severity": "high",
+    "recommendation": "Melder reinigen oder austauschen (DIN 14675)",
+    "normReference": "DIN 14675 / DIN 18232",
+    "assetType": "rwa"
+  },
+  "RWA-ZE-001": {
+    "description": "Rauchabzugszentrale Störungsanzeige / Netzteilfehler / Sicherung ausgelöst",
+    "category": "Rauchabzugszentrale",
+    "severity": "high",
+    "recommendation": "Elektronik und Platine prüfen, Netzteil austauschen",
+    "normReference": "DIN EN 12101-10",
+    "assetType": "rwa"
+  },
+  "RWA-LT-001": {
+    "description": "Lüftungstaster defekt oder ohne Funktion",
+    "category": "Lüftungstaster",
+    "severity": "low",
+    "recommendation": "Taster prüfen und ggf. ersetzen",
+    "normReference": "DIN 18232",
+    "assetType": "rwa"
+  },
+  "RWA-FA-001": {
+    "description": "Fremdansteuerung (BMA / GLT) löst RWA-Anlage nicht aus",
+    "category": "Fremdansteuerung",
+    "severity": "high",
+    "recommendation": "Koppelrelais und Steuerleitung zur BMA prüfen",
+    "normReference": "DIN 14675",
+    "assetType": "rwa"
+  }
+}

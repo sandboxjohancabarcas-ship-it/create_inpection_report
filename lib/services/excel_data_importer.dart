@@ -7,14 +7,19 @@ import 'package:wartungstool/models/models.dart';
 import 'package:wartungstool/services/customer_normalizer.dart';
 import 'package:wartungstool/services/database_service.dart';
 import 'package:wartungstool/services/local_database_service.dart';
+import 'package:wartungstool/services/rwa_excel_importer.dart';
 import 'package:wartungstool/services/window_options_service.dart';
 
 class ExcelImportResult {
   final int sheetsProcessed;
   final int doorsImported;
   final int windowsImported;
+  final int rwaSystemsImported;
   final int errorsLinked;
   final String assetType;
+  final String objectAddress;
+  final String jobNumber;
+  final String inspectionDate;
   final List<String> warnings;
   final List<String> logs;
 
@@ -41,8 +46,12 @@ class ExcelImportResult {
     required this.sheetsProcessed,
     this.doorsImported = 0,
     this.windowsImported = 0,
+    this.rwaSystemsImported = 0,
     required this.errorsLinked,
     this.assetType = 'door',
+    this.objectAddress = '',
+    this.jobNumber = '',
+    this.inspectionDate = '',
     required this.warnings,
     this.logs = const [],
     this.doorConflicts = const [],
@@ -57,8 +66,11 @@ class ExcelImportResult {
 
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
   bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
-  int get totalItemsImported =>
-      assetType == 'window' ? windowsImported : doorsImported;
+  int get totalItemsImported {
+    if (assetType == 'window') return windowsImported;
+    if (assetType == 'rwa') return rwaSystemsImported;
+    return doorsImported;
+  }
 }
 
 class ExcelDataImporter {
@@ -118,7 +130,46 @@ class ExcelDataImporter {
     logs.add(
         'Gefundene Arbeitsblätter (${allSheets.length}): ${allSheets.join(', ')}');
 
-    // Auto-detect asset type: Windows vs Doors
+    // Auto-detect asset type: RWA vs Windows vs Doors
+    bool isRwaFile = fileName.toLowerCase().contains('rwa');
+    if (!isRwaFile) {
+      for (final sName in decoder.tables.keys) {
+        if (sName.toLowerCase().contains('rwa')) {
+          isRwaFile = true;
+          break;
+        }
+        final table = decoder.tables[sName]!;
+        for (int r = 0; r < table.maxRows && r < 5; r++) {
+          final row = table.rows[r];
+          for (final cell in row) {
+            final str = cell?.toString().trim().toLowerCase() ?? '';
+            if (str.contains('rwa-system') || str == 'rwa-system:') {
+              isRwaFile = true;
+              break;
+            }
+          }
+          if (isRwaFile) break;
+        }
+        if (isRwaFile) break;
+      }
+    }
+
+    if (isRwaFile) {
+      logs.add('Erkanntes Prüfobjekt: RWA (assetType: rwa)');
+      final rwaRes = await RwaExcelImporter.importFromFile(excelFile);
+      logs.addAll(rwaRes.logs);
+      warnings.addAll(rwaRes.warnings);
+      return ExcelImportResult(
+        sheetsProcessed: rwaRes.sheetsProcessed,
+        rwaSystemsImported: rwaRes.rwaSystemsImported,
+        errorsLinked: rwaRes.errorsLinked,
+        assetType: 'rwa',
+        jobNumber: fileNameJobNumber,
+        warnings: warnings,
+        logs: logs,
+      );
+    }
+
     bool isWindowFile = fileName.toLowerCase().contains('fenster');
     if (!isWindowFile) {
       for (final sName in decoder.tables.keys) {
@@ -1145,6 +1196,7 @@ class ExcelDataImporter {
       doorsImported: totalDoorsImported,
       errorsLinked: totalErrorsLinked,
       assetType: 'door',
+      jobNumber: fileNameJobNumber,
       warnings: warnings,
       logs: logs,
       doorConflicts: allDoorConflicts,
@@ -2632,6 +2684,7 @@ class ExcelDataImporter {
       windowsImported: distinctWindowAliases.length,
       errorsLinked: totalErrorsLinked,
       assetType: 'window',
+      jobNumber: fileNameJobNumber,
       warnings: warnings,
       logs: logs,
       doorChanges: allWindowChanges,

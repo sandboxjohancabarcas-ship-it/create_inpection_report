@@ -82,6 +82,8 @@ flutter:
     - craftnote_projects_cache.json
     - window_error_catalog.json
     - window_options.json
+    - rwa_error_catalog.json
+    - rwa_options.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

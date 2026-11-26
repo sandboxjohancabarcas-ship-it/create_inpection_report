@@ -17,6 +17,7 @@ import '../widgets/app_log_dialog.dart';
 import '../services/craftnote_sync_service.dart';
 import 'inspection_doors_page.dart';
 import 'inspection_windows_page.dart';
+import 'inspection_rwa_page.dart';
 import 'package:intl/intl.dart';
 
 class DoorListPage extends StatefulWidget {
@@ -814,6 +815,7 @@ class _DoorListPageState extends State<DoorListPage> {
                               if (isSelectionMode) {
                                 _toggleSelection(id);
                               } else {
+                                final isRwa = insp['assetType']?.toString().toLowerCase() == 'rwa';
                                 if (isWindow) {
                                   await Navigator.push(
                                     context,
@@ -822,6 +824,17 @@ class _DoorListPageState extends State<DoorListPage> {
                                         inspectionId: id,
                                         title: insp['clientName'] ??
                                             'Fensterliste',
+                                        isManagerMode: false,
+                                      ),
+                                    ),
+                                  );
+                                } else if (isRwa) {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => InspectionRwaListPage(
+                                        inspectionId: id,
+                                        title: insp['clientName'] ?? 'RWA-Anlagen',
                                         isManagerMode: false,
                                       ),
                                     ),

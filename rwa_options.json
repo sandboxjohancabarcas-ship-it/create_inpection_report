@@ -1,0 +1,139 @@
+{
+  "systemType": {
+    "options": [
+      "elektromotorisch / CO2",
+      "CO2",
+      "elektromotorisch",
+      "pyrotechnisch"
+    ],
+    "default": "elektromotorisch / CO2"
+  },
+  "centralType": {
+    "options": [
+      "JET - FIREJET 165J",
+      "Essmann TRZ Plus 2A",
+      "TRZ Plus 2A",
+      "Velux RWA-Steuerung KFC 210",
+      "Velux RWA-Steuerung KFX 214 EU",
+      "RZN 4102 K",
+      "MZ 2A - 1RG - 1LG",
+      "EL 24 / a"
+    ],
+    "default": ""
+  },
+  "fireButton": {
+    "options": [
+      "1",
+      "2",
+      "2 Auslöseeinheiten CO2",
+      "2 Rauchzugs Nottaster",
+      "Hauptbedienstelle Orange / KFK 104"
+    ],
+    "default": "2"
+  },
+  "smokeDetector": {
+    "options": [
+      "---",
+      "1 Rauchmelder",
+      "2 Rauchmelder",
+      "Velux 3FA F01 WW (55000-317VLX)",
+      "KFA 100"
+    ],
+    "default": "---"
+  },
+  "actuator": {
+    "options": [
+      "1",
+      "2",
+      "2 Stück CO2 Zylinder",
+      "je Kuppel 1 CO2 Zylinder",
+      "1 Stück Linearspindelantrieb Windowdrive M2/500",
+      "1 Stück Linealspindelantrieb",
+      "Kettenantrieb"
+    ],
+    "default": "1"
+  },
+  "ventilationButton": {
+    "options": [
+      "---",
+      "1",
+      "1 Auf/Zu",
+      "nicht vorhanden",
+      "nicht vorhanden (deaktiviert)"
+    ],
+    "default": "---"
+  },
+  "emergencyPower": {
+    "options": [
+      "---",
+      "2 Stück 12V 1,2 Ah",
+      "2 Stück 12V 1,3 Ah (LxHxT - 97x50x48 mm)",
+      "2 x 12V 7,2 Ah"
+    ],
+    "default": "---"
+  },
+  "co2Bottles": {
+    "options": [
+      "---",
+      "2 Stück 501.105, CO2 Patrone 45 gr., 1/2\" UNF Gew.",
+      "1 Stück 501.307, CO2 Flasche 150 gr., M14 x 1,25 Essmann",
+      "1 Stück 501.109, CO2 Flasche 500 gr., 1/2\" Gew.",
+      "4 Stück 501.110 - 80 gr. 1/2\" UNF Gew.",
+      "3 Stück 501.130 - 500 gr. M18x1,5 Gew. mit Steigrohr",
+      "1 Stück 501.110 - 80 gr. 1/2\" UNF Gew.",
+      "1 Stück 501.130 - 500 gr. M18x1,5 Gew. mit Steigrohr",
+      "2 Stück 501.129, CO2 Patrone 300 gr., M18 x 1,5 mit Steigrohr",
+      "2 Stück 501.307, CO2 Flasche 150 gr., M14 x 1,25"
+    ],
+    "default": "---"
+  },
+  "thermalBottle": {
+    "options": [
+      "---",
+      "2 Stück 501.513, Thermoflasche 68°C F4"
+    ],
+    "default": "---"
+  },
+  "rwaFlaps": {
+    "options": [
+      "---",
+      "1",
+      "1 x Kuppel",
+      "1 Stück RWA Kuppeln",
+      "2 Stück RWA Kuppeln",
+      "4 x Kuppel",
+      "Velux Rauchabzugsfenster GGU SK08 007040D Alu PU Thermo"
+    ],
+    "default": "1"
+  },
+  "ventilationFlaps": {
+    "options": [
+      "---",
+      "1",
+      "n.v"
+    ],
+    "default": "---"
+  },
+  "dampers": {
+    "options": [
+      "---",
+      "1",
+      "2 Stück links und rechts am Dachfenster"
+    ],
+    "default": "---"
+  },
+  "einrichtungSettings": [
+    "RWA-Klappen",
+    "Antriebe",
+    "Verriegelung",
+    "Beschläge",
+    "Feuertaster",
+    "Lüftungstaster",
+    "Rauch/wärmemelder",
+    "Rauchabzugszentrale",
+    "Notstrombatterie",
+    "Anlage ausgelöst",
+    "Anlage geschlossen",
+    "Fremdansteuerung"
+  ]
+}

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../utils/inspection_year_utils.dart';
 import '../utils/date_format_helper.dart';
 
@@ -49,17 +48,11 @@ class InspectionSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Format the date for consistent display
-    DateTime parsedDate;
-    try {
-      parsedDate = DateTime.parse(date);
-    } catch (e) {
-      parsedDate = DateTime.now(); 
-    }
-    final formattedDate = DateFormat('dd.MM.yyyy').format(parsedDate);
+    final formattedDate = DateFormatHelper.formatDate(date);
     final bool locked = InspectionYearUtils.isInspectionLocked(isLocked, date);
     final bool isReparatur = orderType == 'Reparatur';
     final bool isErledigt = orderType == 'Erledigt';
+    final bool isRwa = assetType?.toLowerCase() == 'rwa';
     final bool isWindow = assetType?.toLowerCase() == 'window' ||
         (windowCount != null && windowCount! > 0 && (doorCount == null || doorCount == 0));
 
@@ -85,12 +78,16 @@ class InspectionSummaryCard extends StatelessWidget {
               ? Icons.check_circle_outline
               : (isReparatur
                   ? Icons.handyman_outlined
-                  : (isWindow ? Icons.window : Icons.business)),
+                  : (isRwa
+                      ? Icons.fire_extinguisher
+                      : (isWindow ? Icons.window : Icons.business))),
           color: isErledigt
               ? Colors.green.shade700
               : (isReparatur
                   ? Colors.orange.shade800
-                  : (isWindow ? Colors.teal.shade700 : Colors.blue)),
+                  : (isRwa
+                      ? Colors.deepOrange.shade700
+                      : (isWindow ? Colors.teal.shade700 : Colors.blue))),
         ),
         title: Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -98,6 +95,34 @@ class InspectionSummaryCard extends StatelessWidget {
           runSpacing: 4,
           children: [
             Text(clientName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (isRwa)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.deepOrange.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.fire_extinguisher,
+                      size: 11,
+                      color: Colors.deepOrange.shade900,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'RWA',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepOrange.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (isWindow)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

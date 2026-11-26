@@ -1,0 +1,298 @@
+================================================================
+  RWA-SYSTEM EXCEL ANALYSIS REPORT
+================================================================
+
+1. SHEETS SUMMARY BY FILE:
+  * 26-14517-AB P-000893 Checkliste RWA-Anlage-1 Gebäude G.xlsx: 2026, 2025, 2024, 2023, 2020, Tabelle2, Tabelle3
+  * 26-14517-AB P-000893 Checkliste RWA-Anlage-1-1 Gebäude C.xlsx: 2026, 2025, 2024, 2023, 2020, Tabelle2, Tabelle3
+  * 26-14517-AB P-000893 Checkliste RWA-Anlage-1-2 Gebäude D Townhall.xlsx: 2026, 2025, 2024, 2023, 2020, Tabelle2, Tabelle3
+  * 26-14517-AB P-000893 Checkliste RWA-Anlage-1-3 Gebäude A TH2.xlsx: 2026, 2025, 2024, 2023, Tabelle2, Tabelle3
+  * 26-15443-AB P-000623 Deichstraße 21 RWA final.xlsx: 2025, 2024, 2021, 2020, Tabelle2, Tabelle3
+  * 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx: 2026, 2025, 2024, 2021, 2020, Tabelle2, Tabelle3
+  * 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx: 2026, 2025, 2024, 2023, 2022, 2021, 2019, Tabelle2, Tabelle3
+  * 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx: 2026, 2025, 2024, 2023, 2022, 2021, 2019, Tabelle2, Tabelle3
+  * 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx: 2026, 2025, 2024, 2023, 2022, 2021, 2019, Tabelle2, Tabelle3
+
+2. OBJECT ADDRESSES FOUND (9):
+  - PAE-Labor, Gebäude "G"   -   Anlage 1 - M-PIC-Ost
+Hohe-Schar-Str. 36, 21107 Hamburg
+  - PAE-Labor, Gebäude "C"  Lubes-Blending Halle-Alt  -  Anlage  - 
+Hohe-Schar-Str. 36, 21107 Hamburg
+  - PAE-Labor, Gebäude "C"  Lubes-Blending Halle-Alt  -  Anlage 1 - 
+Hohe-Schar-Str. 36, 21107 Hamburg
+  - PAE-Labor, Gebäude "D"   -   Anlage 1 - Town Hall
+Hohe-Schar-Str. 36, 21107 Hamburg
+  - PAE-Labor, Gebäude "A"   -   Anlage 1 - Treppenhaus 2
+Hohe-Schar-Str. 36, 21107 Hamburg
+  - Deichstraße 21, 20457 Hamburg
+  - Deichstraße 23, 20457 Hamburg
+  - Deichstraße 25, 20457 Hamburg
+  - Deichstraße 27, 20457 Hamburg
+
+3. RWA SYSTEM PROPERTIES & UNIQUE VALUES:
+  Property: "RWA-System:" (Count: 3)
+    - elektromotorisch    /     CO2
+    - CO2
+    - elektromotorisch
+  Property: "Zentrale Fabrikat / Typ" (Count: 3)
+    - JET - FIREJET 165J
+    - Essmann TRZ Plus 2A
+    - TRZ Plus 2A
+  Property: "Feuertaster" (Count: 4)
+    - 2 Auslöseeinheiten CO2
+    - 2 Rauchzugs Nottaster
+    - Hauptbedienstelle Orange / KFK 104
+    - 2
+  Property: "Rauch/Wärmemelder" (Count: 4)
+    - ------------------------------------
+    - 1 Rauchmelder
+    - 2 Rauchmelder
+    - -
+  Property: "Antriebe" (Count: 6)
+    - 2 Stück CO2 Zylinder
+    - je Kuppel 1 CO2 Zylinder
+    - 1 Stück Linearspindelanttrieb 
+Windowdrive M2/500
+    - 1 Stück Linealspindelanttrieb
+    - Kettenantrieb
+    - 1
+  Property: "Lüftungstaster" (Count: 6)
+    - ------------------------------------
+    - 1 Auf/Zu
+    - nicht vorhanden (deaktiviert)
+    - nicht vorhanden
+    - -
+    - 1
+  Property: "Notstrombatterie" (Count: 5)
+    - ------------------------------------
+    - 2 Stück 12V  1,2 Ah
+    - 2020 (neue Anlage) Getauscht 01/25
+    - 2020 (neue Anlage)
+    - 2 Stück, 12V, 1,3 Ah, LxHxT - 97x50x48 mm
+  Property: "CO2- Flaschen" (Count: 12)
+    - 2 Stück 501.105, CO2 Patrone 45 gr., 1/2" UNF Gew.
+    - 1 Stück 501.307, CO2 Flasche 150 gr., M14 x 1,25 Essmann
+    - 1 Stück 501.109 , CO2 Flasche 500 gr. , 1/2" Gew.
+    - 4 Stück 501.110 - 80 gr. 1/2" UNF Gew.
+    - 3 Stück 501.130 - 500 gr. M18x1,5 Gew. mit Steigrohr
+    - 1 Stück 501.110 - 80 gr. 1/2" UNF Gew.
+    - 1 Stück 501.130 - 500 gr. M18x1,5 Gew. mit Steigrohr
+    - 2 Stück 501.129, CO2 Patrone 300 gr., M18 x 1,5 mit Steigrohr
+    - 2 Stück 501.307, CO2 Flasche 150 gr., M14 x 1,25
+    - Nein
+    - /
+    - -
+  Property: "Thermoflasche" (Count: 4)
+    - 2 Stück 501.513, Thermoflasche 68°C F4
+    - Nein
+    - /
+    - -
+  Property: "RWA-Klappen" (Count: 7)
+    - 2 Stück RWA Kuppeln
+    - 4 x Kuppel
+    - 1 x Kuppel
+    - 1 Stück RWA Kuppeln
+    - Velux Rauchabzugsfenster GGU SK08 007040D Alu PU Thermo
+    - 1
+    - -
+  Property: "Lüftungsklappen" (Count: 4)
+    - ------------------------------------
+    - /
+    - n.v
+    - 1
+  Property: "Dämpfer" (Count: 3)
+    - ------------------------------------
+    - 2 Stück links und rechts am Dachfenster
+    - 1
+  Property: "Zentrale Typ" (Count: 5)
+    - Velux RWA-Steuerung KFC 210
+    - Velux RWA-Steuerung KFX 214 EU
+    - RZN 4102 K
+    - MZ 2A - 1RG - 1LG
+    - EL 24 / a
+  Property: "Rauchmelder" (Count: 2)
+    - Velux 3FA F01 WW  (55000-317VLX)
+    - KFA 100
+
+4. EINRICHTUNG (INSTALLATION SETTINGS) & OBSERVED RESULTS:
+  Setting: "RWA-Klappen" -> Results: [I.O, √, keine
+Mängel, i.O., i.o]
+  Setting: "Antriebe" -> Results: [I.O, √, keine
+Mängel, i.O., i.o]
+  Setting: "Verriegelung" -> Results: [I.O, √, keine
+Mängel, i.O., n.v]
+  Setting: "Beschläge" -> Results: [I.O, √, keine
+Mängel, i.O., i.o]
+  Setting: "Feuertaster" -> Results: [---, X, √, keine
+Mängel, I.O, i.O., i.o]
+  Setting: "Lüftungstaster" -> Results: [---, n.v, √, keine
+Mängel, I.O, X, -]
+  Setting: "Rauch/wärmemelder" -> Results: [---, n.v, √, keine
+Mängel, I.O, i.O., -]
+  Setting: "Rauchabzugszentrale" -> Results: [---, n.v, √, keine
+Mängel, I.O, i.O., i.o, -, i.o.]
+  Setting: "Notstrombatterie" -> Results: [---, n.v, √, keine
+Mängel, I.O, i.O., X]
+  Setting: "Anlage ausgelöst" -> Results: [Ja, √, I.O, keine
+Mängel, i.O., ja]
+  Setting: "Anlage geschlossen" -> Results: [Ja, √, I.O, keine
+Mängel, i.O., ja]
+  Setting: "Fremdansteuerung" -> Results: [---, n.v, √, keine
+Mängel, -]
+
+5. ALL DISTINCT "ERGEBNIS" VALUES & FREQUENCIES:
+  - "I.O": 114 occurrences
+  - "---": 64 occurrences
+  - "Ja": 20 occurrences
+  - "√": 87 occurrences
+  - "X": 11 occurrences
+  - "n.v": 28 occurrences
+  - "keine
+Mängel": 24 occurrences
+  - "i.O.": 132 occurrences
+  - "-": 66 occurrences
+  - "i.o": 28 occurrences
+  - "ja": 12 occurrences
+  - "i.o.": 2 occurrences
+
+6. ALL "ANMERKUNGEN" COLLECTED (34):
+  [1] Einrichtung: "Feuertaster" | Ergebnis: "X"
+      Text: "2 Auslösekästen im Außenbereich sind stark korrodiert,
+Auslösevorrichtung ebenfalls in Mitleidenschaft geraten.
+Bei nächster Wartung erneuern. Inkl Wetterschutzdach."
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-1 Gebäude C.xlsx (2026)
+
+  [2] Einrichtung: "Feuertaster" | Ergebnis: "X"
+      Text: "2 Auslösekästen im Außenbereich sind stark korrodiert,
+Auslösevorrichtung ebenfalls in Mitleidenschaft geraten.
+Bei nächster Wartung erneuern. Inkl Wetterschutzdach."
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-1 Gebäude C.xlsx (2025)
+
+  [3] Einrichtung: "Notstrombatterie" | Ergebnis: "I.O"
+      Text: "Erneuert 2024, nächster Akkutausch spätestens 2028"
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-3 Gebäude A TH2.xlsx (2026)
+
+  [4] Einrichtung: "Notstrombatterie" | Ergebnis: "√"
+      Text: "Erneuert 2024, nächster Akkutausch spätestens 2028"
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-3 Gebäude A TH2.xlsx (2025)
+
+  [5] Einrichtung: "Notstrombatterie" | Ergebnis: "√"
+      Text: "Müssen dieses Jahr noch erneuert werden"
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-3 Gebäude A TH2.xlsx (2024)
+
+  [6] Einrichtung: "Notstrombatterie" | Ergebnis: "I.O"
+      Text: "Nächster Akkutausch 2024"
+      Source: 26-14517-AB P-000893 Checkliste RWA-Anlage-1-3 Gebäude A TH2.xlsx (2023)
+
+  [7] Einrichtung: "Lüftungstaster" | Ergebnis: "X"
+      Text: "Auf Kundenwunsch deaktiviert"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA final.xlsx (2025)
+
+  [8] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "nächster Tausch 2024 ( alle 4 Jahre laut Hersteller ), 2 x 12 V 7,2 Ah"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA final.xlsx (2024)
+
+  [9] Einrichtung: "Rauch/wärmemelder" | Ergebnis: "i.O."
+      Text: "Nur Rauchmelder KFA 100"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA final.xlsx (2021)
+
+  [10] Einrichtung: "Rauch/wärmemelder" | Ergebnis: "i.O."
+      Text: "Nur Rauchmelder KFA 100"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA final.xlsx (2020)
+
+  [11] Einrichtung: "Lüftungstaster" | Ergebnis: "X"
+      Text: "Auf Kundenwunsch deaktiviert"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx (2026)
+
+  [12] Einrichtung: "Lüftungstaster" | Ergebnis: "X"
+      Text: "Auf Kundenwunsch deaktiviert"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx (2025)
+
+  [13] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "nächster Tausch 2024 ( alle 4 Jahre laut Hersteller ), 2 x 12 V 7,2 Ah"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx (2024)
+
+  [14] Einrichtung: "Rauch/wärmemelder" | Ergebnis: "i.O."
+      Text: "Nur Rauchmelder KFA 100"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx (2021)
+
+  [15] Einrichtung: "Rauch/wärmemelder" | Ergebnis: "i.O."
+      Text: "Nur Rauchmelder KFA 100"
+      Source: 26-15443-AB P-000623 Deichstraße 21 RWA Kunde.xlsx (2020)
+
+  [16] Einrichtung: "Notstrombatterie" | Ergebnis: "I.O"
+      Text: "Getauscht 01/25"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2026)
+
+  [17] Einrichtung: "Notstrombatterie" | Ergebnis: "I.O"
+      Text: "Getauscht 01/25"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2025)
+
+  [18] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2024)
+
+  [19] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2023)
+
+  [20] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2022)
+
+  [21] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2021)
+
+  [22] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15445-AB P-000623 Deichstraße 23 RWA Kunde.xlsx (2019)
+
+  [23] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2024)
+
+  [24] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2023)
+
+  [25] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2022)
+
+  [26] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2021)
+
+  [27] Einrichtung: "Anlage geschlossen" | Ergebnis: "i.O."
+      Text: "schließt mit Unterbrechungen"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2021)
+
+  [28] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2019)
+
+  [29] Einrichtung: "Anlage geschlossen" | Ergebnis: "i.O."
+      Text: "schließt mit Unterbrechungen"
+      Source: 26-15447-AB P-0000623 Deichstraße 25 RWA Kunde.xlsx (2019)
+
+  [30] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx (2024)
+
+  [31] Einrichtung: "Notstrombatterie" | Ergebnis: "X"
+      Text: "Bj. 12/2019"
+      Source: 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx (2023)
+
+  [32] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx (2022)
+
+  [33] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx (2021)
+
+  [34] Einrichtung: "Notstrombatterie" | Ergebnis: "i.O."
+      Text: "Bj. 12/2019"
+      Source: 26-15448-AB P-000623 Deichstraße 27 RWA Kunde.xlsx (2019)
+

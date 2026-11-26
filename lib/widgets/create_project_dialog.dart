@@ -81,9 +81,10 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
     _objectAddressController.text = widget.initialObjectAddress ?? '';
     _clientNameController.text = widget.initialClientName ?? '';
     _orderType = widget.initialOrderType;
-    _assetType = (widget.initialAssetType.trim().toLowerCase() == 'window')
+    final initialLower = widget.initialAssetType.trim().toLowerCase();
+    _assetType = (initialLower == 'window')
         ? 'window'
-        : 'door';
+        : (initialLower == 'rwa' ? 'rwa' : 'door');
     _clonePreviousDoors = widget.initialProjectNumber != null ||
         widget.sourceInspectionId != null;
     if (widget.isInspectorMode) {
@@ -124,10 +125,8 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
                   baseInsp['inspectorName']?.toString() ?? '';
               if (baseInsp['assetType'] != null &&
                   baseInsp['assetType'].toString().isNotEmpty) {
-                _assetType =
-                    baseInsp['assetType'].toString().toLowerCase() == 'window'
-                        ? 'window'
-                        : 'door';
+                final aType = baseInsp['assetType'].toString().toLowerCase();
+                _assetType = aType == 'window' ? 'window' : (aType == 'rwa' ? 'rwa' : 'door');
               }
               _hasExistingInspection = true;
               _clonePreviousDoors = true;
@@ -150,10 +149,8 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
             if (baseInsp != null &&
                 baseInsp['assetType'] != null &&
                 baseInsp['assetType'].toString().isNotEmpty) {
-              _assetType =
-                  baseInsp['assetType'].toString().toLowerCase() == 'window'
-                      ? 'window'
-                      : 'door';
+              final aType = baseInsp['assetType'].toString().toLowerCase();
+              _assetType = aType == 'window' ? 'window' : (aType == 'rwa' ? 'rwa' : 'door');
             }
             _checkIfProjectExists();
           });
@@ -266,7 +263,9 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
       if (mounted) {
         setState(() => _isSaving = false);
         Navigator.of(context).pop(true);
-        final assetTitle = _assetType == 'window' ? 'Fenster' : 'Türen';
+        final assetTitle = _assetType == 'window'
+            ? 'Fenster'
+            : (_assetType == 'rwa' ? 'RWA-Systeme' : 'Türen');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -378,6 +377,11 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
                       value: 'window',
                       icon: Icon(Icons.window, color: Colors.teal),
                       label: Text('Fenster'),
+                    ),
+                    ButtonSegment<String>(
+                      value: 'rwa',
+                      icon: Icon(Icons.fire_extinguisher, color: Colors.deepOrange),
+                      label: Text('RWA'),
                     ),
                   ],
                   selected: {_assetType},

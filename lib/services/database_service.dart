@@ -18,7 +18,7 @@ import '../utils/file_export_helper.dart';
 class DatabaseService {
   /// Canonical Master Database Schema Version (Single Source of Truth).
   /// Increment this ONLY when modifying schema tables/columns and adding onUpgrade handlers.
-  static const int currentDatabaseVersion = 29;
+  static const int currentDatabaseVersion = 30;
 
   static Database? _db;
 
@@ -189,7 +189,8 @@ class DatabaseService {
             requestedBy TEXT,
             requestDate TEXT,
             sourceInspectionDoorId INTEGER,
-            sourceInspectionWindowId INTEGER
+            sourceInspectionWindowId INTEGER,
+            sourceInspectionRwaId INTEGER
           );
         ''');
 
@@ -228,6 +229,91 @@ class DatabaseService {
         ''');
         await db.execute(
             'CREATE INDEX idx_insp_win_err_win ON inspection_window_errors (inspectionWindowId)');
+
+        // RWA-Systeme tables
+        await db.execute('''
+          CREATE TABLE rwa_systems (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            systemAlias TEXT UNIQUE,
+            provisionalAlias TEXT,
+            projectNumber TEXT,
+            systemType TEXT,
+            objectAddress TEXT,
+            building TEXT,
+            floor TEXT,
+            room TEXT,
+            centralType TEXT,
+            fireButtonSpec TEXT,
+            smokeDetectorSpec TEXT,
+            actuatorSpec TEXT,
+            ventilationButtonSpec TEXT,
+            emergencyPowerSpec TEXT,
+            co2BottleSpec TEXT,
+            thermalBottleSpec TEXT,
+            rwaFlapSpec TEXT,
+            ventilationFlapSpec TEXT,
+            damperSpec TEXT,
+            systemFunctionOK INTEGER DEFAULT 1,
+            notes TEXT DEFAULT ''
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_rwa_systems_alias ON rwa_systems (systemAlias)');
+        await db.execute(
+            'CREATE INDEX idx_rwa_systems_provisional_alias ON rwa_systems (provisionalAlias)');
+        await db.execute(
+            'CREATE INDEX idx_rwa_systems_project ON rwa_systems (projectNumber)');
+
+        await db.execute('''
+          CREATE TABLE inspection_rwa (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionId INTEGER,
+            rwaSystemId INTEGER,
+            status TEXT,
+            notes TEXT,
+            attachments TEXT,
+            syncStatus TEXT,
+            FOREIGN KEY (inspectionId) REFERENCES inspections (inspectionId),
+            FOREIGN KEY (rwaSystemId) REFERENCES rwa_systems (id)
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_insp_rwa_insp ON inspection_rwa (inspectionId)');
+        await db.execute(
+            'CREATE INDEX idx_insp_rwa_sys ON inspection_rwa (rwaSystemId)');
+
+        await db.execute('''
+          CREATE TABLE inspection_rwa_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionRwaId INTEGER,
+            settingName TEXT,
+            result TEXT,
+            rawResult TEXT,
+            annotation TEXT,
+            FOREIGN KEY (inspectionRwaId) REFERENCES inspection_rwa (id)
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_insp_rwa_set_rwa ON inspection_rwa_settings (inspectionRwaId)');
+
+        await db.execute('''
+          CREATE TABLE inspection_rwa_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            inspectionRwaId INTEGER,
+            settingName TEXT,
+            errorId INTEGER,
+            errorCode TEXT NOT NULL DEFAULT '',
+            quantity INTEGER,
+            severity TEXT,
+            notes TEXT,
+            resolutionStatus TEXT,
+            attachments TEXT DEFAULT '',
+            FOREIGN KEY (inspectionRwaId) REFERENCES inspection_rwa (id),
+            FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+          );
+        ''');
+        await db.execute(
+            'CREATE INDEX idx_insp_rwa_err_rwa ON inspection_rwa_errors (inspectionRwaId)');
 
         // ErrorRequests table removed - functionality moved to error_catalog
       },
@@ -579,6 +665,104 @@ class DatabaseService {
                 '[DatabaseService] Main DB upgraded to v29: Windows, InspectionWindows, and InspectionWindowErrors tables added.');
           } catch (e) {
             print('Main DB migration warning (v29 tables/columns): $e');
+          }
+        }
+
+        if (oldVersion < 30) {
+          try {
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS rwa_systems (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                systemAlias TEXT UNIQUE,
+                provisionalAlias TEXT,
+                projectNumber TEXT,
+                systemType TEXT,
+                objectAddress TEXT,
+                building TEXT,
+                floor TEXT,
+                room TEXT,
+                centralType TEXT,
+                fireButtonSpec TEXT,
+                smokeDetectorSpec TEXT,
+                actuatorSpec TEXT,
+                ventilationButtonSpec TEXT,
+                emergencyPowerSpec TEXT,
+                co2BottleSpec TEXT,
+                thermalBottleSpec TEXT,
+                rwaFlapSpec TEXT,
+                ventilationFlapSpec TEXT,
+                damperSpec TEXT,
+                systemFunctionOK INTEGER DEFAULT 1,
+                notes TEXT DEFAULT ''
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_rwa_systems_alias ON rwa_systems (systemAlias)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_rwa_systems_provisional_alias ON rwa_systems (provisionalAlias)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_rwa_systems_project ON rwa_systems (projectNumber)');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_rwa (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionId INTEGER,
+                rwaSystemId INTEGER,
+                status TEXT,
+                notes TEXT,
+                attachments TEXT,
+                syncStatus TEXT,
+                FOREIGN KEY (inspectionId) REFERENCES inspections (inspectionId),
+                FOREIGN KEY (rwaSystemId) REFERENCES rwa_systems (id)
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_rwa_insp ON inspection_rwa (inspectionId)');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_rwa_sys ON inspection_rwa (rwaSystemId)');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_rwa_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionRwaId INTEGER,
+                settingName TEXT,
+                result TEXT,
+                rawResult TEXT,
+                annotation TEXT,
+                FOREIGN KEY (inspectionRwaId) REFERENCES inspection_rwa (id)
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_rwa_set_rwa ON inspection_rwa_settings (inspectionRwaId)');
+
+            await db.execute('''
+              CREATE TABLE IF NOT EXISTS inspection_rwa_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inspectionRwaId INTEGER,
+                settingName TEXT,
+                errorId INTEGER,
+                errorCode TEXT NOT NULL DEFAULT '',
+                quantity INTEGER,
+                severity TEXT,
+                notes TEXT,
+                resolutionStatus TEXT,
+                attachments TEXT DEFAULT '',
+                FOREIGN KEY (inspectionRwaId) REFERENCES inspection_rwa (id),
+                FOREIGN KEY (errorId) REFERENCES error_catalog (errorId)
+              );
+            ''');
+            await db.execute(
+                'CREATE INDEX IF NOT EXISTS idx_insp_rwa_err_rwa ON inspection_rwa_errors (inspectionRwaId)');
+
+            try {
+              await db.execute(
+                  "ALTER TABLE error_catalog ADD COLUMN sourceInspectionRwaId INTEGER");
+            } catch (_) {}
+
+            print(
+                '[DatabaseService] Main DB upgraded to v30: RWA-Systeme tables added.');
+          } catch (e) {
+            print('Main DB migration warning (v30 tables/columns): $e');
           }
         }
       },
@@ -1438,6 +1622,369 @@ class DatabaseService {
       WHERE $whereClause
       GROUP BY w.id
       ORDER BY w.windowNumber ASC, w.id DESC
+    ''', whereArgs);
+
+    return rows;
+  }
+
+  // ==========================================
+  // RWA-Systeme (Smoke & Heat Ventilation)
+  // ==========================================
+
+  static Future<int> insertRwaSystem(RwaSystem rwa) async {
+    final db = await getDb();
+    final data = rwa.toMap()..remove('id');
+    return await db.insert(
+      'rwa_systems',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> updateRwaSystem(RwaSystem rwa) async {
+    final db = await getDb();
+    if (rwa.id == null) return;
+    await db.update(
+      'rwa_systems',
+      rwa.toMap()..remove('id'),
+      where: 'id = ?',
+      whereArgs: [rwa.id],
+    );
+  }
+
+  static Future<void> deleteRwaSystem(int id) async {
+    final db = await getDb();
+    await db.delete(
+      'inspection_rwa_errors',
+      where:
+          'inspectionRwaId IN (SELECT id FROM inspection_rwa WHERE rwaSystemId = ?)',
+      whereArgs: [id],
+    );
+    await db.delete(
+      'inspection_rwa_settings',
+      where:
+          'inspectionRwaId IN (SELECT id FROM inspection_rwa WHERE rwaSystemId = ?)',
+      whereArgs: [id],
+    );
+    await db.delete('inspection_rwa', where: 'rwaSystemId = ?', whereArgs: [id]);
+    await db.delete('rwa_systems', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<RwaSystem?> getRwaSystemById(int id) async {
+    final db = await getDb();
+    final maps = await db.query(
+      'rwa_systems',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return RwaSystem.fromMap(maps.first);
+  }
+
+  static Future<RwaSystem?> getRwaSystemByAlias(String alias) async {
+    final db = await getDb();
+    final clean = alias.trim();
+    if (clean.isEmpty) return null;
+    final maps = await db.query(
+      'rwa_systems',
+      where: 'systemAlias = ? OR provisionalAlias = ?',
+      whereArgs: [clean, clean],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return RwaSystem.fromMap(maps.first);
+  }
+
+  static Future<RwaSystem?> findRwaSystemByBarcode(String barcode,
+      {String? projectNumber}) async {
+    final db = await getDb();
+    final clean = barcode.trim();
+    if (clean.isEmpty) return null;
+
+    final exact = await db.query(
+      'rwa_systems',
+      where: 'systemAlias = ? OR provisionalAlias = ?',
+      whereArgs: [clean, clean],
+      limit: 1,
+    );
+    if (exact.isNotEmpty) return RwaSystem.fromMap(exact.first);
+
+    if (projectNumber != null && projectNumber.trim().isNotEmpty) {
+      final inProj = await db.query(
+        'rwa_systems',
+        where:
+            'projectNumber = ? AND (systemAlias LIKE ? OR provisionalAlias LIKE ?)',
+        whereArgs: [projectNumber.trim(), '%$clean%', '%$clean%'],
+        limit: 1,
+      );
+      if (inProj.isNotEmpty) return RwaSystem.fromMap(inProj.first);
+    }
+    return null;
+  }
+
+  static Future<int> updateRwaSystemAlias(int rwaId, String newAlias) async {
+    final db = await getDb();
+    final cleanAlias = newAlias.trim();
+
+    if (cleanAlias.isNotEmpty) {
+      final conflict = await db.query(
+        'rwa_systems',
+        columns: ['id'],
+        where: 'systemAlias = ? AND id != ?',
+        whereArgs: [cleanAlias, rwaId],
+        limit: 1,
+      );
+      if (conflict.isNotEmpty) {
+        throw Exception(
+            'Alias "$cleanAlias" ist bereits an eine andere RWA-Anlage vergeben.');
+      }
+    }
+
+    return await db.update(
+      'rwa_systems',
+      {'systemAlias': cleanAlias.isEmpty ? null : cleanAlias},
+      where: 'id = ?',
+      whereArgs: [rwaId],
+    );
+  }
+
+  static Future<int> insertInspectionRwa(Map<String, dynamic> data) async {
+    final db = await getDb();
+    final inspectionId = data['inspectionId'];
+    final rwaSystemId = data['rwaSystemId'];
+
+    if (inspectionId != null && rwaSystemId != null) {
+      final existing = await db.query(
+        'inspection_rwa',
+        columns: ['id'],
+        where: 'inspectionId = ? AND rwaSystemId = ?',
+        whereArgs: [inspectionId, rwaSystemId],
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        final existingId = existing.first['id'] as int;
+        await db.update(
+          'inspection_rwa',
+          data,
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+        return existingId;
+      }
+    }
+
+    return await db.insert(
+      'inspection_rwa',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getInspectionRwasByInspectionId(
+      int inspectionId) async {
+    final db = await getDb();
+    return await db.query(
+      'inspection_rwa',
+      where: 'inspectionId = ?',
+      whereArgs: [inspectionId],
+    );
+  }
+
+  static Future<void> updateInspectionRwaStatus({
+    required int inspectionId,
+    required int rwaSystemId,
+    required String status,
+    String? notes,
+  }) async {
+    final db = await getDb();
+    final existing = await db.query(
+      'inspection_rwa',
+      columns: ['id'],
+      where: 'inspectionId = ? AND rwaSystemId = ?',
+      whereArgs: [inspectionId, rwaSystemId],
+      limit: 1,
+    );
+
+    final values = <String, dynamic>{
+      'status': status,
+      if (notes != null) 'notes': notes,
+    };
+
+    if (existing.isNotEmpty) {
+      await db.update(
+        'inspection_rwa',
+        values,
+        where: 'inspectionId = ? AND rwaSystemId = ?',
+        whereArgs: [inspectionId, rwaSystemId],
+      );
+    } else {
+      values['inspectionId'] = inspectionId;
+      values['rwaSystemId'] = rwaSystemId;
+      await db.insert('inspection_rwa', values);
+    }
+  }
+
+  static Future<List<RwaSystem>> getRwaSystemsByInspectionId(
+      int inspectionId) async {
+    final db = await getDb();
+    final rows = await db.rawQuery('''
+      SELECT r.* 
+      FROM rwa_systems r
+      INNER JOIN inspection_rwa ir ON r.id = ir.rwaSystemId
+      WHERE ir.inspectionId = ?
+      ORDER BY r.id ASC
+    ''', [inspectionId]);
+    return rows.map((r) => RwaSystem.fromMap(r)).toList();
+  }
+
+  static Future<int> insertRwaInspectionSetting(
+      RwaInspectionSetting setting) async {
+    final db = await getDb();
+    return await db.insert(
+      'inspection_rwa_settings',
+      setting.toMap()..remove('id'),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<RwaInspectionSetting>> getRwaInspectionSettings(
+      int inspectionRwaId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_rwa_settings',
+      where: 'inspectionRwaId = ?',
+      whereArgs: [inspectionRwaId],
+      orderBy: 'id ASC',
+    );
+    return rows.map((r) => RwaInspectionSetting.fromMap(r)).toList();
+  }
+
+  static Future<void> saveRwaInspectionSettings(
+      int inspectionRwaId, List<RwaInspectionSetting> settings) async {
+    final db = await getDb();
+    await db.transaction((txn) async {
+      await txn.delete(
+        'inspection_rwa_settings',
+        where: 'inspectionRwaId = ?',
+        whereArgs: [inspectionRwaId],
+      );
+      for (final s in settings) {
+        await txn.insert(
+          'inspection_rwa_settings',
+          s.copyWith(inspectionRwaId: inspectionRwaId).toMap()..remove('id'),
+        );
+      }
+    });
+  }
+
+  static Future<int> insertInspectionRwaError(InspectionRwaError error) async {
+    final db = await getDb();
+    int? resolvedErrorId = error.errorId;
+    if (resolvedErrorId == null && error.errorCode.isNotEmpty) {
+      final matches = await db.query(
+        'error_catalog',
+        columns: ['errorId'],
+        where: 'code = ?',
+        whereArgs: [error.errorCode],
+        limit: 1,
+      );
+      if (matches.isNotEmpty) {
+        resolvedErrorId = matches.first['errorId'] as int;
+      }
+    }
+
+    final data = error.toMap();
+    data.remove('id');
+    data['errorId'] = resolvedErrorId;
+
+    return await db.insert(
+      'inspection_rwa_errors',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<InspectionRwaError>> getInspectionRwaErrors(
+      int inspectionRwaId) async {
+    final db = await getDb();
+    final rows = await db.query(
+      'inspection_rwa_errors',
+      where: 'inspectionRwaId = ?',
+      whereArgs: [inspectionRwaId],
+    );
+    return rows.map((r) => InspectionRwaError.fromMap(r)).toList();
+  }
+
+  static Future<void> deleteInspectionRwaError(int id) async {
+    final db = await getDb();
+    await db.delete('inspection_rwa_errors', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<List<Map<String, dynamic>>> searchMasterRwaDetailed({
+    String query = '',
+    String clientFilter = '',
+    String projectFilter = '',
+  }) async {
+    final db = await getDb();
+    final cleanQuery = query.trim();
+    final cleanClient = clientFilter.trim();
+    final cleanProject = projectFilter.trim();
+
+    String whereClause = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (cleanProject.isNotEmpty && cleanProject != 'Alle') {
+      whereClause += ' AND (i.projectNumber = ? OR i.objectAddress = ?)';
+      whereArgs.addAll([cleanProject, cleanProject]);
+    }
+
+    if (cleanClient.isNotEmpty && cleanClient != 'Alle') {
+      whereClause += ' AND i.clientName = ?';
+      whereArgs.add(cleanClient);
+    }
+
+    if (cleanQuery.isNotEmpty) {
+      whereClause += ''' AND (
+        r.systemAlias LIKE ? 
+        OR r.provisionalAlias LIKE ? 
+        OR r.systemType LIKE ? 
+        OR r.centralType LIKE ? 
+        OR r.building LIKE ?
+        OR r.objectAddress LIKE ?
+      )''';
+      final wildcard = '%$cleanQuery%';
+      whereArgs.addAll([wildcard, wildcard, wildcard, wildcard, wildcard, wildcard]);
+    }
+
+    final rows = await db.rawQuery('''
+      SELECT 
+        r.*,
+        i.inspectionId,
+        i.clientName,
+        i.date as inspectionDate,
+        i.jobNumber,
+        ir.id as inspectionRwaId,
+        ir.status as inspectionStatus,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_rwa_errors ire
+          INNER JOIN inspection_rwa ir2 ON ire.inspectionRwaId = ir2.id
+          WHERE ir2.rwaSystemId = r.id
+            AND LOWER(COALESCE(ire.resolutionStatus, 'open')) NOT IN ('resolved', 'beholfen', 'gelöst')
+        ) AS openErrorCount,
+        (
+          SELECT COUNT(*) 
+          FROM inspection_rwa_errors ire
+          INNER JOIN inspection_rwa ir2 ON ire.inspectionRwaId = ir2.id
+          WHERE ir2.rwaSystemId = r.id
+        ) AS totalErrorCount
+      FROM rwa_systems r
+      LEFT JOIN inspection_rwa ir ON r.id = ir.rwaSystemId
+      LEFT JOIN inspections i ON ir.inspectionId = i.inspectionId
+      WHERE $whereClause
+      GROUP BY r.id
+      ORDER BY r.id ASC
     ''', whereArgs);
 
     return rows;
@@ -4218,6 +4765,125 @@ class DatabaseService {
           }
         }
 
+        // 7. Merge RWA Systems & Inspections if present in package
+        final packageTables = (await packageDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
+            .map((r) => r['name'] as String)
+            .toSet();
+
+        if (packageTables.contains('rwa_systems')) {
+          final pRwaSystems = await packageDb.query('rwa_systems');
+          final pRwaJunctions = packageTables.contains('inspection_rwa')
+              ? await packageDb.query('inspection_rwa')
+              : <Map<String, dynamic>>[];
+          final pRwaSettings = packageTables.contains('inspection_rwa_settings')
+              ? await packageDb.query('inspection_rwa_settings')
+              : <Map<String, dynamic>>[];
+          final pRwaErrors = packageTables.contains('inspection_rwa_errors')
+              ? await packageDb.query('inspection_rwa_errors')
+              : <Map<String, dynamic>>[];
+
+          final masterRwaColumns = await _getTableColumns(txn, 'rwa_systems');
+          final Map<int, int> rwaIdMap = {};
+
+          for (final row in pRwaSystems) {
+            final packageRwaId = row['id'] as int;
+            final alias = row['systemAlias'] as String?;
+            final provAlias = row['provisionalAlias'] as String?;
+            final proj = row['projectNumber'] as String? ?? '';
+
+            List<Map<String, dynamic>> existingRwa = [];
+            if (alias != null && alias.isNotEmpty) {
+              existingRwa = await txn.query('rwa_systems', where: 'systemAlias = ?', whereArgs: [alias], limit: 1);
+            }
+            if (existingRwa.isEmpty && provAlias != null && provAlias.isNotEmpty) {
+              existingRwa = await txn.query('rwa_systems', where: 'provisionalAlias = ?', whereArgs: [provAlias], limit: 1);
+            }
+
+            final data = Map<String, dynamic>.from(row)..remove('id');
+            data.removeWhere((key, _) => !masterRwaColumns.contains(key));
+
+            int mRwaId;
+            if (existingRwa.isNotEmpty) {
+              mRwaId = existingRwa.first['id'] as int;
+              await txn.update('rwa_systems', data, where: 'id = ?', whereArgs: [mRwaId]);
+            } else {
+              mRwaId = await txn.insert('rwa_systems', data);
+            }
+            rwaIdMap[packageRwaId] = mRwaId;
+          }
+
+          final masterRwaJunctionCols = await _getTableColumns(txn, 'inspection_rwa');
+          final Map<int, int> rwaJunctionIdMap = {};
+
+          for (final row in pRwaJunctions) {
+            final packageJId = row['id'] as int;
+            final pRwaId = row['rwaSystemId'] as int?;
+            final mRwaId = rwaIdMap[pRwaId];
+            final mInspId = inspectionIdMap[row['inspectionId']];
+            if (mRwaId == null || mInspId == null) continue;
+
+            final data = Map<String, dynamic>.from(row)
+              ..['rwaSystemId'] = mRwaId
+              ..['inspectionId'] = mInspId
+              ..remove('id');
+            data.removeWhere((key, _) => !masterRwaJunctionCols.contains(key));
+
+            final existingJ = await txn.query('inspection_rwa',
+                where: 'inspectionId = ? AND rwaSystemId = ?', whereArgs: [mInspId, mRwaId], limit: 1);
+            int mJId;
+            if (existingJ.isNotEmpty) {
+              mJId = existingJ.first['id'] as int;
+              await txn.update('inspection_rwa', data, where: 'id = ?', whereArgs: [mJId]);
+            } else {
+              mJId = await txn.insert('inspection_rwa', data);
+            }
+            rwaJunctionIdMap[packageJId] = mJId;
+          }
+
+          final masterRwaSettingCols = await _getTableColumns(txn, 'inspection_rwa_settings');
+          for (final row in pRwaSettings) {
+            final mJId = rwaJunctionIdMap[row['inspectionRwaId']];
+            if (mJId == null) continue;
+
+            final data = Map<String, dynamic>.from(row)
+              ..['inspectionRwaId'] = mJId
+              ..remove('id');
+            data.removeWhere((key, _) => !masterRwaSettingCols.contains(key));
+
+            final sName = row['settingName'] as String? ?? '';
+            final existingS = await txn.query('inspection_rwa_settings',
+                where: 'inspectionRwaId = ? AND settingName = ?', whereArgs: [mJId, sName], limit: 1);
+            if (existingS.isNotEmpty) {
+              await txn.update('inspection_rwa_settings', data, where: 'id = ?', whereArgs: [existingS.first['id']]);
+            } else {
+              await txn.insert('inspection_rwa_settings', data);
+            }
+          }
+
+          final masterRwaErrorCols = await _getTableColumns(txn, 'inspection_rwa_errors');
+          for (final row in pRwaErrors) {
+            final mJId = rwaJunctionIdMap[row['inspectionRwaId']];
+            if (mJId == null) continue;
+
+            final data = Map<String, dynamic>.from(row)
+              ..['inspectionRwaId'] = mJId
+              ..remove('id');
+            data.removeWhere((key, _) => !masterRwaErrorCols.contains(key));
+
+            final code = row['errorCode'] as String? ?? '';
+            final sName = row['settingName'] as String? ?? '';
+            final existingErr = await txn.query('inspection_rwa_errors',
+                where: 'inspectionRwaId = ? AND settingName = ? AND errorCode = ?',
+                whereArgs: [mJId, sName, code],
+                limit: 1);
+            if (existingErr.isNotEmpty) {
+              await txn.update('inspection_rwa_errors', data, where: 'id = ?', whereArgs: [existingErr.first['id']]);
+            } else {
+              await txn.insert('inspection_rwa_errors', data);
+            }
+          }
+        }
+
         // Auto-consolidate multiple records of the same jobNumber if multiple phases exist
         final Set<String> allImportedJobs = {};
         for (final row in pInspections) {
@@ -4884,6 +5550,8 @@ class DatabaseService {
 
     // Also initialize/seed window error catalog
     await checkAndInitializeWindowCatalog(force: force);
+    // Also initialize/seed RWA error catalog
+    await checkAndInitializeRwaCatalog(force: force);
   }
 
   /// Startup module to check and initialize the Window Error Catalog.
@@ -5005,6 +5673,94 @@ class DatabaseService {
       print('[Catalog] Error deleting window entries: $e');
     }
     await checkAndInitializeWindowCatalog(force: true);
+  }
+
+  /// Startup module to check and initialize the RWA Error Catalog.
+  static Future<void> checkAndInitializeRwaCatalog(
+      {bool force = false}) async {
+    final db = await getDb();
+    final countRows = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'rwa'");
+    final count = Sqflite.firstIntValue(countRows) ?? 0;
+
+    if (!force && count > 0) {
+      print('[Catalog] RWA catalog already initialized ($count entries).');
+      return;
+    }
+
+    final dbPath = await getDatabasesPath();
+    final externalDir = Directory(join(dirname(dbPath), 'WartungsTool'));
+    List<ErrorCatalog> errors = [];
+
+    // 1. External rwa_error_catalog.json
+    final jsonFile = File(join(externalDir.path, 'rwa_error_catalog.json'));
+    if (await jsonFile.exists()) {
+      try {
+        final content = await jsonFile.readAsString();
+        errors = _parseJsonCatalog(content, defaultAssetType: 'rwa');
+      } catch (e) {
+        print('[Catalog] RWA JSON Read/Parse Error: $e');
+      }
+    }
+
+    // 2. Project root rwa_error_catalog.json
+    if (errors.isEmpty) {
+      final projectFile =
+          File(join(Directory.current.path, 'rwa_error_catalog.json'));
+      if (await projectFile.exists()) {
+        try {
+          final content = await projectFile.readAsString();
+          errors = _parseJsonCatalog(content, defaultAssetType: 'rwa');
+        } catch (e) {
+          print('[Catalog] Project Root RWA JSON Read/Parse Error: $e');
+        }
+      }
+    }
+
+    // 3. Fallback to bundled asset
+    if (errors.isEmpty) {
+      try {
+        final content = await rootBundle.loadString('rwa_error_catalog.json');
+        errors = _parseJsonCatalog(content, defaultAssetType: 'rwa');
+      } catch (_) {}
+    }
+
+    if (errors.isEmpty) return;
+
+    try {
+      await db.transaction((txn) async {
+        for (final error in errors) {
+          final existing = await txn.query(
+            'error_catalog',
+            columns: ['errorId'],
+            where: 'code = ?',
+            whereArgs: [error.code],
+            limit: 1,
+          );
+          if (existing.isNotEmpty) {
+            if (force) {
+              await txn.update(
+                'error_catalog',
+                error.toMap()..remove('errorId'),
+                where: 'code = ?',
+                whereArgs: [error.code],
+              );
+            }
+          } else {
+            await txn.insert(
+              'error_catalog',
+              error.toMap()..remove('errorId'),
+              conflictAlgorithm: ConflictAlgorithm.ignore,
+            );
+          }
+        }
+      });
+      print(
+          '[Catalog] RWA Error Catalog initialized with ${errors.length} items.');
+    } catch (e) {
+      print('[Catalog] Error during RWA catalog initialization: $e');
+    }
+  }
   }
 
   /// Parses JSON catalog formatted data
@@ -5575,6 +6331,46 @@ class DatabaseService {
 
     final insp = inspRows.first;
     final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window');
+    final isRwa = (insp['assetType']?.toString().toLowerCase() == 'rwa');
+
+    if (isRwa) {
+      final List<Map<String, dynamic>> rwaRows = await db.rawQuery('''
+        SELECT r.*, ir.id as junctionId, ir.status as junctionStatus, ir.notes as junctionNotes
+        FROM rwa_systems r
+        INNER JOIN inspection_rwa ir ON r.id = ir.rwaSystemId
+        WHERE ir.inspectionId = ?
+        ORDER BY r.id ASC
+      ''', [inspectionId]);
+
+      final List<Map<String, dynamic>> processedRwas = [];
+      for (final r in rwaRows) {
+        final junctionId = r['junctionId'] as int;
+        final settings = await db.query(
+          'inspection_rwa_settings',
+          where: 'inspectionRwaId = ?',
+          whereArgs: [junctionId],
+          orderBy: 'id ASC',
+        );
+        final errors = await db.rawQuery('''
+          SELECT ire.*, ec.code as errorCode, ec.description as errorDesc, ec.category as errorCat
+          FROM inspection_rwa_errors ire
+          LEFT JOIN error_catalog ec ON ire.errorCode = ec.code OR ire.errorId = ec.errorId
+          WHERE ire.inspectionRwaId = ?
+        ''', [junctionId]);
+
+        final rwaData = Map<String, dynamic>.from(r);
+        rwaData['settings'] = settings;
+        rwaData['errors'] = errors;
+        processedRwas.add(rwaData);
+      }
+
+      return {
+        'inspection': insp,
+        'rwaSystems': processedRwas,
+        'windows': const <Map<String, dynamic>>[],
+        'doors': const <Map<String, dynamic>>[],
+      };
+    }
 
     if (isWindow) {
       final List<Map<String, dynamic>> windowRows = await db.rawQuery('''

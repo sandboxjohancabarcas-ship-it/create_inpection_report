@@ -22,6 +22,7 @@ import '../widgets/import_report_dialog.dart';
 import '../widgets/export_center_dialog.dart';
 import 'inspection_doors_page.dart';
 import 'inspection_windows_page.dart';
+import 'inspection_rwa_page.dart';
 import 'new_door_page.dart';
 import 'door_history_page.dart';
 import '../utils/date_format_helper.dart';
@@ -861,6 +862,32 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
               },
             ),
             IconButton(
+              icon: const Icon(Icons.upload_file),
+              tooltip: 'Prüfpakete exportieren',
+              onPressed: _isProcessing ? null : _handleExportSelectedInspections,
+            ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'Weitere Export-Optionen',
+              onSelected: (val) {
+                if (val == 'gaeb_xml') {
+                  _handleGaebExport(isXml: true);
+                } else if (val == 'gaeb_d83') {
+                  _handleGaebExport(isXml: false);
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'gaeb_xml',
+                  child: Text('Als GAEB XML exportieren'),
+                ),
+                PopupMenuItem(
+                  value: 'gaeb_d83',
+                  child: Text('Als GAEB 90 (.D83) exportieren'),
+                ),
+              ],
+            ),
+            IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red),
               tooltip: 'Ausgewählte löschen',
               onPressed: _handleDeleteSelectedInspections,
@@ -1075,7 +1102,8 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
 
               // Unified Single Search Bar & Project Dropdown Filter
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final bool isNarrow = constraints.maxWidth < 600;
@@ -1412,6 +1440,17 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
           0,
           (sum, item) => sum + ((item['doorCount'] as num?)?.toInt() ?? 0),
         );
+        final totalWindows = projectInspections.fold<int>(
+          0,
+          (sum, item) => sum + ((item['windowCount'] as num?)?.toInt() ?? 0),
+        );
+        final totalRwa = projectInspections.where((item) => item['assetType']?.toString().toLowerCase() == 'rwa').length;
+
+        final List<String> countsSummary = [];
+        if (totalDoors > 0) countsSummary.add('$totalDoors Tür(en)');
+        if (totalWindows > 0) countsSummary.add('$totalWindows Fenster');
+        if (totalRwa > 0) countsSummary.add('$totalRwa RWA');
+        final String countsStr = countsSummary.isNotEmpty ? ' • ${countsSummary.join(', ')} gesamt' : '';
 
         final clients = projectInspections
             .map((i) => i['clientName']?.toString().trim() ?? '')
@@ -1541,7 +1580,7 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 2.0),
               child: Text(
-                '${projectInspections.length} Auftrag/Aufträge • $totalDoors Tür(en) gesamt${clients.isNotEmpty ? ' • Kunde: $clients' : ''}',
+                '${projectInspections.length} Auftrag/Aufträge$countsStr${clients.isNotEmpty ? ' • Kunde: $clients' : ''}',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
               ),
             ),
@@ -1732,7 +1771,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                             (job['assetType']?.toString().toLowerCase() ==
                                     'window')
                                 ? '${(job['windowCount'] as num?)?.toInt() ?? 0} Fenster erfasst'
-                                : '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
+                                : (job['assetType']?.toString().toLowerCase() == 'rwa')
+                                    ? 'RWA-System erfasst'
+                                    : '${(job['doorCount'] as num?)?.toInt() ?? 0} Türen erfasst',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -1741,7 +1782,9 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                                             .toLowerCase() ==
                                         'window')
                                     ? Colors.teal.shade800
-                                    : Colors.blue.shade800),
+                                    : (job['assetType']?.toString().toLowerCase() == 'rwa')
+                                        ? Colors.deepOrange.shade800
+                                        : Colors.blue.shade800),
                           ),
                         ],
                       ),
@@ -1811,14 +1854,24 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                       if (_selectedInspectionIds.isNotEmpty) {
                         _toggleInspectionSelection(id);
                       } else {
-                        final isWindow =
-                            (job['assetType']?.toString().toLowerCase() ==
-                                'window');
-                        if (isWindow) {
+                        final aType = job['assetType']?.toString().toLowerCase();
+                        if (aType == 'window') {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => InspectionWindowsPage(
+                                inspectionId: id,
+                                title:
+                                    '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',
+                                isManagerMode: true,
+                              ),
+                            ),
+                          );
+                        } else if (aType == 'rwa') {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => InspectionRwaListPage(
                                 inspectionId: id,
                                 title:
                                     '${job['projectNumber'] ?? job['clientName'] ?? ""} - ${job['jobNumber'] ?? ""}',

@@ -284,6 +284,12 @@ class ExcelExportService {
     }
 
     final insp = data['inspection'] as Map<String, dynamic>;
+    final isRwa = (insp['assetType']?.toString().toLowerCase() == 'rwa') ||
+        (data['rwaSystems'] != null && (data['rwaSystems'] as List).isNotEmpty);
+    if (isRwa) {
+      return exportSingleRwaInspection(inspectionId, outputPath, data: data);
+    }
+
     final isWindow = (insp['assetType']?.toString().toLowerCase() == 'window') ||
         (data['windows'] != null && (data['windows'] as List).isNotEmpty);
     if (isWindow) {
@@ -1221,6 +1227,114 @@ class ExcelExportService {
       print('Warning: Failed to inject print header/logo: $e');
       return xlsxBytes;
     }
+  }
+
+  /// Exports a single RWA inspection job to an Excel workbook matching the historical customer layout.
+  static Future<File> exportSingleRwaInspection(
+    int inspectionId,
+    String outputPath, {
+    Map<String, dynamic>? data,
+  }) async {
+    final exportData = data ?? await DatabaseService.getSingleInspectionExportData(inspectionId);
+    if (exportData.isEmpty) {
+      throw Exception('Inspektionsdaten nicht gefunden.');
+    }
+
+    final excel = Excel.createExcel();
+    final insp = exportData['inspection'] as Map<String, dynamic>;
+    final rwaSystems = List<Map<String, dynamic>>.from(exportData['rwaSystems'] as List<Map<String, dynamic>>? ?? []);
+
+    final String dateStr = _cleanText(insp['date']);
+    final String defaultSheetYear = dateStr.isNotEmpty ? dateStr.split('-').first : DateTime.now().year.toString();
+
+    // Default sheet in new Excel is 'Sheet1'
+    final defaultSheetName = excel.getDefaultSheet() ?? 'Sheet1';
+
+    for (int i = 0; i < rwaSystems.length; i++) {
+      final rwa = rwaSystems[i];
+      final sheetName = rwaSystems.length == 1
+          ? defaultSheetYear
+          : '${defaultSheetYear}_${i + 1}';
+
+      excel.rename(defaultSheetName, sheetName);
+      final sheet = excel[sheetName];
+
+      // Format header specifications block (rows 0 to 14)
+      final headerProps = [
+        ['Objekt:', '${rwa['objectAddress'] ?? ""}\nGebäude: ${rwa['building'] ?? ""} | Raum: ${rwa['room'] ?? ""}'],
+        ['RWA-System:', rwa['systemType'] ?? 'elektromotorisch'],
+        ['Zentrale Fabrikat / Typ', rwa['centralType'] ?? ''],
+        ['Feuertaster', rwa['fireButtonSpec'] ?? ''],
+        ['Rauch/Wärmemelder', rwa['smokeDetectorSpec'] ?? ''],
+        ['Antriebe', rwa['actuatorSpec'] ?? ''],
+        ['Lüftungstaster', rwa['ventilationButtonSpec'] ?? ''],
+        ['Notstrombatterie', rwa['emergencyPowerSpec'] ?? ''],
+        ['CO2- Flaschen', rwa['co2BottleSpec'] ?? ''],
+        ['Thermoflasche', rwa['thermalBottleSpec'] ?? ''],
+        ['RWA-Klappen', rwa['rwaFlapSpec'] ?? ''],
+        ['Lüftungsklappen', rwa['ventilationFlapSpec'] ?? ''],
+        ['Dämpfer', rwa['damperSpec'] ?? ''],
+      ];
+
+      int rowIdx = 0;
+      for (final prop in headerProps) {
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(prop[0]);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(prop[1]);
+        rowIdx++;
+      }
+
+      rowIdx++; // Empty separator row
+
+      // Checklist Header row
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue('Einrichtung');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue('Ergebnis');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = TextCellValue('Anmerkungen');
+      rowIdx++;
+
+      // Checklist items
+      final settings = List<Map<String, dynamic>>.from(rwa['settings'] as List<dynamic>? ?? []);
+      final errors = List<Map<String, dynamic>>.from(rwa['errors'] as List<dynamic>? ?? []);
+
+      for (final s in settings) {
+        final sName = s['settingName']?.toString() ?? '';
+        final res = s['result']?.toString() ?? 'OK';
+        final rawRes = s['rawResult']?.toString() ?? (res == 'OK' ? 'I.O' : (res == 'DEFECT' ? 'X' : 'n.v'));
+        var annotation = s['annotation']?.toString() ?? '';
+
+        // If there are recorded errors for this setting, append error description
+        final matchingErrors = errors.where((e) => e['settingName'] == sName).toList();
+        if (matchingErrors.isNotEmpty) {
+          final errNotes = matchingErrors.map((e) => '${e["errorCode"]}: ${e["notes"]}').join('; ');
+          annotation = annotation.isNotEmpty ? '$annotation ($errNotes)' : errNotes;
+        }
+
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(sName);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(rawRes);
+        sheet.cell(CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = TextCellValue(annotation);
+        rowIdx++;
+      }
+
+      rowIdx++; // Empty separator row
+
+      // Footer metadata
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue('Prüfdatum:');
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue('Monteur:');
+      rowIdx++;
+
+      final tech = _cleanText(insp['clientName']);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = TextCellValue(dateStr);
+      sheet.cell(CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = TextCellValue(tech);
+    }
+
+    final bytes = excel.encode();
+    if (bytes == null) {
+      throw Exception('Fehler beim Generieren der Excel-Datei.');
+    }
+
+    final file = File(outputPath);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes);
+    return file;
   }
 
   /// Exports a single window inspection job to an Excel workbook matching the template layout.
