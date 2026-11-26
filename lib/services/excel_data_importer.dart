@@ -38,9 +38,6 @@ class ExcelImportResult {
 
   /// Metadata extracted during inspection migration
   final String clientName;
-  final String objectAddress;
-  final String jobNumber;
-  final String inspectionDate;
 
   ExcelImportResult({
     required this.sheetsProcessed,
@@ -59,9 +56,6 @@ class ExcelImportResult {
     this.doorChanges = const [],
     this.newCatalogProposals = const [],
     this.clientName = '',
-    this.objectAddress = '',
-    this.jobNumber = '',
-    this.inspectionDate = '',
   });
 
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
@@ -1196,14 +1190,15 @@ class ExcelDataImporter {
       doorsImported: totalDoorsImported,
       errorsLinked: totalErrorsLinked,
       assetType: 'door',
-      jobNumber: fileNameJobNumber,
       warnings: warnings,
       logs: logs,
       doorConflicts: allDoorConflicts,
       catalogConflicts: allCatalogConflicts,
       clientName: doorSheetsToProcess.firstOrNull?['meta']?['clientName'] ?? '',
       objectAddress: canonicalObjectAddress,
-      jobNumber: doorSheetsToProcess.firstOrNull?['meta']?['jobNumber'] ?? '',
+      jobNumber: fileNameJobNumber.isNotEmpty
+          ? fileNameJobNumber
+          : (doorSheetsToProcess.firstOrNull?['meta']?['jobNumber'] ?? ''),
       inspectionDate: doorSheetsToProcess.firstOrNull?['meta']?['date'] ?? '',
     );
   }
@@ -2684,14 +2679,13 @@ class ExcelDataImporter {
       windowsImported: distinctWindowAliases.length,
       errorsLinked: totalErrorsLinked,
       assetType: 'window',
-      jobNumber: fileNameJobNumber,
       warnings: warnings,
       logs: logs,
       doorChanges: allWindowChanges,
       newCatalogProposals: newCatalogProposals,
       clientName: fallbackClient,
       objectAddress: canonicalObjectAddress,
-      jobNumber: fallbackJobNum,
+      jobNumber: fileNameJobNumber.isNotEmpty ? fileNameJobNumber : fallbackJobNum,
       inspectionDate: windowSheetsToProcess.firstOrNull?['dateStr'] ?? '',
     );
   }

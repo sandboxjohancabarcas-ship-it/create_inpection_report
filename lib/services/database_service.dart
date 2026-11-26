@@ -5761,7 +5761,6 @@ class DatabaseService {
       print('[Catalog] Error during RWA catalog initialization: $e');
     }
   }
-  }
 
   /// Parses JSON catalog formatted data
   static List<ErrorCatalog> _parseJsonCatalog(String jsonStr,

@@ -1993,6 +1993,8 @@ class LocalDatabaseService {
       LEFT JOIN error_catalog ec ON (iwe.errorId = ec.errorId OR (iwe.errorCode IS NOT NULL AND iwe.errorCode != '' AND iwe.errorCode = ec.code))
       WHERE iwe.inspectionWindowId IN ($idString)
     ''');
+  }
+
   // ==========================================
   // RWA-Systeme (Local Working DB)
   // ==========================================

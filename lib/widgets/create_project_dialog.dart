@@ -11,7 +11,7 @@ class CreateProjectDialog extends StatefulWidget {
   final String? initialObjectAddress;
   final String? initialClientName;
   final String initialOrderType;
-  final String initialAssetType; // 'door' or 'window'
+  final String initialAssetType;
   final bool isInspectorMode;
   final int? sourceInspectionId;
 
@@ -67,8 +67,8 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
   DateTime _selectedDate = DateTime.now();
   DateTime _selectedRepairDate = DateTime.now();
   String _orderType = 'Wartung'; // 'Wartung' or 'Reparatur'
-  String _assetType = 'door'; // 'door' or 'window'
-  bool _clonePreviousDoors = false;
+  String _assetType = 'door';
+  bool _clonePreviousDoors = true;
   bool _exportImmediately = true;
   bool _isSaving = false;
   List<Map<String, String>> _existingProjects = [];
@@ -146,12 +146,6 @@ class _CreateProjectDialogState extends State<CreateProjectDialog> {
         if (mounted) {
           setState(() {
             _existingProjects = projects;
-            if (baseInsp != null &&
-                baseInsp['assetType'] != null &&
-                baseInsp['assetType'].toString().isNotEmpty) {
-              final aType = baseInsp['assetType'].toString().toLowerCase();
-              _assetType = aType == 'window' ? 'window' : (aType == 'rwa' ? 'rwa' : 'door');
-            }
             _checkIfProjectExists();
           });
         }
