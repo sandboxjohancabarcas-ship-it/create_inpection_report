@@ -738,6 +738,27 @@ class LocalDatabaseService {
       final errorList =
           await DatabaseService.getErrorsForInspectionDoorIds(junctionIds);
 
+      // Fetch related window records from Master DB
+      final List<Map<String, dynamic>> allWindowJunctions = [];
+      final List<Window> windowList = [];
+      for (int id in inspectionIds) {
+        allWindowJunctions.addAll(
+            await DatabaseService.getInspectionWindowsByInspectionId(id));
+        final wins = await DatabaseService.getWindowsByInspectionId(id);
+        for (final w in wins) {
+          if (!windowList.any((existing) => existing.id == w.id)) {
+            windowList.add(w);
+          }
+        }
+      }
+
+      final List<InspectionWindowError> windowErrors = [];
+      for (final j in allWindowJunctions) {
+        final jId = j['id'] as int;
+        final errs = await DatabaseService.getInspectionWindowErrors(jId);
+        windowErrors.addAll(errs);
+      }
+
       // Resolve full inspection objects for the local DB
       final allMainInspections = await DatabaseService.searchInspections('');
       final selectedInspections = allMainInspections
@@ -765,12 +786,20 @@ class LocalDatabaseService {
         await txn.delete('inspection_doors');
         await txn.delete('inspections');
         await txn.delete('doors');
+        await txn.delete('inspection_window_errors');
+        await txn.delete('inspection_windows');
+        await txn.delete('windows');
 
         // 3. Populate local Inspections from the downloaded package
         final localInspCols = await _getTableColumns(txn, 'inspections');
         final localDoorCols = await _getTableColumns(txn, 'doors');
         final localJunctionCols =
             await _getTableColumns(txn, 'inspection_doors');
+        final localWinCols = await _getTableColumns(txn, 'windows');
+        final localWinJuncCols =
+            await _getTableColumns(txn, 'inspection_windows');
+        final localWinErrCols =
+            await _getTableColumns(txn, 'inspection_window_errors');
 
         for (var insp in selectedInspections) {
           final Map<String, dynamic> data = Map<String, dynamic>.from(insp);
@@ -799,6 +828,29 @@ class LocalDatabaseService {
           final dData = door.toMap();
           dData.removeWhere((key, _) => !localDoorCols.contains(key));
           await txn.insert('doors', dData,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        for (var win in windowList) {
+          final wData = win.toMap();
+          wData.removeWhere((key, _) => !localWinCols.contains(key));
+          await txn.insert('windows', wData,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        for (var junction in allWindowJunctions) {
+          final Map<String, dynamic> jData =
+              Map<String, dynamic>.from(junction);
+          jData['status'] = 'Pending';
+          jData.removeWhere((key, _) => !localWinJuncCols.contains(key));
+          await txn.insert('inspection_windows', jData,
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        for (var err in windowErrors) {
+          final eData = err.toMap();
+          eData.removeWhere((key, _) => !localWinErrCols.contains(key));
+          await txn.insert('inspection_window_errors', eData,
               conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
@@ -2558,6 +2610,7 @@ class LocalDatabaseService {
     required String jobNumber,
     required DateTime date,
     String orderType = 'Wartung', // 'Wartung' or 'Reparatur'
+    String assetType = 'door', // 'door' or 'window'
     DateTime? repairDate,
     String contactPerson = '',
     String inspectorName = '',
@@ -2569,6 +2622,7 @@ class LocalDatabaseService {
     final cleanAddr = objectAddress.trim();
     final cleanClient = clientName.trim();
     final cleanJob = jobNumber.trim();
+    final cleanAssetType = assetType.trim().toLowerCase();
 
     if (cleanJob.isEmpty) {
       throw ArgumentError('Bitte eine Auftragsnummer eingeben.');
@@ -2600,8 +2654,8 @@ class LocalDatabaseService {
     if (baseInspection == null && cleanProj.isNotEmpty) {
       final found = await db.query(
         'inspections',
-        where: 'projectNumber = ?',
-        whereArgs: [cleanProj],
+        where: "projectNumber = ? AND LOWER(COALESCE(assetType, 'door')) = ?",
+        whereArgs: [cleanProj, cleanAssetType],
         orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
@@ -2610,8 +2664,8 @@ class LocalDatabaseService {
     if (baseInspection == null && cleanAddr.isNotEmpty) {
       final found = await db.query(
         'inspections',
-        where: 'objectAddress = ?',
-        whereArgs: [cleanAddr],
+        where: "objectAddress = ? AND LOWER(COALESCE(assetType, 'door')) = ?",
+        whereArgs: [cleanAddr, cleanAssetType],
         orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
@@ -2620,6 +2674,8 @@ class LocalDatabaseService {
     if (baseInspection == null && cloneDoors) {
       final allLocal = await db.query(
         'inspections',
+        where: "LOWER(COALESCE(assetType, 'door')) = ?",
+        whereArgs: [cleanAssetType],
         orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
@@ -2689,6 +2745,7 @@ class LocalDatabaseService {
               ? (baseInspection['inspectorName']?.toString() ?? '')
               : ''),
       'orderType': orderType,
+      'assetType': cleanAssetType,
       'repairDate': orderType == 'Reparatur' && repairDate != null
           ? _normalizeDate(repairDate)
           : null,
@@ -2697,58 +2754,117 @@ class LocalDatabaseService {
 
     final newInspectionId = await insertInspection(inspectionData);
 
-    // 5. Clone doors and propagate open errors
+    // 5. Clone doors / windows and propagate open errors
     if (cloneDoors && baseInspection != null) {
       final prevInspId = baseInspection['inspectionId'] as int;
-      final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
-      final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
-      final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
+      final bool isWindow = cleanAssetType == 'window';
 
-      bool isResolved(Map<String, dynamic> e) {
-        final res =
-            (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
-        return res == 'resolved' ||
-            res == 'gelöst' ||
-            res == 'geloest' ||
-            res == 'beholfen' ||
-            res == 'erledigt';
-      }
+      if (isWindow) {
+        final prevJunctions =
+            await getInspectionWindowsByInspectionId(prevInspId);
 
-      for (final j in prevJunctions) {
-        final doorId = j['doorId'] as int;
-        final prevJunctionId = j['id'] as int;
-        final doorErrors = prevErrors
-            .where((e) => e['inspectionDoorId'] == prevJunctionId)
-            .toList();
-
-        final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
-
-        String doorNote = '';
-        if (openErrors.isNotEmpty) {
-          doorNote = j['notes']?.toString() ?? '';
+        bool isResolved(dynamic e) {
+          final res = (e is InspectionWindowError
+                  ? e.resolutionStatus
+                  : e['resolutionStatus']?.toString() ?? 'open')
+              .trim()
+              .toLowerCase();
+          return res == 'resolved' ||
+              res == 'gelöst' ||
+              res == 'geloest' ||
+              res == 'beholfen' ||
+              res == 'erledigt';
         }
 
-        final newJunctionId = await insertInspectionDoor({
-          'inspectionId': newInspectionId,
-          'doorId': doorId,
-          'status': 'Pending',
-          'notes': doorNote,
-          'attachments': null,
-        });
+        for (final j in prevJunctions) {
+          final windowId = j['windowId'] as int;
+          final prevJunctionId = j['id'] as int;
+          final winErrors = await getInspectionWindowErrors(prevJunctionId);
+          final openErrors = winErrors.where((e) => !isResolved(e)).toList();
 
-        for (final err in openErrors) {
-          final errorObj = InspectionDoorError(
-            id: null,
-            inspectionDoorId: newJunctionId,
-            errorId: err['errorId'] as int?,
-            errorCode: err['errorCode']?.toString() ?? '',
-            quantity: (err['quantity'] as num?)?.toInt() ?? 1,
-            severity: err['severity']?.toString() ?? 'medium',
-            notes: err['notes']?.toString() ?? '',
-            resolutionStatus: 'Open',
-            attachments: err['attachments']?.toString() ?? '',
-          );
-          await insertInspectionDoorError(errorObj);
+          String winNote = '';
+          if (openErrors.isNotEmpty) {
+            winNote = j['notes']?.toString() ?? '';
+          }
+
+          final newJunctionId = await insertInspectionWindow({
+            'inspectionId': newInspectionId,
+            'windowId': windowId,
+            'status': 'Pending',
+            'notes': winNote,
+            'attachments': null,
+          });
+
+          for (final err in openErrors) {
+            final errorObj = InspectionWindowError(
+              id: null,
+              inspectionWindowId: newJunctionId,
+              errorId: err.errorId,
+              errorCode: err.errorCode,
+              quantity: err.quantity,
+              severity: err.severity,
+              notes: err.notes,
+              resolutionStatus: 'Open',
+              attachments: err.attachments,
+            );
+            await insertInspectionWindowError(errorObj);
+          }
+        }
+      } else {
+        final prevJunctions =
+            await getInspectionDoorsByInspectionId(prevInspId);
+        final prevJunctionIds =
+            prevJunctions.map((j) => j['id'] as int).toList();
+        final prevErrors =
+            await getErrorsForInspectionDoorIds(prevJunctionIds);
+
+        bool isResolved(Map<String, dynamic> e) {
+          final res = (e['resolutionStatus']?.toString() ?? 'open')
+              .trim()
+              .toLowerCase();
+          return res == 'resolved' ||
+              res == 'gelöst' ||
+              res == 'geloest' ||
+              res == 'beholfen' ||
+              res == 'erledigt';
+        }
+
+        for (final j in prevJunctions) {
+          final doorId = j['doorId'] as int;
+          final prevJunctionId = j['id'] as int;
+          final doorErrors = prevErrors
+              .where((e) => e['inspectionDoorId'] == prevJunctionId)
+              .toList();
+
+          final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
+
+          String doorNote = '';
+          if (openErrors.isNotEmpty) {
+            doorNote = j['notes']?.toString() ?? '';
+          }
+
+          final newJunctionId = await insertInspectionDoor({
+            'inspectionId': newInspectionId,
+            'doorId': doorId,
+            'status': 'Pending',
+            'notes': doorNote,
+            'attachments': null,
+          });
+
+          for (final err in openErrors) {
+            final errorObj = InspectionDoorError(
+              id: null,
+              inspectionDoorId: newJunctionId,
+              errorId: err['errorId'] as int?,
+              errorCode: err['errorCode']?.toString() ?? '',
+              quantity: (err['quantity'] as num?)?.toInt() ?? 1,
+              severity: err['severity']?.toString() ?? 'medium',
+              notes: err['notes']?.toString() ?? '',
+              resolutionStatus: 'Open',
+              attachments: err['attachments']?.toString() ?? '',
+            );
+            await insertInspectionDoorError(errorObj);
+          }
         }
       }
     }

@@ -1785,6 +1785,7 @@ class DatabaseService {
     required String jobNumber,
     required DateTime date,
     String orderType = 'Wartung', // 'Wartung' or 'Reparatur'
+    String assetType = 'door', // 'door' or 'window'
     DateTime? repairDate,
     String contactPerson = '',
     String inspectorName = '',
@@ -1796,6 +1797,7 @@ class DatabaseService {
     final cleanAddr = objectAddress.trim();
     final cleanClient = clientName.trim();
     final cleanJob = jobNumber.trim();
+    final cleanAssetType = assetType.trim().toLowerCase();
 
     if (cleanJob.isEmpty) {
       throw ArgumentError('Bitte eine Auftragsnummer eingeben.');
@@ -1827,8 +1829,8 @@ class DatabaseService {
     if (baseInspection == null && cleanProj.isNotEmpty) {
       final found = await db.query(
         'inspections',
-        where: 'projectNumber = ?',
-        whereArgs: [cleanProj],
+        where: "projectNumber = ? AND LOWER(COALESCE(assetType, 'door')) = ?",
+        whereArgs: [cleanProj, cleanAssetType],
         orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
@@ -1837,8 +1839,8 @@ class DatabaseService {
     if (baseInspection == null && cleanAddr.isNotEmpty) {
       final found = await db.query(
         'inspections',
-        where: 'objectAddress = ?',
-        whereArgs: [cleanAddr],
+        where: "objectAddress = ? AND LOWER(COALESCE(assetType, 'door')) = ?",
+        whereArgs: [cleanAddr, cleanAssetType],
         orderBy: "COALESCE(repairDate, date) DESC, inspectionId DESC",
         limit: 1,
       );
@@ -1906,6 +1908,7 @@ class DatabaseService {
               ? (baseInspection['inspectorName']?.toString() ?? '')
               : ''),
       'orderType': orderType,
+      'assetType': cleanAssetType,
       'repairDate': orderType == 'Reparatur' && repairDate != null
           ? _normalizeDate(repairDate)
           : null,
@@ -1914,60 +1917,117 @@ class DatabaseService {
 
     final newInspectionId = await insertInspection(inspectionData);
 
-    // 5. Clone doors and propagate open errors
+    // 5. Clone doors / windows and propagate open errors
     if (cloneDoors && baseInspection != null) {
       final prevInspId = baseInspection['inspectionId'] as int;
-      final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
-      final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
-      final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
+      final bool isWindow = cleanAssetType == 'window';
 
-      bool isResolved(Map<String, dynamic> e) {
-        final res =
-            (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
-        return res == 'resolved' ||
-            res == 'gelöst' ||
-            res == 'geloest' ||
-            res == 'beholfen';
-      }
+      if (isWindow) {
+        final prevJunctions =
+            await getInspectionWindowsByInspectionId(prevInspId);
 
-      for (final j in prevJunctions) {
-        final doorId = j['doorId'] as int;
-        final prevJunctionId = j['id'] as int;
-        final doorErrors = prevErrors
-            .where((e) => e['inspectionDoorId'] == prevJunctionId)
-            .toList();
-
-        final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
-
-        // Open error notes and door notes of the open error remain,
-        // but notes of resolved/gelöst errors are cleared.
-        String doorNote = '';
-        if (openErrors.isNotEmpty) {
-          doorNote = j['notes']?.toString() ?? '';
+        bool isResolved(dynamic e) {
+          final res = (e is InspectionWindowError
+                  ? e.resolutionStatus
+                  : e['resolutionStatus']?.toString() ?? 'open')
+              .trim()
+              .toLowerCase();
+          return res == 'resolved' ||
+              res == 'gelöst' ||
+              res == 'geloest' ||
+              res == 'beholfen' ||
+              res == 'erledigt';
         }
 
-        final newJunctionId = await insertInspectionDoor({
-          'inspectionId': newInspectionId,
-          'doorId': doorId,
-          'status': 'Pending',
-          'notes': doorNote,
-          'attachments': null,
-        });
+        for (final j in prevJunctions) {
+          final windowId = j['windowId'] as int;
+          final prevJunctionId = j['id'] as int;
+          final winErrors = await getInspectionWindowErrors(prevJunctionId);
+          final openErrors = winErrors.where((e) => !isResolved(e)).toList();
 
-        // Pass open errors to the new event; solved errors are omitted
-        for (final err in openErrors) {
-          final errorObj = InspectionDoorError(
-            id: null,
-            inspectionDoorId: newJunctionId,
-            errorId: err['errorId'] as int?,
-            errorCode: err['errorCode']?.toString() ?? '',
-            quantity: (err['quantity'] as num?)?.toInt() ?? 1,
-            severity: err['severity']?.toString() ?? 'medium',
-            notes: err['notes']?.toString() ?? '',
-            resolutionStatus: 'Open',
-            attachments: err['attachments']?.toString() ?? '',
-          );
-          await insertInspectionDoorError(errorObj);
+          String winNote = '';
+          if (openErrors.isNotEmpty) {
+            winNote = j['notes']?.toString() ?? '';
+          }
+
+          final newJunctionId = await insertInspectionWindow({
+            'inspectionId': newInspectionId,
+            'windowId': windowId,
+            'status': 'Pending',
+            'notes': winNote,
+            'attachments': null,
+          });
+
+          // Pass open errors to the new event; solved errors are omitted
+          for (final err in openErrors) {
+            final errorObj = InspectionWindowError(
+              id: null,
+              inspectionWindowId: newJunctionId,
+              errorId: err.errorId,
+              errorCode: err.errorCode,
+              quantity: err.quantity,
+              severity: err.severity,
+              notes: err.notes,
+              resolutionStatus: 'Open',
+              attachments: err.attachments,
+            );
+            await insertInspectionWindowError(errorObj);
+          }
+        }
+      } else {
+        final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
+        final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
+        final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
+
+        bool isResolved(Map<String, dynamic> e) {
+          final res =
+              (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
+          return res == 'resolved' ||
+              res == 'gelöst' ||
+              res == 'geloest' ||
+              res == 'beholfen' ||
+              res == 'erledigt';
+        }
+
+        for (final j in prevJunctions) {
+          final doorId = j['doorId'] as int;
+          final prevJunctionId = j['id'] as int;
+          final doorErrors = prevErrors
+              .where((e) => e['inspectionDoorId'] == prevJunctionId)
+              .toList();
+
+          final openErrors = doorErrors.where((e) => !isResolved(e)).toList();
+
+          // Open error notes and door notes of the open error remain,
+          // but notes of resolved/gelöst errors are cleared.
+          String doorNote = '';
+          if (openErrors.isNotEmpty) {
+            doorNote = j['notes']?.toString() ?? '';
+          }
+
+          final newJunctionId = await insertInspectionDoor({
+            'inspectionId': newInspectionId,
+            'doorId': doorId,
+            'status': 'Pending',
+            'notes': doorNote,
+            'attachments': null,
+          });
+
+          // Pass open errors to the new event; solved errors are omitted
+          for (final err in openErrors) {
+            final errorObj = InspectionDoorError(
+              id: null,
+              inspectionDoorId: newJunctionId,
+              errorId: err['errorId'] as int?,
+              errorCode: err['errorCode']?.toString() ?? '',
+              quantity: (err['quantity'] as num?)?.toInt() ?? 1,
+              severity: err['severity']?.toString() ?? 'medium',
+              notes: err['notes']?.toString() ?? '',
+              resolutionStatus: 'Open',
+              attachments: err['attachments']?.toString() ?? '',
+            );
+            await insertInspectionDoorError(errorObj);
+          }
         }
       }
     }
