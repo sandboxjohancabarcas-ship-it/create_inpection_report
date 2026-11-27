@@ -109,13 +109,13 @@ class _RwaErrorManagementPageState extends State<RwaErrorManagementPage> {
                       const SizedBox(height: 12),
 
                       // Error catalog code selector
-                      DropdownButtonFormField<ErrorCatalog>(
-                        value: selectedCatalogItem,
+                      DropdownButtonFormField<String>(
+                        value: selectedCatalogItem?.code,
                         decoration: const InputDecoration(labelText: 'Katalog-Fehler (Code / Beschreibung)'),
                         isExpanded: true,
                         items: _catalog.map((c) {
-                          return DropdownMenuItem(
-                            value: c,
+                          return DropdownMenuItem<String>(
+                            value: c.code,
                             child: Text(
                               '${c.code} - ${c.description}',
                               overflow: TextOverflow.ellipsis,
@@ -123,11 +123,11 @@ class _RwaErrorManagementPageState extends State<RwaErrorManagementPage> {
                             ),
                           );
                         }).toList(),
-                        onChanged: (val) {
+                        onChanged: (codeVal) {
                           setDialogState(() {
-                            selectedCatalogItem = val;
-                            if (val != null && notesController.text.isEmpty) {
-                              notesController.text = val.description;
+                            selectedCatalogItem = _catalog.where((c) => c.code == codeVal).firstOrNull;
+                            if (selectedCatalogItem != null && notesController.text.isEmpty) {
+                              notesController.text = selectedCatalogItem!.description;
                             }
                           });
                         },
@@ -312,9 +312,9 @@ class _RwaErrorManagementPageState extends State<RwaErrorManagementPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(err.notes, style: const TextStyle(fontSize: 13)),
-                              if (cat?.recommendation != null && cat!.recommendation.isNotEmpty)
+                              if (cat?.recommendation.isNotEmpty == true)
                                 Text(
-                                  'Empfehlung: ${cat.recommendation}',
+                                  'Empfehlung: ${cat!.recommendation}',
                                   style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700),
                                 ),
                             ],
@@ -330,7 +330,7 @@ class _RwaErrorManagementPageState extends State<RwaErrorManagementPage> {
                                     ),
                                     IconButton(
                                       icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                      onPressed: () => _deleteError(err.id!),
+                                      onPressed: err.id != null ? () => _deleteError(err.id!) : null,
                                     ),
                                   ],
                                 ),

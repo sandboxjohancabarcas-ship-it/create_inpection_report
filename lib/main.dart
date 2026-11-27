@@ -13,6 +13,16 @@ void main() async {
 
   // Initialize persistent file logger for both Android and Windows
   await AppLogger.instance.init();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    AppLogger.error(
+      'FlutterError',
+      '${details.exceptionAsString()}\nLibrary: ${details.library}\nContext: ${details.context}',
+      details.stack?.toString(),
+    );
+    FlutterError.presentError(details);
+  };
+
   AppLogger.info(
     'App',
     'WartungsTool gestartet (Version: ${AppVersionService.fullVersion}, OS: ${Platform.operatingSystem}, '

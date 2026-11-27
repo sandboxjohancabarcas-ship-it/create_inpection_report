@@ -3,13 +3,18 @@ import 'door_conflict.dart';
 
 class AssetTypeHelper {
   static String getLabel(String assetType, {bool plural = false}) {
-    switch (assetType.toLowerCase()) {
+    switch (assetType.trim().toLowerCase()) {
       case 'window':
         return 'Fenster';
       case 'schiebetor':
         return plural ? 'Schiebetore' : 'Schiebetor';
       case 'rwa':
       case 'rwa-anlage':
+      case 'smoke_ventilation':
+      case 'smoke ventilation':
+      case 'smoke-ventilation':
+      case 'rauch-wärme-abzug':
+      case 'rauchabzug':
         return plural ? 'RWA-Anlagen' : 'RWA-Anlage';
       case 'tor':
         return plural ? 'Tore' : 'Tor';
@@ -22,13 +27,18 @@ class AssetTypeHelper {
   }
 
   static IconData getIcon(String assetType) {
-    switch (assetType.toLowerCase()) {
+    switch (assetType.trim().toLowerCase()) {
       case 'window':
         return Icons.window;
       case 'schiebetor':
         return Icons.sensor_door;
       case 'rwa':
       case 'rwa-anlage':
+      case 'smoke_ventilation':
+      case 'smoke ventilation':
+      case 'smoke-ventilation':
+      case 'rauch-wärme-abzug':
+      case 'rauchabzug':
         return Icons.air;
       case 'tor':
         return Icons.garage;
@@ -50,7 +60,7 @@ class DoorChangeItem {
   final String? status;
   final int errorCount;
   final int? pos;
-  final String assetType; // 'door' | 'window' | ...
+  final String assetType; // 'door' | 'window' | 'rwa' | ...
 
   DoorChangeItem({
     required this.doorAlias,
@@ -64,7 +74,14 @@ class DoorChangeItem {
     this.assetType = 'door',
   });
 
-  bool get isWindow => assetType.toLowerCase() == 'window';
+  bool get isWindow => assetType.trim().toLowerCase() == 'window';
+  bool get isRwa {
+    final t = assetType.trim().toLowerCase();
+    return t == 'rwa' ||
+        t == 'rwa-anlage' ||
+        t.contains('smoke') ||
+        t.contains('rauch');
+  }
 
   /// Returns true if this door is marked as inspected/processed.
   bool get isProcessed {
@@ -89,6 +106,8 @@ class InspectionFileReportItem {
   final int updatedDoorsCount;
   final int newWindowsCount;
   final int updatedWindowsCount;
+  final int newRwaCount;
+  final int updatedRwaCount;
   final String assetType;
   final int defectsRecordedCount;
   final int attachmentsCount;
@@ -105,6 +124,8 @@ class InspectionFileReportItem {
     this.updatedDoorsCount = 0,
     this.newWindowsCount = 0,
     this.updatedWindowsCount = 0,
+    this.newRwaCount = 0,
+    this.updatedRwaCount = 0,
     this.assetType = 'door',
     this.defectsRecordedCount = 0,
     this.attachmentsCount = 0,
@@ -114,10 +135,54 @@ class InspectionFileReportItem {
 
   int get totalDoors => newDoorsCount + updatedDoorsCount;
   int get totalWindows => newWindowsCount + updatedWindowsCount;
-  int get totalItems => isWindow ? (totalWindows > 0 ? totalWindows : totalDoors) : totalDoors;
-  int get newItemsCount => isWindow ? (newWindowsCount > 0 ? newWindowsCount : newDoorsCount) : newDoorsCount;
-  int get updatedItemsCount => isWindow ? (updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount) : updatedDoorsCount;
-  bool get isWindow => assetType.toLowerCase() == 'window' || (newWindowsCount + updatedWindowsCount > 0 && newDoorsCount + updatedDoorsCount == 0);
+  int get totalRwa => newRwaCount + updatedRwaCount;
+
+  bool get isRwa {
+    final t = assetType.trim().toLowerCase();
+    return t == 'rwa' ||
+        t == 'rwa-anlage' ||
+        t.contains('smoke') ||
+        t.contains('rauch') ||
+        (newRwaCount + updatedRwaCount > 0 &&
+            newDoorsCount + updatedDoorsCount == 0 &&
+            newWindowsCount + updatedWindowsCount == 0);
+  }
+
+  bool get isWindow =>
+      !isRwa &&
+      (assetType.trim().toLowerCase() == 'window' ||
+          (newWindowsCount + updatedWindowsCount > 0 &&
+              newDoorsCount + updatedDoorsCount == 0));
+
+  int get totalItems {
+    if (isRwa) {
+      return totalRwa > 0
+          ? totalRwa
+          : (totalWindows > 0 ? totalWindows : totalDoors);
+    }
+    if (isWindow) return totalWindows > 0 ? totalWindows : totalDoors;
+    return totalDoors;
+  }
+
+  int get newItemsCount {
+    if (isRwa) {
+      return newRwaCount > 0
+          ? newRwaCount
+          : (newWindowsCount > 0 ? newWindowsCount : newDoorsCount);
+    }
+    if (isWindow) return newWindowsCount > 0 ? newWindowsCount : newDoorsCount;
+    return newDoorsCount;
+  }
+
+  int get updatedItemsCount {
+    if (isRwa) {
+      return updatedRwaCount > 0
+          ? updatedRwaCount
+          : (updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount);
+    }
+    if (isWindow) return updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount;
+    return updatedDoorsCount;
+  }
 
   List<DoorChangeItem> get unprocessedDoors =>
       doorChanges.where((d) => !d.isProcessed).toList();
@@ -220,6 +285,8 @@ class ImportReport {
   final int updatedDoorsCount;
   final int newWindowsCount;
   final int updatedWindowsCount;
+  final int newRwaCount;
+  final int updatedRwaCount;
   final int newInspectionsCount;
   final int updatedInspectionsCount;
   final int totalErrorsImported;
@@ -238,6 +305,8 @@ class ImportReport {
     this.updatedDoorsCount = 0,
     this.newWindowsCount = 0,
     this.updatedWindowsCount = 0,
+    this.newRwaCount = 0,
+    this.updatedRwaCount = 0,
     this.newInspectionsCount = 0,
     this.updatedInspectionsCount = 0,
     this.totalErrorsImported = 0,
@@ -251,46 +320,85 @@ class ImportReport {
   });
 
   String get effectiveAssetType {
-    if (assetType.isNotEmpty && assetType.toLowerCase() != 'door') return assetType;
+    final cleanType = assetType.trim().toLowerCase();
+    if (cleanType.isNotEmpty && cleanType != 'door') {
+      if (cleanType == 'rwa-anlage' ||
+          cleanType.contains('smoke') ||
+          cleanType.contains('rauch')) {
+        return 'rwa';
+      }
+      return cleanType;
+    }
+    final hasRwa = (newRwaCount + updatedRwaCount > 0) ||
+        fileReports.any((f) => f.isRwa) ||
+        doorChanges.any((d) => d.isRwa);
     final hasWin = (newWindowsCount + updatedWindowsCount > 0) ||
         fileReports.any((f) => f.isWindow) ||
         doorChanges.any((d) => d.isWindow);
     final hasDoor = (newDoorsCount + updatedDoorsCount > 0) ||
-        fileReports.any((f) => !f.isWindow) ||
-        doorChanges.any((d) => !d.isWindow);
+        fileReports.any((f) => !f.isWindow && !f.isRwa) ||
+        doorChanges.any((d) => !d.isWindow && !d.isRwa);
 
-    if (hasWin && !hasDoor) return 'window';
-    if (hasWin && hasDoor) return 'mixed';
-    return assetType.isNotEmpty ? assetType : 'door';
+    final typesCount = (hasRwa ? 1 : 0) + (hasWin ? 1 : 0) + (hasDoor ? 1 : 0);
+    if (typesCount > 1) return 'mixed';
+    if (hasRwa) return 'rwa';
+    if (hasWin) return 'window';
+    if (hasDoor) return 'door';
+    return cleanType.isNotEmpty ? cleanType : 'door';
   }
 
   bool get isWindowReport => effectiveAssetType == 'window';
+  bool get isRwaReport => effectiveAssetType == 'rwa';
 
   int get totalDoorsProcessed => newDoorsCount + updatedDoorsCount;
   int get totalWindowsProcessed => newWindowsCount + updatedWindowsCount;
+  int get totalRwaProcessed => newRwaCount + updatedRwaCount;
 
   int get totalItemsProcessed {
+    if (effectiveAssetType == 'rwa') {
+      return totalRwaProcessed > 0
+          ? totalRwaProcessed
+          : (totalWindowsProcessed > 0
+              ? totalWindowsProcessed
+              : totalDoorsProcessed);
+    }
     if (effectiveAssetType == 'window') {
-      return totalWindowsProcessed > 0 ? totalWindowsProcessed : totalDoorsProcessed;
+      return totalWindowsProcessed > 0
+          ? totalWindowsProcessed
+          : totalDoorsProcessed;
     }
     if (effectiveAssetType == 'mixed') {
-      return totalDoorsProcessed + totalWindowsProcessed;
+      return totalDoorsProcessed + totalWindowsProcessed + totalRwaProcessed;
     }
-    return totalDoorsProcessed > 0 ? totalDoorsProcessed : totalWindowsProcessed;
+    return totalDoorsProcessed > 0
+        ? totalDoorsProcessed
+        : (totalWindowsProcessed > 0
+            ? totalWindowsProcessed
+            : totalRwaProcessed);
   }
 
   int get newItemsCount {
+    if (effectiveAssetType == 'rwa') {
+      return newRwaCount > 0
+          ? newRwaCount
+          : (newWindowsCount > 0 ? newWindowsCount : newDoorsCount);
+    }
     if (effectiveAssetType == 'window') {
       return newWindowsCount > 0 ? newWindowsCount : newDoorsCount;
     }
-    return newDoorsCount + newWindowsCount;
+    return newDoorsCount + newWindowsCount + newRwaCount;
   }
 
   int get updatedItemsCount {
+    if (effectiveAssetType == 'rwa') {
+      return updatedRwaCount > 0
+          ? updatedRwaCount
+          : (updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount);
+    }
     if (effectiveAssetType == 'window') {
       return updatedWindowsCount > 0 ? updatedWindowsCount : updatedDoorsCount;
     }
-    return updatedDoorsCount + updatedWindowsCount;
+    return updatedDoorsCount + updatedWindowsCount + updatedRwaCount;
   }
 
   /// Returns all doors/items from the imported package that are in an unprocessed/pending status.

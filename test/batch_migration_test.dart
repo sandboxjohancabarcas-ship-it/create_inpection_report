@@ -61,5 +61,37 @@ void main() {
       expect(report.newWindowsCount, greaterThan(200));
       expect(report.newDoorsCount, equals(0));
     });
+
+    test('migrateSingleFile recognizes and imports RWA / smoke ventilation Excel correctly', () async {
+      final db = await DatabaseService.getDb();
+      await db.delete('inspections');
+      await db.delete('inspection_rwa_errors');
+      await db.delete('inspection_rwa_settings');
+      await db.delete('inspection_rwa');
+      await db.delete('rwa_systems');
+
+      final rwaExcel = File('test/test_data/RWA-Anlagen/26-14517-AB P-000893 Checkliste RWA-Anlage-1 Gebäude G.xlsx');
+      final result = await BatchMigrationService.migrateSingleFile(rwaExcel);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.assetType, equals('rwa'));
+      expect(result.isRwa, isTrue);
+      expect(result.isWindow, isFalse);
+      expect(result.newRwaCount, equals(1));
+      expect(result.totalItems, equals(1));
+      expect(result.newDoorsCount, equals(0));
+      expect(result.newWindowsCount, equals(0));
+
+      // Report verification
+      final report = result.importReport;
+      expect(report, isNotNull);
+      expect(report!.effectiveAssetType, equals('rwa'));
+      expect(report.isRwaReport, isTrue);
+      expect(report.isWindowReport, isFalse);
+      expect(report.totalItemsProcessed, equals(1));
+      expect(report.newRwaCount, equals(1));
+      expect(report.newDoorsCount, equals(0));
+      expect(report.newWindowsCount, equals(0));
+    });
   });
 }

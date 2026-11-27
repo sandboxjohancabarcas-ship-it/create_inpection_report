@@ -61,7 +61,14 @@ void main() {
       expect(AssetTypeHelper.getLabel('mixed', plural: true), equals('Objekte'));
       expect(AssetTypeHelper.getLabel('schiebetor', plural: true), equals('Schiebetore'));
       expect(AssetTypeHelper.getLabel('rwa', plural: true), equals('RWA-Anlagen'));
+      expect(AssetTypeHelper.getLabel('rwa', plural: false), equals('RWA-Anlage'));
+      expect(AssetTypeHelper.getLabel('rwa-anlage', plural: true), equals('RWA-Anlagen'));
+      expect(AssetTypeHelper.getLabel('smoke_ventilation', plural: true), equals('RWA-Anlagen'));
+      expect(AssetTypeHelper.getLabel('smoke ventilation', plural: true), equals('RWA-Anlagen'));
+      expect(AssetTypeHelper.getLabel('smoke ventilation', plural: false), equals('RWA-Anlage'));
       expect(AssetTypeHelper.getLabel('tor', plural: true), equals('Tore'));
+      expect(AssetTypeHelper.getIcon('rwa'), equals(Icons.air));
+      expect(AssetTypeHelper.getIcon('smoke_ventilation'), equals(Icons.air));
     });
 
     test('ImportReport recognizes window imports and calculates window metrics', () {
@@ -209,6 +216,100 @@ void main() {
       expect(find.text('+42 neu, 3 aktualisiert'), findsOneWidget);
       expect(find.text('Alle Türen (1)'), findsOneWidget);
       expect(find.text('Tür T-01'), findsOneWidget);
+      expect(find.text('Verarbeitete Fenster'), findsNothing);
+      expect(find.text('Verarbeitete RWA-Anlagen'), findsNothing);
+    });
+
+    test('ImportReport recognizes RWA imports and calculates RWA metrics', () {
+      final report = ImportReport(
+        packageName: '26-14517-AB Checkliste RWA-Anlage-1 Gebäude G.xlsx',
+        importedAt: DateTime.now(),
+        assetType: 'rwa',
+        newRwaCount: 4,
+        updatedRwaCount: 1,
+        totalErrorsImported: 2,
+        doorChanges: [
+          DoorChangeItem(
+            doorAlias: 'RWA-01',
+            doorNumber: 'RWA-01',
+            roomDesignation: 'Gebäude G',
+            changeType: 'new',
+            status: 'Geprüft',
+            assetType: 'rwa',
+            errorCount: 2,
+          ),
+        ],
+        fileReports: [
+          InspectionFileReportItem(
+            fileName: 'Checkliste RWA-Anlage-1.xlsx',
+            status: 'Erfolgreich',
+            assetType: 'rwa',
+            newRwaCount: 4,
+            updatedRwaCount: 1,
+            doorChanges: [
+              DoorChangeItem(
+                doorAlias: 'RWA-01',
+                doorNumber: 'RWA-01',
+                roomDesignation: 'Gebäude G',
+                assetType: 'rwa',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      expect(report.isRwaReport, isTrue);
+      expect(report.isWindowReport, isFalse);
+      expect(report.effectiveAssetType, equals('rwa'));
+      expect(report.totalRwaProcessed, equals(5));
+      expect(report.totalItemsProcessed, equals(5));
+      expect(report.newItemsCount, equals(4));
+      expect(report.updatedItemsCount, equals(1));
+      expect(report.doorChanges.first.isRwa, isTrue);
+      expect(report.fileReports.first.isRwa, isTrue);
+      expect(report.fileReports.first.totalItems, equals(5));
+    });
+
+    testWidgets('ImportReportDialog displays RWA / smoke ventilation metrics and titles correctly', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final rwaReport = ImportReport(
+        packageName: '26-14517-AB Checkliste RWA-Anlage-1 Gebäude G.xlsx',
+        importedAt: DateTime.now(),
+        assetType: 'rwa',
+        newRwaCount: 1,
+        updatedRwaCount: 0,
+        doorChanges: [
+          DoorChangeItem(
+            doorAlias: 'RWA-Gebäude-G',
+            doorNumber: 'Anlage 1',
+            roomDesignation: 'Gebäude G / EG',
+            changeType: 'new',
+            status: 'geprüft',
+            assetType: 'rwa',
+            errorCount: 0,
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ImportReportDialog(report: rwaReport),
+          ),
+        ),
+      );
+
+      // Verify that RWA labels are shown, NOT door labels
+      expect(find.text('Verarbeitete RWA-Anlagen'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('+1 neu, 0 aktualisiert'), findsOneWidget);
+      expect(find.text('Alle RWA-Anlagen (1)'), findsOneWidget);
+      expect(find.text('RWA-Anlage Anlage 1'), findsOneWidget);
+      expect(find.text('Verarbeitete Türen'), findsNothing);
       expect(find.text('Verarbeitete Fenster'), findsNothing);
     });
   });

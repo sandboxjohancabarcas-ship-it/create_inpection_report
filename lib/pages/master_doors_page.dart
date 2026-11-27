@@ -87,11 +87,10 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
             ...projectsList,
           ];
           final projectExists = _projects.any((p) {
-            final key = p['projectNumber']!.isNotEmpty
-                ? p['projectNumber']!
-                : p['objectAddress']!;
-            return key == _selectedProject ||
-                p['projectNumber'] == _selectedProject;
+            final projNum = p['projectNumber'] ?? '';
+            final objAddr = p['objectAddress'] ?? '';
+            final key = projNum.isNotEmpty ? projNum : objAddr;
+            return key == _selectedProject || projNum == _selectedProject;
           });
           if (!projectExists) {
             _selectedProject = 'Alle';
@@ -1110,11 +1109,11 @@ class _MasterDoorsPageState extends State<MasterDoorsPage> {
                     final projectDropdown = _projects.length > 1
                         ? DropdownButtonFormField<String>(
                             value: _projects.any((p) {
-                              final k = p['projectNumber']!.isNotEmpty
-                                  ? p['projectNumber']!
-                                  : p['objectAddress']!;
+                              final projNum = p['projectNumber'] ?? '';
+                              final objAddr = p['objectAddress'] ?? '';
+                              final k = projNum.isNotEmpty ? projNum : objAddr;
                               return k == _selectedProject ||
-                                  p['projectNumber'] == _selectedProject;
+                                  projNum == _selectedProject;
                             })
                                 ? _selectedProject
                                 : 'Alle',

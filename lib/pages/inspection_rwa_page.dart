@@ -158,11 +158,13 @@ class _InspectionRwaListPageState extends State<InspectionRwaListPage> {
   }
 
   void _openInspection(RwaSystem system) async {
+    final sysId = system.id;
+    if (sysId == null) return;
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => RwaInspectionPage(
-          rwaSystemId: system.id!,
+          rwaSystemId: sysId,
           inspectionId: widget.inspectionId,
           isManagerMode: widget.isManagerMode,
         ),

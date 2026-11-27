@@ -1666,7 +1666,8 @@ class DatabaseService {
           'inspectionRwaId IN (SELECT id FROM inspection_rwa WHERE rwaSystemId = ?)',
       whereArgs: [id],
     );
-    await db.delete('inspection_rwa', where: 'rwaSystemId = ?', whereArgs: [id]);
+    await db
+        .delete('inspection_rwa', where: 'rwaSystemId = ?', whereArgs: [id]);
     await db.delete('rwa_systems', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -1954,7 +1955,8 @@ class DatabaseService {
         OR r.objectAddress LIKE ?
       )''';
       final wildcard = '%$cleanQuery%';
-      whereArgs.addAll([wildcard, wildcard, wildcard, wildcard, wildcard, wildcard]);
+      whereArgs
+          .addAll([wildcard, wildcard, wildcard, wildcard, wildcard, wildcard]);
     }
 
     final rows = await db.rawQuery('''
@@ -2522,13 +2524,16 @@ class DatabaseService {
           }
         }
       } else {
-        final prevJunctions = await getInspectionDoorsByInspectionId(prevInspId);
-        final prevJunctionIds = prevJunctions.map((j) => j['id'] as int).toList();
+        final prevJunctions =
+            await getInspectionDoorsByInspectionId(prevInspId);
+        final prevJunctionIds =
+            prevJunctions.map((j) => j['id'] as int).toList();
         final prevErrors = await getErrorsForInspectionDoorIds(prevJunctionIds);
 
         bool isResolved(Map<String, dynamic> e) {
-          final res =
-              (e['resolutionStatus']?.toString() ?? 'open').trim().toLowerCase();
+          final res = (e['resolutionStatus']?.toString() ?? 'open')
+              .trim()
+              .toLowerCase();
           return res == 'resolved' ||
               res == 'gelöst' ||
               res == 'geloest' ||
@@ -4228,10 +4233,13 @@ class DatabaseService {
 
     int newDoorsCount = 0;
     int updatedDoorsCount = 0;
+    int newRwaCount = 0;
+    int updatedRwaCount = 0;
     int newInspectionsCount = 0;
     int updatedInspectionsCount = 0;
     int totalErrorsImported = 0;
     int totalAttachmentsImported = 0;
+    String packageAssetType = 'door';
     final List<DoorChangeItem> doorChanges = [];
     final List<String> newCatalogProposals = [];
     final List<InspectionFileReportItem> fileReports = [];
@@ -4766,7 +4774,8 @@ class DatabaseService {
         }
 
         // 7. Merge RWA Systems & Inspections if present in package
-        final packageTables = (await packageDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
+        final packageTables = (await packageDb
+                .rawQuery("SELECT name FROM sqlite_master WHERE type='table'"))
             .map((r) => r['name'] as String)
             .toSet();
 
@@ -4789,14 +4798,19 @@ class DatabaseService {
             final packageRwaId = row['id'] as int;
             final alias = row['systemAlias'] as String?;
             final provAlias = row['provisionalAlias'] as String?;
-            final proj = row['projectNumber'] as String? ?? '';
 
             List<Map<String, dynamic>> existingRwa = [];
             if (alias != null && alias.isNotEmpty) {
-              existingRwa = await txn.query('rwa_systems', where: 'systemAlias = ?', whereArgs: [alias], limit: 1);
+              existingRwa = await txn.query('rwa_systems',
+                  where: 'systemAlias = ?', whereArgs: [alias], limit: 1);
             }
-            if (existingRwa.isEmpty && provAlias != null && provAlias.isNotEmpty) {
-              existingRwa = await txn.query('rwa_systems', where: 'provisionalAlias = ?', whereArgs: [provAlias], limit: 1);
+            if (existingRwa.isEmpty &&
+                provAlias != null &&
+                provAlias.isNotEmpty) {
+              existingRwa = await txn.query('rwa_systems',
+                  where: 'provisionalAlias = ?',
+                  whereArgs: [provAlias],
+                  limit: 1);
             }
 
             final data = Map<String, dynamic>.from(row)..remove('id');
@@ -4805,14 +4819,39 @@ class DatabaseService {
             int mRwaId;
             if (existingRwa.isNotEmpty) {
               mRwaId = existingRwa.first['id'] as int;
-              await txn.update('rwa_systems', data, where: 'id = ?', whereArgs: [mRwaId]);
+              await txn.update('rwa_systems', data,
+                  where: 'id = ?', whereArgs: [mRwaId]);
+              updatedRwaCount++;
             } else {
               mRwaId = await txn.insert('rwa_systems', data);
+              newRwaCount++;
             }
             rwaIdMap[packageRwaId] = mRwaId;
+
+            final rwaAlias = alias ?? provAlias ?? 'RWA-$packageRwaId';
+            final rwaNum = row['systemNumber'] as String? ?? '';
+            final rwaLocation = [
+              if (row['building'] != null && row['building'].toString().isNotEmpty)
+                row['building'].toString(),
+              if (row['floor'] != null && row['floor'].toString().isNotEmpty)
+                row['floor'].toString(),
+              if (row['room'] != null && row['room'].toString().isNotEmpty)
+                row['room'].toString(),
+            ].join(' / ');
+            doorChanges.add(DoorChangeItem(
+              doorAlias: rwaAlias,
+              doorNumber: rwaNum.isNotEmpty ? rwaNum : rwaAlias,
+              roomDesignation: rwaLocation.isNotEmpty ? rwaLocation : 'RWA-Anlage',
+              floor: row['floor'] as String? ?? '',
+              changeType: existingRwa.isNotEmpty ? 'updated' : 'new',
+              status: 'Geprüft',
+              errorCount: 0,
+              assetType: 'rwa',
+            ));
           }
 
-          final masterRwaJunctionCols = await _getTableColumns(txn, 'inspection_rwa');
+          final masterRwaJunctionCols =
+              await _getTableColumns(txn, 'inspection_rwa');
           final Map<int, int> rwaJunctionIdMap = {};
 
           for (final row in pRwaJunctions) {
@@ -4829,18 +4868,22 @@ class DatabaseService {
             data.removeWhere((key, _) => !masterRwaJunctionCols.contains(key));
 
             final existingJ = await txn.query('inspection_rwa',
-                where: 'inspectionId = ? AND rwaSystemId = ?', whereArgs: [mInspId, mRwaId], limit: 1);
+                where: 'inspectionId = ? AND rwaSystemId = ?',
+                whereArgs: [mInspId, mRwaId],
+                limit: 1);
             int mJId;
             if (existingJ.isNotEmpty) {
               mJId = existingJ.first['id'] as int;
-              await txn.update('inspection_rwa', data, where: 'id = ?', whereArgs: [mJId]);
+              await txn.update('inspection_rwa', data,
+                  where: 'id = ?', whereArgs: [mJId]);
             } else {
               mJId = await txn.insert('inspection_rwa', data);
             }
             rwaJunctionIdMap[packageJId] = mJId;
           }
 
-          final masterRwaSettingCols = await _getTableColumns(txn, 'inspection_rwa_settings');
+          final masterRwaSettingCols =
+              await _getTableColumns(txn, 'inspection_rwa_settings');
           for (final row in pRwaSettings) {
             final mJId = rwaJunctionIdMap[row['inspectionRwaId']];
             if (mJId == null) continue;
@@ -4852,15 +4895,19 @@ class DatabaseService {
 
             final sName = row['settingName'] as String? ?? '';
             final existingS = await txn.query('inspection_rwa_settings',
-                where: 'inspectionRwaId = ? AND settingName = ?', whereArgs: [mJId, sName], limit: 1);
+                where: 'inspectionRwaId = ? AND settingName = ?',
+                whereArgs: [mJId, sName],
+                limit: 1);
             if (existingS.isNotEmpty) {
-              await txn.update('inspection_rwa_settings', data, where: 'id = ?', whereArgs: [existingS.first['id']]);
+              await txn.update('inspection_rwa_settings', data,
+                  where: 'id = ?', whereArgs: [existingS.first['id']]);
             } else {
               await txn.insert('inspection_rwa_settings', data);
             }
           }
 
-          final masterRwaErrorCols = await _getTableColumns(txn, 'inspection_rwa_errors');
+          final masterRwaErrorCols =
+              await _getTableColumns(txn, 'inspection_rwa_errors');
           for (final row in pRwaErrors) {
             final mJId = rwaJunctionIdMap[row['inspectionRwaId']];
             if (mJId == null) continue;
@@ -4873,11 +4920,13 @@ class DatabaseService {
             final code = row['errorCode'] as String? ?? '';
             final sName = row['settingName'] as String? ?? '';
             final existingErr = await txn.query('inspection_rwa_errors',
-                where: 'inspectionRwaId = ? AND settingName = ? AND errorCode = ?',
+                where:
+                    'inspectionRwaId = ? AND settingName = ? AND errorCode = ?',
                 whereArgs: [mJId, sName, code],
                 limit: 1);
             if (existingErr.isNotEmpty) {
-              await txn.update('inspection_rwa_errors', data, where: 'id = ?', whereArgs: [existingErr.first['id']]);
+              await txn.update('inspection_rwa_errors', data,
+                  where: 'id = ?', whereArgs: [existingErr.first['id']]);
             } else {
               await txn.insert('inspection_rwa_errors', data);
             }
@@ -4903,6 +4952,15 @@ class DatabaseService {
           }
         }
 
+        String packageAssetType = 'door';
+        if (pInspections.isNotEmpty && pInspections.first['assetType'] != null) {
+          packageAssetType =
+              pInspections.first['assetType'].toString().toLowerCase();
+        } else if (newRwaCount + updatedRwaCount > 0 &&
+            newDoorsCount + updatedDoorsCount == 0) {
+          packageAssetType = 'rwa';
+        }
+
         fileReports.add(InspectionFileReportItem(
           fileName: basename(packagePath),
           clientName: pInspections.isNotEmpty
@@ -4917,8 +4975,11 @@ class DatabaseService {
           inspectionDate: pInspections.isNotEmpty
               ? (pInspections.first['date'] as String? ?? '')
               : '',
+          assetType: packageAssetType,
           newDoorsCount: newDoorsCount,
           updatedDoorsCount: updatedDoorsCount,
+          newRwaCount: newRwaCount,
+          updatedRwaCount: updatedRwaCount,
           defectsRecordedCount: totalErrorsImported,
           attachmentsCount: totalAttachmentsImported,
           doorChanges: doorChanges,
@@ -4929,8 +4990,11 @@ class DatabaseService {
       return ImportReport(
         packageName: basename(packagePath),
         importedAt: DateTime.now(),
+        assetType: packageAssetType,
         newDoorsCount: newDoorsCount,
         updatedDoorsCount: updatedDoorsCount,
+        newRwaCount: newRwaCount,
+        updatedRwaCount: updatedRwaCount,
         newInspectionsCount: newInspectionsCount,
         updatedInspectionsCount: updatedInspectionsCount,
         totalErrorsImported: totalErrorsImported,
@@ -5676,8 +5740,7 @@ class DatabaseService {
   }
 
   /// Startup module to check and initialize the RWA Error Catalog.
-  static Future<void> checkAndInitializeRwaCatalog(
-      {bool force = false}) async {
+  static Future<void> checkAndInitializeRwaCatalog({bool force = false}) async {
     final db = await getDb();
     final countRows = await db.rawQuery(
         "SELECT COUNT(*) as count FROM error_catalog WHERE LOWER(COALESCE(assetType, 'door')) = 'rwa'");

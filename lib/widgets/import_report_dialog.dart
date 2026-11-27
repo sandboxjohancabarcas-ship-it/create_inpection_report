@@ -13,6 +13,13 @@ class ImportReportDialog extends StatelessWidget {
     required this.report,
   });
 
+  String get assetLabelPlural =>
+      AssetTypeHelper.getLabel(report.effectiveAssetType, plural: true);
+  String get assetLabelSingular =>
+      AssetTypeHelper.getLabel(report.effectiveAssetType, plural: false);
+  IconData get assetIcon =>
+      AssetTypeHelper.getIcon(report.effectiveAssetType);
+
   static Future<void> show(BuildContext context, ImportReport report) {
     return showDialog<void>(
       context: context,
@@ -31,10 +38,6 @@ class ImportReportDialog extends StatelessWidget {
     final bool hasCatalogProposals = report.newCatalogProposals.isNotEmpty;
     final bool hasLegacyAudit = report.hasLegacyAudit;
 
-    final String effectiveAsset = report.effectiveAssetType;
-    final String assetLabelPlural =
-        AssetTypeHelper.getLabel(effectiveAsset, plural: true);
-    final IconData assetIcon = AssetTypeHelper.getIcon(effectiveAsset);
 
     int tabCount = 1; // Asset items tab by default
     if (hasLegacyAudit) tabCount++;
@@ -194,16 +197,21 @@ class ImportReportDialog extends StatelessWidget {
                       child: SingleChildScrollView(
                         child: Text(
                           report.unprocessedDoors.map((d) {
-                            final itemSingular =
-                                AssetTypeHelper.getLabel(d.assetType, plural: false);
+                            final itemSingular = AssetTypeHelper.getLabel(
+                                d.assetType,
+                                plural: false);
                             final loc = [
                               if (d.floor.isNotEmpty) d.floor,
                               if (d.roomDesignation.isNotEmpty)
                                 d.roomDesignation
                             ].join(' | ');
                             final locStr = loc.isNotEmpty ? ' ($loc)' : '';
-                            final dNum = d.doorNumber.isNotEmpty ? d.doorNumber : d.doorAlias;
-                            final name = dNum.toLowerCase().contains(itemSingular.toLowerCase())
+                            final dNum = d.doorNumber.isNotEmpty
+                                ? d.doorNumber
+                                : d.doorAlias;
+                            final name = dNum
+                                    .toLowerCase()
+                                    .contains(itemSingular.toLowerCase())
                                 ? dNum
                                 : '$itemSingular $dNum';
                             return '• $name$locStr [ID: ${d.doorAlias}]';
@@ -250,7 +258,9 @@ class ImportReportDialog extends StatelessWidget {
                           Tab(
                               text:
                                   'Inspektions-Dateien (${report.fileReports.length})'),
-                        Tab(text: 'Alle $assetLabelPlural (${report.doorChanges.length})'),
+                        Tab(
+                            text:
+                                'Alle $assetLabelPlural (${report.doorChanges.length})'),
                         if (hasCatalogProposals)
                           Tab(
                               text:
@@ -269,7 +279,8 @@ class ImportReportDialog extends StatelessWidget {
                           // Asset Items Tab
                           report.doorChanges.isEmpty
                               ? Center(
-                                  child: Text('Keine $assetLabelPlural-Details vorhanden.'))
+                                  child: Text(
+                                      'Keine $assetLabelPlural-Details vorhanden.'))
                               : ListView.separated(
                                   itemCount: report.doorChanges.length,
                                   separatorBuilder: (_, __) =>
@@ -277,7 +288,8 @@ class ImportReportDialog extends StatelessWidget {
                                   itemBuilder: (context, index) {
                                     final door = report.doorChanges[index];
                                     final itemSingular =
-                                        AssetTypeHelper.getLabel(door.assetType, plural: false);
+                                        AssetTypeHelper.getLabel(door.assetType,
+                                            plural: false);
                                     final itemIcon =
                                         AssetTypeHelper.getIcon(door.assetType);
                                     final isNew = door.changeType == 'new';
@@ -285,131 +297,168 @@ class ImportReportDialog extends StatelessWidget {
                                     final dNum = door.doorNumber.isNotEmpty
                                         ? door.doorNumber
                                         : door.doorAlias;
-                                    final displayTitle = dNum.toLowerCase().contains(itemSingular.toLowerCase())
+                                    final displayTitle = dNum
+                                            .toLowerCase()
+                                            .contains(
+                                                itemSingular.toLowerCase())
                                         ? dNum
                                         : '$itemSingular $dNum';
-                                    return ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 2),
-                                      leading: CircleAvatar(
-                                        backgroundColor: isNew
-                                            ? Colors.green.shade50
-                                            : Colors.blue.shade50,
-                                        child: Icon(
-                                          itemIcon,
-                                          color: isNew
-                                              ? Colors.green
-                                              : Colors.blue,
-                                          size: 20,
-                                        ),
-                                      ),
-                                      title: Text(
-                                        displayTitle,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14),
-                                      ),
-                                      subtitle: Text(
-                                        '${door.roomDesignation.isNotEmpty ? door.roomDesignation : "Ohne Raumbeschreibung"} • Alias: ${door.doorAlias}',
-                                        style: TextStyle(
-                                            color: Colors.grey.shade700,
-                                            fontSize: 12),
-                                      ),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                    return Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 6),
+                                      child: Row(
                                         children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 3),
-                                            margin:
-                                                const EdgeInsets.only(right: 6),
-                                            decoration: BoxDecoration(
-                                              color: isProcessed
-                                                  ? Colors.green.shade50
-                                                  : Colors.orange.shade50,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              border: Border.all(
-                                                color: isProcessed
-                                                    ? Colors.green.shade400
-                                                    : Colors.orange.shade400,
-                                              ),
+                                          CircleAvatar(
+                                            backgroundColor: isNew
+                                                ? Colors.green.shade50
+                                                : Colors.blue.shade50,
+                                            child: Icon(
+                                              itemIcon,
+                                              color: isNew
+                                                  ? Colors.green
+                                                  : Colors.blue,
+                                              size: 20,
                                             ),
-                                            child: Row(
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                Icon(
-                                                  isProcessed
-                                                      ? Icons.check_circle
-                                                      : Icons.pending_actions,
-                                                  size: 11,
-                                                  color: isProcessed
-                                                      ? Colors.green.shade800
-                                                      : Colors.orange.shade800,
-                                                ),
-                                                const SizedBox(width: 3),
                                                 Text(
-                                                  isProcessed
-                                                      ? 'Geprüft'
-                                                      : 'Nicht geprüft',
+                                                  displayTitle,
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      fontSize: 14),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '${door.roomDesignation.isNotEmpty ? door.roomDesignation : "Ohne Raumbeschreibung"} • Alias: ${door.doorAlias}',
                                                   style: TextStyle(
-                                                    color: isProcessed
-                                                        ? Colors.green.shade800
-                                                        : Colors
-                                                            .orange.shade800,
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                      fontSize: 12),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ],
                                             ),
                                           ),
-                                          if (door.errorCount > 0)
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
+                                          const SizedBox(width: 8),
+                                          Wrap(
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            children: [
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
+                                                decoration: BoxDecoration(
+                                                  color: isProcessed
+                                                      ? Colors.green.shade50
+                                                      : Colors.orange.shade50,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                  border: Border.all(
+                                                    color: isProcessed
+                                                        ? Colors.green.shade400
+                                                        : Colors
+                                                            .orange.shade400,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      isProcessed
+                                                          ? Icons.check_circle
+                                                          : Icons
+                                                              .pending_actions,
+                                                      size: 11,
+                                                      color: isProcessed
+                                                          ? Colors
+                                                              .green.shade800
+                                                          : Colors
+                                                              .orange.shade800,
+                                                    ),
+                                                    const SizedBox(width: 3),
+                                                    Text(
+                                                      isProcessed
+                                                          ? 'Geprüft'
+                                                          : 'Nicht geprüft',
+                                                      style: TextStyle(
+                                                        color: isProcessed
+                                                            ? Colors
+                                                                .green.shade800
+                                                            : Colors.orange
+                                                                .shade800,
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (door.errorCount > 0)
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
                                                       horizontal: 8,
                                                       vertical: 4),
-                                              margin: const EdgeInsets.only(
-                                                  right: 8),
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange.shade50,
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                border: Border.all(
+                                                  decoration: BoxDecoration(
                                                     color:
-                                                        Colors.orange.shade200),
-                                              ),
-                                              child: Text(
-                                                '${door.errorCount} Mängel',
-                                                style: const TextStyle(
-                                                    color: Colors.orange,
+                                                        Colors.orange.shade50,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            12),
+                                                    border: Border.all(
+                                                        color: Colors
+                                                            .orange.shade200),
+                                                  ),
+                                                  child: Text(
+                                                    '${door.errorCount} Mängel',
+                                                    style: const TextStyle(
+                                                        color: Colors.orange,
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold),
+                                                  ),
+                                                ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: isNew
+                                                      ? Colors.green.shade100
+                                                      : Colors.blue.shade100,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  isNew
+                                                      ? 'Neu'
+                                                      : 'Aktualisiert',
+                                                  style: TextStyle(
+                                                    color: isNew
+                                                        ? Colors.green.shade900
+                                                        : Colors.blue.shade900,
                                                     fontSize: 11,
                                                     fontWeight:
-                                                        FontWeight.bold),
+                                                        FontWeight.bold,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: isNew
-                                                  ? Colors.green.shade100
-                                                  : Colors.blue.shade100,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              isNew ? 'Neu' : 'Aktualisiert',
-                                              style: TextStyle(
-                                                color: isNew
-                                                    ? Colors.green.shade900
-                                                    : Colors.blue.shade900,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -752,7 +801,7 @@ class ImportReportDialog extends StatelessWidget {
                                               BorderRadius.circular(6),
                                         ),
                                         child: Text(
-                                          '${entry.value} Türen',
+                                          '${entry.value} $assetLabelPlural',
                                           style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 11,
@@ -772,7 +821,7 @@ class ImportReportDialog extends StatelessWidget {
                         if (audit.placeholderSampleDoors.isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Text(
-                            'Beispiel betroffene Türen: ${audit.placeholderSampleDoors.join(', ')}',
+                            'Beispiel betroffene $assetLabelPlural: ${audit.placeholderSampleDoors.join(', ')}',
                             style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey.shade700,
@@ -895,19 +944,29 @@ class ImportReportDialog extends StatelessWidget {
                 ],
               ),
             ),
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: statusColor.withValues(alpha: 0.4)),
-              ),
-              child: Text(
-                item.status,
-                style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11),
+            trailing: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Tooltip(
+                message: item.status,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    item.status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11),
+                  ),
+                ),
               ),
             ),
             children: [
@@ -975,8 +1034,9 @@ class ImportReportDialog extends StatelessWidget {
                           itemCount: item.doorChanges.length,
                           itemBuilder: (context, dIdx) {
                             final door = item.doorChanges[dIdx];
-                            final itemSing =
-                                AssetTypeHelper.getLabel(door.assetType, plural: false);
+                            final itemSing = AssetTypeHelper.getLabel(
+                                door.assetType,
+                                plural: false);
                             final dNum = door.doorNumber.isNotEmpty
                                 ? door.doorNumber
                                 : door.doorAlias;

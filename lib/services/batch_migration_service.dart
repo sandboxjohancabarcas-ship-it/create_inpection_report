@@ -40,6 +40,8 @@ class SingleFileMigrationResult {
   final int updatedDoorsCount;
   final int newWindowsCount;
   final int updatedWindowsCount;
+  final int newRwaCount;
+  final int updatedRwaCount;
   final int newInspectionsCount;
   final int updatedInspectionsCount;
   final int totalErrorsImported;
@@ -63,6 +65,8 @@ class SingleFileMigrationResult {
     this.updatedDoorsCount = 0,
     this.newWindowsCount = 0,
     this.updatedWindowsCount = 0,
+    this.newRwaCount = 0,
+    this.updatedRwaCount = 0,
     this.newInspectionsCount = 0,
     this.updatedInspectionsCount = 0,
     this.totalErrorsImported = 0,
@@ -79,8 +83,24 @@ class SingleFileMigrationResult {
   bool get hasConflicts => doorConflicts.isNotEmpty || catalogConflicts.isNotEmpty;
   bool get hasDoorConflicts => doorConflicts.isNotEmpty;
   bool get hasCatalogConflicts => catalogConflicts.isNotEmpty;
-  bool get isWindow => assetType.toLowerCase() == 'window' || (newWindowsCount + updatedWindowsCount > 0 && newDoorsCount + updatedDoorsCount == 0);
-  int get totalItems => isWindow ? (newWindowsCount + updatedWindowsCount) : (newDoorsCount + updatedDoorsCount);
+  bool get isRwa =>
+      assetType.toLowerCase() == 'rwa' ||
+      assetType.toLowerCase() == 'rwa-anlage' ||
+      assetType.toLowerCase().contains('smoke') ||
+      assetType.toLowerCase().contains('rauch') ||
+      (newRwaCount + updatedRwaCount > 0 &&
+          newDoorsCount + updatedDoorsCount == 0 &&
+          newWindowsCount + updatedWindowsCount == 0);
+  bool get isWindow =>
+      !isRwa &&
+      (assetType.toLowerCase() == 'window' ||
+          (newWindowsCount + updatedWindowsCount > 0 &&
+              newDoorsCount + updatedDoorsCount == 0));
+  int get totalItems {
+    if (isRwa) return newRwaCount + updatedRwaCount;
+    if (isWindow) return newWindowsCount + updatedWindowsCount;
+    return newDoorsCount + updatedDoorsCount;
+  }
 }
 
 class BatchMigrationService {
@@ -151,6 +171,8 @@ class BatchMigrationService {
                   updatedDoorsCount: report.updatedDoorsCount,
                   newWindowsCount: report.newWindowsCount,
                   updatedWindowsCount: report.updatedWindowsCount,
+                  newRwaCount: report.newRwaCount,
+                  updatedRwaCount: report.updatedRwaCount,
                   defectsRecordedCount: report.totalErrorsImported,
                   attachmentsCount: report.totalAttachmentsImported,
                   doorChanges: report.doorChanges,
@@ -167,6 +189,8 @@ class BatchMigrationService {
           updatedDoorsCount: report.updatedDoorsCount,
           newWindowsCount: report.newWindowsCount,
           updatedWindowsCount: report.updatedWindowsCount,
+          newRwaCount: report.newRwaCount,
+          updatedRwaCount: report.updatedRwaCount,
           newInspectionsCount: report.newInspectionsCount,
           updatedInspectionsCount: report.updatedInspectionsCount,
           totalErrorsImported: report.totalErrorsImported,
@@ -179,13 +203,29 @@ class BatchMigrationService {
         );
       } else if (excelExtensions.contains(ext)) {
         final excelResult = await ExcelDataImporter.importFromFile(file, resolutions: resolutions);
-        final isWindow = excelResult.assetType.toLowerCase() == 'window' ||
-            (excelResult.windowsImported > 0 && excelResult.doorsImported == 0);
+        final cleanType = excelResult.assetType.toLowerCase();
+        final isRwa = cleanType == 'rwa' ||
+            cleanType == 'rwa-anlage' ||
+            cleanType.contains('smoke') ||
+            cleanType.contains('rauch') ||
+            (excelResult.rwaSystemsImported > 0 &&
+                excelResult.doorsImported == 0 &&
+                excelResult.windowsImported == 0);
+        final isWindow = !isRwa &&
+            (cleanType == 'window' ||
+                (excelResult.windowsImported > 0 &&
+                    excelResult.doorsImported == 0));
+
         final doorCount = excelResult.doorsImported;
         final windowCount = excelResult.windowsImported;
-        final itemCount = isWindow ? windowCount : doorCount;
-        final assetType = isWindow ? 'window' : 'door';
-        final assetLabel = isWindow ? 'Fenster' : 'Türen';
+        final rwaCount = excelResult.rwaSystemsImported;
+        final itemCount = isRwa
+            ? rwaCount
+            : (isWindow ? windowCount : doorCount);
+        final assetType = isRwa ? 'rwa' : (isWindow ? 'window' : 'door');
+        final assetLabel = isRwa
+            ? 'RWA-Anlagen'
+            : (isWindow ? 'Fenster' : 'Türen');
 
         final excelItems = excelResult.doorChanges.isNotEmpty
             ? excelResult.doorChanges
@@ -202,7 +242,10 @@ class BatchMigrationService {
         String statusStr = 'Erfolgreich';
         final conflictParts = <String>[];
         if (excelResult.hasDoorConflicts) {
-          conflictParts.add('${excelResult.doorConflicts.length} ${isWindow ? "Fensterkonflikte" : "Türkonflikte"}');
+          final conflictName = isRwa
+              ? 'RWA-Konflikte'
+              : (isWindow ? 'Fensterkonflikte' : 'Türkonflikte');
+          conflictParts.add('${excelResult.doorConflicts.length} $conflictName');
         }
         if (excelResult.hasCatalogConflicts) {
           conflictParts.add('${excelResult.catalogConflicts.length} Katalogkonflikte');
@@ -220,6 +263,7 @@ class BatchMigrationService {
           assetType: assetType,
           newDoorsCount: doorCount,
           newWindowsCount: windowCount,
+          newRwaCount: rwaCount,
           defectsRecordedCount: excelResult.errorsLinked,
           doorChanges: excelItems,
           status: statusStr,
@@ -231,6 +275,7 @@ class BatchMigrationService {
           assetType: assetType,
           newDoorsCount: doorCount,
           newWindowsCount: windowCount,
+          newRwaCount: rwaCount,
           totalErrorsImported: excelResult.errorsLinked,
           doorChanges: excelItems,
           newCatalogProposals: excelResult.newCatalogProposals,
@@ -245,6 +290,7 @@ class BatchMigrationService {
           assetType: assetType,
           newDoorsCount: doorCount,
           newWindowsCount: windowCount,
+          newRwaCount: rwaCount,
           totalErrorsImported: excelResult.errorsLinked,
           doorChanges: excelItems,
           newCatalogProposals: excelResult.newCatalogProposals,
@@ -294,6 +340,8 @@ class BatchMigrationService {
     int updatedDoorsCount = 0;
     int newWindowsCount = 0;
     int updatedWindowsCount = 0;
+    int newRwaCount = 0;
+    int updatedRwaCount = 0;
     int newInspectionsCount = 0;
     int updatedInspectionsCount = 0;
     int totalErrorsImported = 0;
@@ -333,6 +381,8 @@ class BatchMigrationService {
       updatedDoorsCount += singleResult.updatedDoorsCount;
       newWindowsCount += singleResult.newWindowsCount;
       updatedWindowsCount += singleResult.updatedWindowsCount;
+      newRwaCount += singleResult.newRwaCount;
+      updatedRwaCount += singleResult.updatedRwaCount;
       newInspectionsCount += singleResult.newInspectionsCount;
       updatedInspectionsCount += singleResult.updatedInspectionsCount;
       totalErrorsImported += singleResult.totalErrorsImported;
@@ -350,10 +400,16 @@ class BatchMigrationService {
     String aggregatedAssetType = 'door';
     final hasWindows = newWindowsCount + updatedWindowsCount > 0;
     final hasDoors = newDoorsCount + updatedDoorsCount > 0;
-    if (hasWindows && !hasDoors) {
-      aggregatedAssetType = 'window';
-    } else if (hasWindows && hasDoors) {
+    final hasRwa = newRwaCount + updatedRwaCount > 0;
+    final typesCount = (hasDoors ? 1 : 0) + (hasWindows ? 1 : 0) + (hasRwa ? 1 : 0);
+    if (typesCount > 1) {
       aggregatedAssetType = 'mixed';
+    } else if (hasRwa) {
+      aggregatedAssetType = 'rwa';
+    } else if (hasWindows) {
+      aggregatedAssetType = 'window';
+    } else if (hasDoors) {
+      aggregatedAssetType = 'door';
     }
 
     final aggregatedReport = ImportReport(
@@ -364,6 +420,8 @@ class BatchMigrationService {
       updatedDoorsCount: updatedDoorsCount,
       newWindowsCount: newWindowsCount,
       updatedWindowsCount: updatedWindowsCount,
+      newRwaCount: newRwaCount,
+      updatedRwaCount: updatedRwaCount,
       newInspectionsCount: newInspectionsCount,
       updatedInspectionsCount: updatedInspectionsCount,
       totalErrorsImported: totalErrorsImported,

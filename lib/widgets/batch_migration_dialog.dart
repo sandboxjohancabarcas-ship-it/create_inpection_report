@@ -15,11 +15,13 @@ class BatchMigrationDialog extends StatefulWidget {
 
   const BatchMigrationDialog({super.key, this.onMigrationCompleted});
 
-  static Future<void> show(BuildContext context, {VoidCallback? onMigrationCompleted}) {
+  static Future<void> show(BuildContext context,
+      {VoidCallback? onMigrationCompleted}) {
     return showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => BatchMigrationDialog(onMigrationCompleted: onMigrationCompleted),
+      builder: (context) =>
+          BatchMigrationDialog(onMigrationCompleted: onMigrationCompleted),
     );
   }
 
@@ -38,7 +40,18 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: FileType.custom,
-        allowedExtensions: ['db', 'db3', 'wartung', 'sqlite', 'xlsx', 'xls', 'xlsm', 'xlms', 'csv', 'pdf'],
+        allowedExtensions: [
+          'db',
+          'db3',
+          'wartung',
+          'sqlite',
+          'xlsx',
+          'xls',
+          'xlsm',
+          'xlms',
+          'csv',
+          'pdf'
+        ],
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -66,7 +79,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       final String? folderPath = await FilePicker.platform.getDirectoryPath();
 
       if (folderPath != null && folderPath.isNotEmpty) {
-        final folderFiles = BatchMigrationService.getFilesFromDirectory(folderPath);
+        final folderFiles =
+            BatchMigrationService.getFilesFromDirectory(folderPath);
 
         if (folderFiles.isEmpty) {
           if (mounted) {
@@ -99,7 +113,9 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
     for (final file in files) {
       final ext = file.path.split('.').last.toLowerCase();
       if (['db', 'db3', 'sqlite', 'wartung'].contains(ext)) {
-        final compat = await ErrorLogExportHelper.checkPackageCompatibility(file.path, targetVersion: 17);
+        final compat = await ErrorLogExportHelper.checkPackageCompatibility(
+            file.path,
+            targetVersion: 17);
         if (compat.hasVersionMismatch) {
           if (!mounted) return;
           final proceed = await ErrorLogExportHelper.showVersionWarningDialog(
@@ -128,6 +144,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
     int updatedDoorsCount = 0;
     int newWindowsCount = 0;
     int updatedWindowsCount = 0;
+    int newRwaCount = 0;
+    int updatedRwaCount = 0;
     int newInspectionsCount = 0;
     int updatedInspectionsCount = 0;
     int totalErrorsImported = 0;
@@ -151,19 +169,24 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
         }
 
         // 1. Process this individual file
-        SingleFileMigrationResult fileResult = await BatchMigrationService.migrateSingleFile(file);
+        SingleFileMigrationResult fileResult =
+            await BatchMigrationService.migrateSingleFile(file);
 
         if (fileResult.isSkipped) {
-          skippedNames.add(fileResult.errorMessage != null ? '$fileName (${fileResult.errorMessage})' : fileName);
+          skippedNames.add(fileResult.errorMessage != null
+              ? '$fileName (${fileResult.errorMessage})'
+              : fileName);
           allFileReports.addAll(fileResult.fileReports);
           continue;
         }
 
-        List<DoorConflict> currentDoorConflicts = List.from(fileResult.doorConflicts);
+        List<DoorConflict> currentDoorConflicts =
+            List.from(fileResult.doorConflicts);
 
         // 2. Check and show Catalog/Error conflicts for THIS specific file
         if (fileResult.catalogConflicts.isNotEmpty && mounted) {
-          final catalogResolutions = await Navigator.of(context).push<List<ConflictResolution>>(
+          final catalogResolutions =
+              await Navigator.of(context).push<List<ConflictResolution>>(
             MaterialPageRoute(
               builder: (context) => ErrorConflictReviewPage(
                 conflicts: fileResult.catalogConflicts,
@@ -176,7 +199,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
             // Re-run single file migration with resolutions applied to get updated doors and fresh door conflicts
             final ext = file.path.split('.').last.toLowerCase();
             if (['xlsx', 'xls', 'xlsm', 'xlms', 'csv'].contains(ext)) {
-              fileResult = await BatchMigrationService.migrateSingleFile(file, resolutions: catalogResolutions);
+              fileResult = await BatchMigrationService.migrateSingleFile(file,
+                  resolutions: catalogResolutions);
               currentDoorConflicts = List.from(fileResult.doorConflicts);
             }
           }
@@ -201,17 +225,24 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
           updatedDoorsCount += fileResult.importReport!.updatedDoorsCount;
           newWindowsCount += fileResult.importReport!.newWindowsCount;
           updatedWindowsCount += fileResult.importReport!.updatedWindowsCount;
+          newRwaCount += fileResult.importReport!.newRwaCount;
+          updatedRwaCount += fileResult.importReport!.updatedRwaCount;
           newInspectionsCount += fileResult.importReport!.newInspectionsCount;
-          updatedInspectionsCount += fileResult.importReport!.updatedInspectionsCount;
+          updatedInspectionsCount +=
+              fileResult.importReport!.updatedInspectionsCount;
           totalErrorsImported += fileResult.importReport!.totalErrorsImported;
-          totalAttachmentsImported += fileResult.importReport!.totalAttachmentsImported;
+          totalAttachmentsImported +=
+              fileResult.importReport!.totalAttachmentsImported;
           allDoorChanges.addAll(fileResult.importReport!.doorChanges);
-          allNewCatalogProposals.addAll(fileResult.importReport!.newCatalogProposals);
+          allNewCatalogProposals
+              .addAll(fileResult.importReport!.newCatalogProposals);
         } else {
           newDoorsCount += fileResult.newDoorsCount;
           updatedDoorsCount += fileResult.updatedDoorsCount;
           newWindowsCount += fileResult.newWindowsCount;
           updatedWindowsCount += fileResult.updatedWindowsCount;
+          newRwaCount += fileResult.newRwaCount;
+          updatedRwaCount += fileResult.updatedRwaCount;
           newInspectionsCount += fileResult.newInspectionsCount;
           updatedInspectionsCount += fileResult.updatedInspectionsCount;
           totalErrorsImported += fileResult.totalErrorsImported;
@@ -231,10 +262,17 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       String aggregatedAssetType = 'door';
       final hasWindows = newWindowsCount + updatedWindowsCount > 0;
       final hasDoors = newDoorsCount + updatedDoorsCount > 0;
-      if (hasWindows && !hasDoors) {
-        aggregatedAssetType = 'window';
-      } else if (hasWindows && hasDoors) {
+      final hasRwa = newRwaCount + updatedRwaCount > 0;
+      final typesCount =
+          (hasDoors ? 1 : 0) + (hasWindows ? 1 : 0) + (hasRwa ? 1 : 0);
+      if (typesCount > 1) {
         aggregatedAssetType = 'mixed';
+      } else if (hasRwa) {
+        aggregatedAssetType = 'rwa';
+      } else if (hasWindows) {
+        aggregatedAssetType = 'window';
+      } else if (hasDoors) {
+        aggregatedAssetType = 'door';
       }
 
       final aggregatedReport = ImportReport(
@@ -245,6 +283,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
         updatedDoorsCount: updatedDoorsCount,
         newWindowsCount: newWindowsCount,
         updatedWindowsCount: updatedWindowsCount,
+        newRwaCount: newRwaCount,
+        updatedRwaCount: updatedRwaCount,
         newInspectionsCount: newInspectionsCount,
         updatedInspectionsCount: updatedInspectionsCount,
         totalErrorsImported: totalErrorsImported,
@@ -258,7 +298,6 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
       if (mounted) {
         await ImportReportDialog.show(context, aggregatedReport);
       }
-
     } catch (e, stackTrace) {
       if (mounted) {
         Navigator.pop(context); // Close migration dialog
@@ -308,7 +347,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                 children: [
                   Text(
                     'Migration läuft: Datei $_currentFileIndex von $_totalFilesCount',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -319,7 +359,9 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                   ),
                   const SizedBox(height: 16),
                   LinearProgressIndicator(
-                    value: _totalFilesCount > 0 ? _currentFileIndex / _totalFilesCount : 0.0,
+                    value: _totalFilesCount > 0
+                        ? _currentFileIndex / _totalFilesCount
+                        : 0.0,
                     backgroundColor: Colors.grey.shade200,
                     color: Colors.blue,
                   ),
@@ -351,7 +393,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.file_present, color: Colors.blue, size: 28),
+                          const Icon(Icons.file_present,
+                              color: Colors.blue, size: 28),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
@@ -359,12 +402,15 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                               children: const [
                                 Text(
                                   'Dateien auswählen',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
                                 ),
                                 SizedBox(height: 2),
                                 Text(
                                   'Einzelne oder mehrere Dateien wählen (Strg + Klick)',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),
@@ -387,7 +433,8 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.folder_copy, color: Colors.teal, size: 28),
+                          const Icon(Icons.folder_copy,
+                              color: Colors.teal, size: 28),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
@@ -395,12 +442,15 @@ class _BatchMigrationDialogState extends State<BatchMigrationDialog> {
                               children: const [
                                 Text(
                                   'Ganzen Ordner auswählen',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14),
                                 ),
                                 SizedBox(height: 2),
                                 Text(
                                   'Alle Unterordner nach konformen Dateien durchsuchen',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),

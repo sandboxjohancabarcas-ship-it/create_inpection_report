@@ -161,6 +161,7 @@ class ExcelDataImporter {
         jobNumber: fileNameJobNumber,
         warnings: warnings,
         logs: logs,
+        doorChanges: rwaRes.doorChanges,
       );
     }
 

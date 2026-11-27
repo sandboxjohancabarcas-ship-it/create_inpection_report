@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:wartungstool/models/models.dart';
@@ -14,6 +13,7 @@ class RwaImportResult {
   final int errorsLinked;
   final List<String> warnings;
   final List<String> logs;
+  final List<DoorChangeItem> doorChanges;
 
   RwaImportResult({
     required this.sheetsProcessed,
@@ -23,6 +23,7 @@ class RwaImportResult {
     required this.errorsLinked,
     required this.warnings,
     required this.logs,
+    this.doorChanges = const [],
   });
 }
 
@@ -536,6 +537,26 @@ class RwaExcelImporter {
       } catch (_) {}
     }
 
+    final List<DoorChangeItem> doorChanges = [];
+    if (currentRwa != null) {
+      final locationParts = [
+        if (currentRwa.building.isNotEmpty) currentRwa.building,
+        if (currentRwa.floor.isNotEmpty) currentRwa.floor,
+        if (currentRwa.room.isNotEmpty) currentRwa.room,
+      ];
+      final locationStr = locationParts.join(' / ');
+      doorChanges.add(DoorChangeItem(
+        doorAlias: currentRwa.displayAlias,
+        doorNumber: currentRwa.displayAlias,
+        roomDesignation: locationStr.isNotEmpty ? locationStr : 'RWA-Anlage ($projectNumber)',
+        floor: currentRwa.floor,
+        changeType: rwaSystemsImported > 0 ? 'new' : 'updated',
+        status: currentRwa.systemFunctionOK ? 'Geprüft' : 'Mängel',
+        errorCount: errorsLinked,
+        assetType: 'rwa',
+      ));
+    }
+
     logs.add('Import abgeschlossen: $sheetsProcessed Blätter, $rwaSystemsImported Anlage(n), $inspectionsCreated Prüfungen, $settingsEvaluated Einstellungen, $errorsLinked Mängel.');
 
     return RwaImportResult(
@@ -546,6 +567,7 @@ class RwaExcelImporter {
       errorsLinked: errorsLinked,
       warnings: warnings,
       logs: logs,
+      doorChanges: doorChanges,
     );
   }
 
